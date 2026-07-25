@@ -1,5 +1,6 @@
 import { lightOrDark, removeTransparencyFromHex } from "@/utils"
 import { availabilityTypes, timeTypes } from "@/constants"
+import { getResponseCountColorClass } from "./responseCounts"
 import dayjs from "dayjs"
 import utcPlugin from "dayjs/plugin/utc"
 dayjs.extend(utcPlugin)
@@ -15,6 +16,44 @@ dayjs.extend(utcPlugin)
  */
 export default {
   methods: {
+    /**
+     * Returns the traffic-light response count to render inside a timeslot, or
+     * null when nothing should be shown. The count is the number of respondents
+     * leaning available (available or if-needed) at the given date; the color
+     * reflects that count as a share of the total respondents.
+     */
+    getTimeslotCount(date) {
+      if (!this.showResponseCounts || !date) return null
+      if (this.respondents.length === 0) return null
+
+      const countableStates = [
+        this.states.HEATMAP,
+        this.states.BEST_TIMES,
+        this.states.SCHEDULE_EVENT,
+        this.states.SUBSET_AVAILABILITY,
+        this.states.EDIT_AVAILABILITY,
+      ]
+      if (!countableStates.includes(this.state)) return null
+
+      const respondentsSet =
+        this.responsesFormatted.get(date.getTime()) ?? new Set()
+
+      let count
+      let total
+      if (this.state === this.states.SUBSET_AVAILABILITY) {
+        count = [...respondentsSet].filter((r) =>
+          this.curRespondentsSet.has(r)
+        ).length
+        total = this.curRespondents.length
+      } else {
+        count = respondentsSet.size
+        total = this.respondents.length
+      }
+
+      if (count === 0 || total === 0) return null
+
+      return { text: String(count), class: getResponseCountColorClass(count, total) }
+    },
     setTimeslotSize() {
       /* Gets the dimensions of each timeslot and assigns it to the timeslot variable */
       const timeslotEl = document.querySelector(".timeslot")

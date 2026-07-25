@@ -52,12 +52,18 @@
                     <div
                       v-for="(day, i) in monthDays"
                       :key="day.time"
-                      class="timeslot tw-aspect-square tw-flex tw-items-center tw-justify-center tw-text-sm sm:tw-text-base"
+                      class="timeslot tw-aspect-square tw-flex tw-flex-col tw-items-center tw-justify-center tw-text-sm sm:tw-text-base"
                       :class="dayTimeslotClassStyle[i].class"
                       :style="dayTimeslotClassStyle[i].style"
                       v-on="dayTimeslotVon[i]"
                     >
-                      {{ day.date }}
+                      <span>{{ day.date }}</span>
+                      <span
+                        v-if="dayTimeslotCounts[i]"
+                        class="timeslot-count timeslot-count--day tw-leading-none"
+                        :class="dayTimeslotCounts[i].class"
+                        >{{ dayTimeslotCounts[i].text }}</span
+                      >
                     </div>
                   </div>
                   <ZigZag
@@ -262,7 +268,7 @@
                               class="tw-w-full"
                             >
                               <div
-                                class="timeslot"
+                                class="timeslot tw-relative tw-flex tw-items-center tw-justify-center"
                                 :class="
                                   timeslotClassStyle[d * times.length + t]
                                     ?.class
@@ -272,7 +278,18 @@
                                     ?.style
                                 "
                                 v-on="timeslotVon[d * times.length + t]"
-                              ></div>
+                              >
+                                <span
+                                  v-if="timeslotCounts[d * times.length + t]"
+                                  class="timeslot-count"
+                                  :class="
+                                    timeslotCounts[d * times.length + t].class
+                                  "
+                                  >{{
+                                    timeslotCounts[d * times.length + t].text
+                                  }}</span
+                                >
+                              </div>
                             </div>
 
                             <template v-if="splitTimes[1].length > 0">
@@ -287,7 +304,7 @@
                                 class="tw-w-full"
                               >
                                 <div
-                                  class="timeslot"
+                                  class="timeslot tw-relative tw-flex tw-items-center tw-justify-center"
                                   :class="
                                     timeslotClassStyle[
                                       d * times.length +
@@ -309,7 +326,32 @@
                                         splitTimes[0].length
                                     ]
                                   "
-                                ></div>
+                                >
+                                  <span
+                                    v-if="
+                                      timeslotCounts[
+                                        d * times.length +
+                                          t +
+                                          splitTimes[0].length
+                                      ]
+                                    "
+                                    class="timeslot-count"
+                                    :class="
+                                      timeslotCounts[
+                                        d * times.length +
+                                          t +
+                                          splitTimes[0].length
+                                      ].class
+                                    "
+                                    >{{
+                                      timeslotCounts[
+                                        d * times.length +
+                                          t +
+                                          splitTimes[0].length
+                                      ].text
+                                    }}</span
+                                  >
+                                </div>
                               </div>
                             </template>
 
@@ -799,6 +841,7 @@
                   :timezone="curTimezone"
                   :show-best-times.sync="showBestTimes"
                   :hide-if-needed.sync="hideIfNeeded"
+                  :show-response-counts.sync="showResponseCounts"
                   :start-calendar-on-monday.sync="startCalendarOnMonday"
                   :show-event-options="showEventOptions"
                   :guestAddedAvailability="guestAddedAvailability"
@@ -925,6 +968,7 @@
                   :timezone="curTimezone"
                   :show-best-times.sync="showBestTimes"
                   :hide-if-needed.sync="hideIfNeeded"
+                  :show-response-counts.sync="showResponseCounts"
                   :show-event-options="showEventOptions"
                   :guestAddedAvailability="guestAddedAvailability"
                   :addingAvailabilityAsGuest="addingAvailabilityAsGuest"
@@ -967,6 +1011,20 @@
 .break {
   flex-basis: 100%;
   height: 0;
+}
+
+/* Traffic-light response count rendered inside a timeslot */
+.timeslot-count {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+  /* White halo so colored digits stay legible over any heatmap fill */
+  text-shadow: 0 0 2px #fff, 0 0 2px #fff;
+}
+.timeslot-count--day {
+  font-size: 11px;
+  margin-top: 1px;
 }
 </style>
 
@@ -1148,6 +1206,10 @@ export default {
         localStorage["showBestTimes"] == undefined
           ? false
           : localStorage["showBestTimes"] == "true",
+      showResponseCounts:
+        localStorage["showResponseCounts"] == undefined
+          ? true
+          : localStorage["showResponseCounts"] == "true",
       hideIfNeeded: false,
 
       /* Variables for drag stuff */
@@ -2114,6 +2176,36 @@ export default {
       }
       return classStyles
     },
+    /** Per-cell traffic-light response counts for the time grid (indexed like timeslotClassStyle) */
+    timeslotCounts() {
+      const counts = []
+      for (let d = 0; d < this.days.length; ++d) {
+        for (let t = 0; t < this.splitTimes[0].length; ++t) {
+          counts.push(this.getTimeslotCount(this.getDateFromRowCol(t, d)))
+        }
+        for (let t = 0; t < this.splitTimes[1].length; ++t) {
+          counts.push(
+            this.getTimeslotCount(
+              this.getDateFromRowCol(t + this.splitTimes[0].length, d)
+            )
+          )
+        }
+      }
+      return counts
+    },
+    /** Per-cell traffic-light response counts for the daysOnly grid */
+    dayTimeslotCounts() {
+      const counts = []
+      for (let i = 0; i < this.monthDays.length; ++i) {
+        const date = this.monthDays[i].dateObject
+        counts.push(
+          this.monthDayIncluded.get(date.getTime())
+            ? this.getTimeslotCount(date)
+            : null
+        )
+      }
+      return counts
+    },
     timeslotVon() {
       const vons = []
       for (let d = 0; d < this.days.length; ++d) {
@@ -2989,6 +3081,9 @@ export default {
     },
     startCalendarOnMonday() {
       localStorage["startCalendarOnMonday"] = this.startCalendarOnMonday
+    },
+    showResponseCounts() {
+      localStorage["showResponseCounts"] = this.showResponseCounts
     },
     bufferTime(cur, prev) {
       if (cur.enabled !== prev.enabled || cur.enabled) {
