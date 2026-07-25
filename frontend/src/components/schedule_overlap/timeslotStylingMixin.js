@@ -35,6 +35,13 @@ export default {
       ]
       if (!countableStates.includes(this.state)) return null
 
+      // In whole-block mode, show a single pill at the start of each block
+      // rather than repeating the count in every slot of the block.
+      if (this.isWholeBlockSelection) {
+        const block = this.slotToBlock.get(date.getTime())
+        if (!block || block.start !== date.getTime()) return null
+      }
+
       const respondentsSet =
         this.responsesFormatted.get(date.getTime()) ?? new Set()
 

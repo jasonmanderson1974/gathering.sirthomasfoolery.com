@@ -302,6 +302,11 @@ definitions:
         $ref: '#/definitions/models.EventType'
       when2meetHref:
         type: string
+      wholeBlockSelection:
+        description: |-
+          When true (only meaningful with HasSpecificTimes), recipients must select
+          an entire contiguous block of specific times at once, not individual slots.
+        type: boolean
     type: object
   models.EventType:
     enum:
@@ -943,6 +948,8 @@ paths:
               $ref: '#/definitions/models.EventType'
             when2meetHref:
               type: string
+            wholeBlockSelection:
+              type: boolean
           type: object
       produces:
       - application/json
@@ -1035,6 +1042,8 @@ paths:
               type: array
             type:
               $ref: '#/definitions/models.EventType'
+            wholeBlockSelection:
+              type: boolean
           type: object
       produces:
       - application/json

@@ -58,7 +58,7 @@ func InitEvents(router *gin.RouterGroup) {
 // @Tags events
 // @Accept json
 // @Produce json
-// @Param payload body object{name=string,duration=float32,dates=[]string,type=models.EventType,isSignUpForm=bool,signUpBlocks=[]models.SignUpBlock,notificationsEnabled=bool,blindAvailabilityEnabled=bool,daysOnly=bool,remindees=[]string,sendEmailAfterXResponses=int,when2meetHref=string,timeIncrement=int,attendees=[]string} true "Object containing info about the event to create"
+// @Param payload body object{name=string,duration=float32,dates=[]string,type=models.EventType,isSignUpForm=bool,signUpBlocks=[]models.SignUpBlock,notificationsEnabled=bool,blindAvailabilityEnabled=bool,daysOnly=bool,wholeBlockSelection=bool,remindees=[]string,sendEmailAfterXResponses=int,when2meetHref=string,timeIncrement=int,attendees=[]string} true "Object containing info about the event to create"
 // @Success 201 {object} object{eventId=string}
 // @Router /events [post]
 func createEvent(c *gin.Context) {
@@ -70,8 +70,9 @@ func createEvent(c *gin.Context) {
 		Type     models.EventType     `json:"type" binding:"required"`
 
 		// Only for specific times for specific dates events
-		HasSpecificTimes *bool                `json:"hasSpecificTimes"`
-		Times            []primitive.DateTime `json:"times"`
+		HasSpecificTimes    *bool                `json:"hasSpecificTimes"`
+		Times               []primitive.DateTime `json:"times"`
+		WholeBlockSelection *bool                `json:"wholeBlockSelection"`
 
 		// Only for sign up form events
 		IsSignUpForm *bool                 `json:"isSignUpForm"`
@@ -135,6 +136,7 @@ func createEvent(c *gin.Context) {
 		Dates:                    payload.Dates,
 		HasSpecificTimes:         payload.HasSpecificTimes,
 		Times:                    payload.Times,
+		WholeBlockSelection:      payload.WholeBlockSelection,
 		IsSignUpForm:             payload.IsSignUpForm,
 		SignUpBlocks:             payload.SignUpBlocks,
 		StartOnMonday:            payload.StartOnMonday,
@@ -249,7 +251,7 @@ func createEvent(c *gin.Context) {
 // @Tags events
 // @Produce json
 // @Param eventId path string true "Event ID"
-// @Param payload body object{name=string,description=string,duration=float32,dates=[]string,type=models.EventType,signUpBlocks=[]models.SignUpBlock,notificationsEnabled=bool,blindAvailabilityEnabled=bool,daysOnly=bool,remindees=[]string,sendEmailAfterXResponses=int,attendees=[]string} true "Object containing info about the event to update"
+// @Param payload body object{name=string,description=string,duration=float32,dates=[]string,type=models.EventType,signUpBlocks=[]models.SignUpBlock,notificationsEnabled=bool,blindAvailabilityEnabled=bool,daysOnly=bool,wholeBlockSelection=bool,remindees=[]string,sendEmailAfterXResponses=int,attendees=[]string} true "Object containing info about the event to update"
 // @Success 200
 // @Router /events/{eventId} [put]
 func editEvent(c *gin.Context) {
@@ -261,8 +263,9 @@ func editEvent(c *gin.Context) {
 		Type     models.EventType     `json:"type" binding:"required"`
 
 		// Only for specific times for specific dates events
-		HasSpecificTimes *bool                `json:"hasSpecificTimes"`
-		Times            []primitive.DateTime `json:"times"`
+		HasSpecificTimes    *bool                `json:"hasSpecificTimes"`
+		Times               []primitive.DateTime `json:"times"`
+		WholeBlockSelection *bool                `json:"wholeBlockSelection"`
 
 		// For both events and groups
 		Description *string `json:"description"`
@@ -326,6 +329,7 @@ func editEvent(c *gin.Context) {
 	event.Dates = payload.Dates
 	event.Times = payload.Times
 	event.HasSpecificTimes = payload.HasSpecificTimes
+	event.WholeBlockSelection = payload.WholeBlockSelection
 	event.SignUpBlocks = payload.SignUpBlocks
 	event.StartOnMonday = payload.StartOnMonday
 	event.NotificationsEnabled = payload.NotificationsEnabled

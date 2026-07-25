@@ -127,6 +127,30 @@
                     </v-expand-transition>
                   </template>
                 </v-checkbox>
+                <v-expand-transition>
+                  <div v-if="specificTimesEnabled" class="tw-ml-[32px]">
+                    <v-checkbox v-model="wholeBlockSelection" hide-details>
+                      <template v-slot:label>
+                        <span
+                          class="tw-text-sm"
+                          :class="
+                            wholeBlockSelection
+                              ? 'tw-text-parchment'
+                              : 'tw-text-parchment-dim'
+                          "
+                        >
+                          Recipients pick whole blocks only
+                        </span>
+                      </template>
+                    </v-checkbox>
+                    <div
+                      class="tw-ml-[32px] tw-text-xs tw-text-parchment-dim"
+                    >
+                      Recipients can only select an entire block, not partial
+                      times
+                    </div>
+                  </div>
+                </v-expand-transition>
               </div>
             </div>
           </v-expand-transition>
@@ -405,6 +429,7 @@ export default {
     startTime: 9,
     endTime: 17,
     specificTimesEnabled: false,
+    wholeBlockSelection: false,
     loading: false,
     selectedDays: [],
     selectedDaysOfWeek: [],
@@ -460,6 +485,7 @@ export default {
       this.notificationsEnabled = this.contactsPayload.notificationsEnabled
       this.timezone = this.contactsPayload.timezone
       this.specificTimesEnabled = this.contactsPayload.specificTimesEnabled
+      this.wholeBlockSelection = this.contactsPayload.wholeBlockSelection
 
       this.$refs.form.resetValidation()
     }
@@ -520,6 +546,7 @@ export default {
       this.startTime = 9
       this.endTime = 17
       this.specificTimesEnabled = false
+      this.wholeBlockSelection = false
       this.selectedDays = []
       this.selectedDaysOfWeek = []
       this.notificationsEnabled = true
@@ -557,6 +584,7 @@ export default {
         }
 
         this.specificTimesEnabled = false
+        this.wholeBlockSelection = false
       } else {
         const startTimeString = timeNumToTimeString(this.startTime)
         if (this.selectedDateOption === this.dateOptions.SPECIFIC) {
@@ -602,6 +630,9 @@ export default {
         duration: duration,
         dates: dates,
         hasSpecificTimes: this.specificTimesEnabled,
+        wholeBlockSelection: this.specificTimesEnabled
+          ? this.wholeBlockSelection
+          : false,
         notificationsEnabled: !this.authUser
           ? false
           : this.notificationsEnabled,
@@ -622,6 +653,9 @@ export default {
         eventDuration: duration,
         eventDates: JSON.stringify(dates),
         eventHasSpecificTimes: this.specificTimesEnabled,
+        eventWholeBlockSelection: this.specificTimesEnabled
+          ? this.wholeBlockSelection
+          : false,
         eventNotificationsEnabled: !this.authUser
           ? false
           : this.notificationsEnabled,
@@ -755,6 +789,7 @@ export default {
         this.blindAvailabilityEnabled = this.event.blindAvailabilityEnabled
         this.daysOnly = this.event.daysOnly
         this.specificTimesEnabled = this.event.hasSpecificTimes
+        this.wholeBlockSelection = this.event.wholeBlockSelection
         this.startOnMonday = this.event.startOnMonday
         this.collectEmails = this.event.collectEmails
         this.timeIncrement = this.event.timeIncrement ?? 15
@@ -814,6 +849,7 @@ export default {
         startTime: this.startTime,
         endTime: this.endTime,
         specificTimesEnabled: this.specificTimesEnabled,
+        wholeBlockSelection: this.wholeBlockSelection,
         daysOnly: this.daysOnly,
         selectedDays: this.selectedDays,
         selectedDaysOfWeek: this.selectedDaysOfWeek,
@@ -833,6 +869,8 @@ export default {
         this.endTime !== this.initialEventData.endTime ||
         this.specificTimesEnabled !==
           this.initialEventData.specificTimesEnabled ||
+        this.wholeBlockSelection !==
+          this.initialEventData.wholeBlockSelection ||
         this.selectedDateOption !== this.initialEventData.selectedDateOption ||
         JSON.stringify(this.selectedDays) !==
           JSON.stringify(this.initialEventData.selectedDays) ||

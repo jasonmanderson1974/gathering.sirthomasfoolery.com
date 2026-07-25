@@ -495,6 +495,9 @@ const docTemplate = `{
                                 },
                                 "when2meetHref": {
                                     "type": "string"
+                                },
+                                "wholeBlockSelection": {
+                                    "type": "boolean"
                                 }
                             }
                         }
@@ -659,6 +662,9 @@ const docTemplate = `{
                                 },
                                 "type": {
                                     "$ref": "#/definitions/models.EventType"
+                                },
+                                "wholeBlockSelection": {
+                                    "type": "boolean"
                                 }
                             }
                         }
@@ -3050,6 +3056,10 @@ const docTemplate = `{
                 },
                 "when2meetHref": {
                     "type": "string"
+                },
+                "wholeBlockSelection": {
+                    "description": "When true (only meaningful with HasSpecificTimes), recipients must select\nan entire contiguous block of specific times at once, not individual slots.",
+                    "type": "boolean"
                 }
             }
         },

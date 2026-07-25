@@ -8,24 +8,24 @@ describe("getResponseCountColorClass", () => {
     expect(getResponseCountColorClass(0, 0)).toBe("")
   })
 
-  it("returns green when at least two thirds are free", () => {
-    expect(getResponseCountColorClass(2, 3)).toBe("tw-text-[#16A34A]")
-    expect(getResponseCountColorClass(3, 3)).toBe("tw-text-[#16A34A]")
-    expect(getResponseCountColorClass(4, 5)).toBe("tw-text-[#16A34A]")
+  it("returns a green pill when at least two thirds are free", () => {
+    expect(getResponseCountColorClass(2, 3)).toBe("tw-bg-[#16A34A] tw-text-white")
+    expect(getResponseCountColorClass(3, 3)).toBe("tw-bg-[#16A34A] tw-text-white")
+    expect(getResponseCountColorClass(4, 5)).toBe("tw-bg-[#16A34A] tw-text-white")
   })
 
-  it("returns yellow between one third and two thirds", () => {
-    expect(getResponseCountColorClass(1, 3)).toBe("tw-text-[#CA8A04]")
-    expect(getResponseCountColorClass(2, 5)).toBe("tw-text-[#CA8A04]")
-    expect(getResponseCountColorClass(3, 6)).toBe("tw-text-[#CA8A04]")
+  it("returns a yellow pill between one third and two thirds", () => {
+    expect(getResponseCountColorClass(1, 3)).toBe("tw-bg-[#CA8A04] tw-text-black")
+    expect(getResponseCountColorClass(2, 5)).toBe("tw-bg-[#CA8A04] tw-text-black")
+    expect(getResponseCountColorClass(3, 6)).toBe("tw-bg-[#CA8A04] tw-text-black")
   })
 
-  it("returns red below one third", () => {
-    expect(getResponseCountColorClass(1, 4)).toBe("tw-text-[#DC2626]")
-    expect(getResponseCountColorClass(1, 10)).toBe("tw-text-[#DC2626]")
+  it("returns a red pill below one third", () => {
+    expect(getResponseCountColorClass(1, 4)).toBe("tw-bg-[#DC2626] tw-text-white")
+    expect(getResponseCountColorClass(1, 10)).toBe("tw-bg-[#DC2626] tw-text-white")
   })
 
   it("colors a lone respondent green", () => {
-    expect(getResponseCountColorClass(1, 1)).toBe("tw-text-[#16A34A]")
+    expect(getResponseCountColorClass(1, 1)).toBe("tw-bg-[#16A34A] tw-text-white")
   })
 })

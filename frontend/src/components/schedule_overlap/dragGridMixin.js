@@ -90,6 +90,47 @@ export default {
           colInc = 1
         }
 
+        // Whole-block mode: toggle every block the drag touched in its entirety,
+        // so partial selections are impossible.
+        if (
+          this.isWholeBlockSelection &&
+          this.state === this.states.EDIT_AVAILABILITY
+        ) {
+          const blocks = new Set()
+          for (let r = rowStart; r != rowMax; r += rowInc) {
+            for (let c = colStart; c != colMax; c += colInc) {
+              const date = this.getDateFromRowCol(r, c)
+              if (!date) continue
+              const block = this.slotToBlock.get(date.getTime())
+              if (block) blocks.add(block)
+            }
+          }
+          for (const block of blocks) {
+            for (const slot of block.slots) {
+              if (this.dragType === this.DRAG_TYPES.ADD) {
+                if (this.availabilityType === availabilityTypes.AVAILABLE) {
+                  this.availability.add(slot)
+                  this.ifNeeded.delete(slot)
+                } else if (
+                  this.availabilityType === availabilityTypes.IF_NEEDED
+                ) {
+                  this.ifNeeded.add(slot)
+                  this.availability.delete(slot)
+                }
+              } else if (this.dragType === this.DRAG_TYPES.REMOVE) {
+                this.availability.delete(slot)
+                this.ifNeeded.delete(slot)
+              }
+            }
+          }
+          this.availability = new Set(this.availability)
+          this.ifNeeded = new Set(this.ifNeeded)
+          this.dragging = false
+          this.dragStart = null
+          this.dragCur = null
+          return
+        }
+
         // Iterate all selected time slots and either add or remove them
         for (let r = rowStart; r != rowMax; r += rowInc) {
           for (let c = colStart; c != colMax; c += colInc) {
@@ -314,6 +355,21 @@ export default {
       // Set drag type
       if (this.isSignUp) {
         this.dragType = this.DRAG_TYPES.ADD
+      } else if (
+        this.isWholeBlockSelection &&
+        this.state === this.states.EDIT_AVAILABILITY
+      ) {
+        // Whole-block: remove if the clicked block is already fully selected in
+        // the current availability type, otherwise add.
+        const block = this.slotToBlock.get(date.getTime())
+        const set =
+          this.availabilityType === availabilityTypes.IF_NEEDED
+            ? this.ifNeeded
+            : this.availability
+        const fullySelected = block && block.slots.every((s) => set.has(s))
+        this.dragType = fullySelected
+          ? this.DRAG_TYPES.REMOVE
+          : this.DRAG_TYPES.ADD
       } else if (
         (this.state === this.states.SET_SPECIFIC_TIMES &&
           this.tempTimes.has(date.getTime())) ||

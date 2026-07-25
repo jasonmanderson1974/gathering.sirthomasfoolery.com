@@ -250,6 +250,10 @@ type Event struct {
 	HasSpecificTimes *bool                `json:"hasSpecificTimes" bson:"hasSpecificTimes,omitempty"`
 	Times            []primitive.DateTime `json:"times" bson:"times,omitempty"`
 
+	// When true (only meaningful with HasSpecificTimes), recipients must select
+	// an entire contiguous block of specific times at once, not individual slots.
+	WholeBlockSelection *bool `json:"wholeBlockSelection" bson:"wholeBlockSelection,omitempty"`
+
 	Type EventType `json:"type" bson:"type,omitempty"`
 
 	// Sign up form details

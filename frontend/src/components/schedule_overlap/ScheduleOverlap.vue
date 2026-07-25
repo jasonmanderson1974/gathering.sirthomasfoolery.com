@@ -1013,17 +1013,25 @@
   height: 0;
 }
 
-/* Traffic-light response count rendered inside a timeslot */
+/* Traffic-light response count rendered as a solid pill inside a timeslot.
+   The pill supplies its own background so the digit stays legible over any
+   heatmap cell color, in both light and dark themes. */
 .timeslot-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  padding: 0 4px;
+  border-radius: 9999px;
   font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
+  font-weight: 700;
+  line-height: 15px;
   pointer-events: none;
-  /* White halo so colored digits stay legible over any heatmap fill */
-  text-shadow: 0 0 2px #fff, 0 0 2px #fff;
 }
 .timeslot-count--day {
   font-size: 11px;
+  line-height: 17px;
+  min-width: 17px;
   margin-top: 1px;
 }
 </style>
@@ -1110,6 +1118,10 @@ import currentAvailabilityMixin from "./currentAvailabilityMixin"
 import respondentSelectionMixin from "./respondentSelectionMixin"
 import timeslotStylingMixin from "./timeslotStylingMixin"
 import optionsMixin from "./optionsMixin"
+import {
+  getSpecificTimeBlocks,
+  buildSlotToBlockMap,
+} from "./specificTimeBlocks"
 dayjs.extend(utcPlugin)
 dayjs.extend(timezonePlugin)
 
@@ -1895,6 +1907,19 @@ export default {
     /** Returns a set containing the times for the event if it has specific times */
     specificTimesSet() {
       return new Set(this.event.times?.map((t) => new Date(t).getTime()) ?? [])
+    },
+    /** Whether recipients must select whole blocks of specific times at once */
+    isWholeBlockSelection() {
+      return !!this.event.wholeBlockSelection && this.isSpecificTimes
+    },
+    /** The specific times grouped into contiguous blocks (whole-block mode) */
+    specificTimeBlocks() {
+      if (!this.isWholeBlockSelection) return []
+      return getSpecificTimeBlocks([...this.specificTimesSet], this.timeslotDuration)
+    },
+    /** Map from a slot's ms timestamp to the block containing it */
+    slotToBlock() {
+      return buildSlotToBlockMap(this.specificTimeBlocks)
     },
     /**
      * Returns a two dimensional array of times
