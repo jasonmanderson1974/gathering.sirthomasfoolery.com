@@ -79,6 +79,16 @@ func Init() func() {
 	}
 	AllowlistCollection.Indexes().CreateOne(context.Background(), allowlistIndexModel)
 
+	// Ensure each user has at most one default folder per kind ("created" /
+	// "received"), so EnsureDefaultFolders is race-safe on concurrent loads.
+	defaultFolderIndexModel := mongo.IndexModel{
+		Keys: bson.D{{Key: "userId", Value: 1}, {Key: "defaultKind", Value: 1}},
+		Options: options.Index().SetUnique(true).SetPartialFilterExpression(
+			bson.M{"defaultKind": bson.M{"$exists": true}},
+		),
+	}
+	FoldersCollection.Indexes().CreateOne(context.Background(), defaultFolderIndexModel)
+
 	// Return a function to close the connection
 	return func() {
 		Client.Disconnect(ctx)

@@ -2,13 +2,120 @@ package db
 
 import (
 	"context"
+	"errors"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"sirtom/server/logger"
 	"sirtom/server/models"
 )
+
+// Default (system) folder kinds and their display names. Every user gets one
+// of each; new events land in them automatically (see AssignUnfiledEventsToDefaults).
+const (
+	DefaultFolderKindCreated  = "created"
+	DefaultFolderKindReceived = "received"
+	defaultFolderNameCreated  = "Invites created"
+	defaultFolderNameReceived = "Invites received"
+)
+
+// ErrCannotDeleteDefaultFolder is returned when a delete targets a system folder.
+var ErrCannotDeleteDefaultFolder = errors.New("cannot delete a default folder")
+
+// EnsureDefaultFolders returns the user's two default folders ("created" and
+// "received"), creating them if they don't exist yet. Idempotent; safe to call
+// on every dashboard load. A unique index on {userId, defaultKind} (see db.Init)
+// prevents duplicates under concurrent calls.
+func EnsureDefaultFolders(userId primitive.ObjectID) (created *models.Folder, received *models.Folder, err error) {
+	created, err = ensureDefaultFolder(userId, DefaultFolderKindCreated, defaultFolderNameCreated)
+	if err != nil {
+		return nil, nil, err
+	}
+	received, err = ensureDefaultFolder(userId, DefaultFolderKindReceived, defaultFolderNameReceived)
+	if err != nil {
+		return nil, nil, err
+	}
+	return created, received, nil
+}
+
+func ensureDefaultFolder(userId primitive.ObjectID, kind string, name string) (*models.Folder, error) {
+	ctx := context.Background()
+	trueVal := true
+	filter := bson.M{"userId": userId, "defaultKind": kind}
+	update := bson.M{
+		"$setOnInsert": bson.M{
+			"userId":      userId,
+			"name":        name,
+			"defaultKind": kind,
+			"isDefault":   trueVal,
+		},
+	}
+	opts := options.FindOneAndUpdate().
+		SetUpsert(true).
+		SetReturnDocument(options.After)
+
+	var folder models.Folder
+	err := FoldersCollection.FindOneAndUpdate(ctx, filter, update, opts).Decode(&folder)
+	if mongo.IsDuplicateKeyError(err) {
+		// Lost an upsert race; the folder now exists, so just read it.
+		err = FoldersCollection.FindOne(ctx, filter).Decode(&folder)
+	}
+	if err != nil {
+		logger.StdErr.Println(err)
+		return nil, err
+	}
+	return &folder, nil
+}
+
+// AssignUnfiledEventsToDefaults files any of the given events that aren't yet in
+// a folder (for this user) into the appropriate default folder: events the user
+// owns go to "created", the rest to "received". Best-effort; existing folder
+// assignments (including user overrides) are left untouched.
+func AssignUnfiledEventsToDefaults(userId primitive.ObjectID, events []models.Event, createdFolderId primitive.ObjectID, receivedFolderId primitive.ObjectID) error {
+	ctx := context.Background()
+
+	// Collect event ids already mapped to some folder for this user
+	cursor, err := FolderEventsCollection.Find(ctx, bson.M{"userId": userId},
+		options.Find().SetProjection(bson.M{"eventId": 1}))
+	if err != nil {
+		return err
+	}
+	var mappedRows []struct {
+		EventId primitive.ObjectID `bson:"eventId"`
+	}
+	if err = cursor.All(ctx, &mappedRows); err != nil {
+		return err
+	}
+	mapped := make(map[primitive.ObjectID]struct{}, len(mappedRows))
+	for _, row := range mappedRows {
+		mapped[row.EventId] = struct{}{}
+	}
+
+	docs := make([]interface{}, 0)
+	for _, event := range events {
+		if _, ok := mapped[event.Id]; ok {
+			continue
+		}
+		folderId := receivedFolderId
+		if event.OwnerId == userId {
+			folderId = createdFolderId
+		}
+		docs = append(docs, models.FolderEvent{
+			UserId:   userId,
+			FolderId: folderId,
+			EventId:  event.Id,
+		})
+	}
+
+	if len(docs) > 0 {
+		if _, err := FolderEventsCollection.InsertMany(ctx, docs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func CreateFolder(folder *models.Folder) (primitive.ObjectID, error) {
 	result, err := FoldersCollection.InsertOne(context.Background(), folder)
@@ -123,8 +230,18 @@ func SetEventFolder(eventId primitive.ObjectID, folderId *primitive.ObjectID, us
 
 func DeleteFolder(folderId primitive.ObjectID, userId primitive.ObjectID) error {
 	ctx := context.Background()
+
+	// Never delete a default (system) folder
+	folder, err := GetFolderById(folderId, userId)
+	if err != nil {
+		return err
+	}
+	if folder.IsDefault != nil && *folder.IsDefault {
+		return ErrCannotDeleteDefaultFolder
+	}
+
 	// Mark this folder as deleted
-	_, err := FoldersCollection.UpdateOne(ctx, bson.M{"_id": folderId, "userId": userId}, bson.M{"$set": bson.M{"isDeleted": true}})
+	_, err = FoldersCollection.UpdateOne(ctx, bson.M{"_id": folderId, "userId": userId}, bson.M{"$set": bson.M{"isDeleted": true}})
 	if err != nil {
 		return err
 	}

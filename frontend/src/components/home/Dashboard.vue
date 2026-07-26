@@ -39,9 +39,18 @@
           >
             {{ folder.name }}
           </v-chip>
-          <span v-else class="tw-mr-2 tw-text-sm tw-font-medium">{{
-            folder.name
-          }}</span>
+          <span
+            v-else
+            class="tw-mr-2 tw-flex tw-items-center tw-text-sm tw-font-medium"
+          >
+            <v-icon
+              v-if="folder.icon"
+              small
+              class="tw-mr-1 tw-text-parchment-dim"
+              >{{ folder.icon }}</v-icon
+            >
+            {{ folder.name }}
+          </span>
           <div
             v-if="folder.type === 'regular'"
             class="tw-invisible tw-flex tw-items-center group-hover:tw-visible"
@@ -63,6 +72,18 @@
                 </v-list-item>
               </v-list>
             </v-menu>
+            <v-btn
+              icon
+              small
+              @click.stop.prevent="createEventInFolder(folder.id)"
+            >
+              <v-icon small>mdi-plus</v-icon>
+            </v-btn>
+          </div>
+          <div
+            v-else-if="folder.type === 'default'"
+            class="tw-invisible tw-flex tw-items-center group-hover:tw-visible"
+          >
             <v-btn
               icon
               small
@@ -275,20 +296,28 @@ export default {
 
       for (const eventId of allEventIds) {
         const event = this.allEventsMap[eventId]
-        if (event) {
-          if (event.isArchived) {
-            if (event.type === eventTypes.GROUP) {
-              eventsByFolder["archived"].groups.push(event)
-            } else {
-              eventsByFolder["archived"].events.push(event)
-            }
+        if (!event) continue
+
+        if (event.isArchived) {
+          if (event.type === eventTypes.GROUP) {
+            eventsByFolder["archived"].groups.push(event)
           } else {
-            if (event.type === eventTypes.GROUP) {
-              eventsByFolder["no-folder"].groups.push(event)
-            } else {
-              eventsByFolder["no-folder"].events.push(event)
-            }
+            eventsByFolder["archived"].events.push(event)
           }
+          continue
+        }
+
+        // Not yet filed on the server: place it in the matching default folder
+        // by ownership (events you own -> created, otherwise received). Falls
+        // back to "no-folder" only if the defaults somehow don't exist.
+        const isOwner = this.authUser && event.ownerId === this.authUser._id
+        const target = isOwner ? this.createdFolder : this.receivedFolder
+        const bucketId =
+          target && eventsByFolder[target._id] ? target._id : "no-folder"
+        if (event.type === eventTypes.GROUP) {
+          eventsByFolder[bucketId].groups.push(event)
+        } else {
+          eventsByFolder[bucketId].events.push(event)
         }
       }
 
@@ -296,6 +325,13 @@ export default {
       eventsByFolder["no-folder"].events.sort(this.sortEvents)
       eventsByFolder["archived"].groups.sort(this.sortEvents)
       eventsByFolder["archived"].events.sort(this.sortEvents)
+      // Re-sort default folder buckets that may have received unfiled events
+      for (const f of [this.createdFolder, this.receivedFolder]) {
+        if (f && eventsByFolder[f._id]) {
+          eventsByFolder[f._id].groups.sort(this.sortEvents)
+          eventsByFolder[f._id].events.sort(this.sortEvents)
+        }
+      }
       return eventsByFolder
     },
     folderDialogTitle() {
@@ -304,17 +340,54 @@ export default {
     folderDialogConfirmText() {
       return this.isEditingFolder ? "Save" : "Create"
     },
+    /** The default "Invites created" folder, if it exists */
+    createdFolder() {
+      return this.folders.find((f) => f.defaultKind === "created")
+    },
+    /** The default "Invites received" folder, if it exists */
+    receivedFolder() {
+      return this.folders.find((f) => f.defaultKind === "received")
+    },
+    /** User-created (non-default) folders, sorted by name */
+    customFolders() {
+      return [...this.folders]
+        .filter((f) => !f.isDefault)
+        .sort((a, b) => a.name.localeCompare(b.name))
+    },
     allFolders() {
-      const folders = this.folders.map((folder) => ({
-        ...folder,
-        id: folder._id,
-        type: "regular",
-        name: folder.name,
-        emptyMessage: "No events in this folder",
-      }))
+      const folders = []
 
-      // Only show "no-folder" section if there are events
-      if (this.allEvents.length > 0) {
+      // Default folders first, in a fixed order
+      const addDefault = (folder, icon) => {
+        if (!folder) return
+        folders.push({
+          ...folder,
+          id: folder._id,
+          type: "default",
+          icon,
+          name: folder.name,
+          emptyMessage: "No events yet",
+        })
+      }
+      addDefault(this.createdFolder, "mdi-folder-account-outline")
+      addDefault(this.receivedFolder, "mdi-folder-download-outline")
+
+      // Then user-created folders
+      this.customFolders.forEach((folder) => {
+        folders.push({
+          ...folder,
+          id: folder._id,
+          type: "regular",
+          name: folder.name,
+          emptyMessage: "No events in this folder",
+        })
+      })
+
+      // "No folder" only as a safety net if something actually landed there
+      if (
+        this.eventsByFolder["no-folder"].groups.length > 0 ||
+        this.eventsByFolder["no-folder"].events.length > 0
+      ) {
         folders.push({
           id: "no-folder",
           type: "no-folder",

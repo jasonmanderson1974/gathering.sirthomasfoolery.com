@@ -10,5 +10,11 @@ type Folder struct {
 	Color     *string `json:"color,omitempty" bson:"color,omitempty"`
 	IsDeleted *bool   `json:"isDeleted,omitempty" bson:"isDeleted,omitempty"`
 
+	// System "default" folders where events land automatically ("Invites
+	// created" / "Invites received"). IsDefault folders can't be deleted;
+	// DefaultKind is "created" or "received".
+	IsDefault   *bool   `json:"isDefault,omitempty" bson:"isDefault,omitempty"`
+	DefaultKind *string `json:"defaultKind,omitempty" bson:"defaultKind,omitempty"`
+
 	EventIds []primitive.ObjectID `json:"eventIds" bson:"-"`
 }

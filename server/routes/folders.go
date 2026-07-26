@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-contrib/sessions"
@@ -36,6 +37,13 @@ func GetAllFolders(c *gin.Context) {
 	userId, err := primitive.ObjectIDFromHex(userIdString)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	// Make sure the two default folders ("Invites created" / "Invites received")
+	// exist so they always show on the dashboard, even before any events load.
+	if _, _, err := db.EnsureDefaultFolders(userId); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get folders"})
 		return
 	}
 
@@ -214,6 +222,10 @@ func DeleteFolder(c *gin.Context) {
 
 	err = db.DeleteFolder(folderId, userId)
 	if err != nil {
+		if errors.Is(err, db.ErrCannotDeleteDefaultFolder) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot delete a default folder"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete folder"})
 		return
 	}

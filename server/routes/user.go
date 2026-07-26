@@ -487,6 +487,17 @@ func getEvents(c *gin.Context) {
 		}
 	}
 
+	// File any events that aren't in a folder yet into the user's default
+	// folders: owned events -> "Invites created", the rest -> "Invites received".
+	// Best-effort: never fail the request over folder bookkeeping.
+	if createdFolder, receivedFolder, ferr := db.EnsureDefaultFolders(userId); ferr == nil {
+		if aerr := db.AssignUnfiledEventsToDefaults(userId, events, createdFolder.Id, receivedFolder.Id); aerr != nil {
+			logger.StdErr.Println(aerr)
+		}
+	} else {
+		logger.StdErr.Println(ferr)
+	}
+
 	c.JSON(http.StatusOK, events)
 }
 

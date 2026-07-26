@@ -324,10 +324,18 @@ definitions:
         type: string
       color:
         type: string
+      defaultKind:
+        type: string
       eventIds:
         items:
           type: string
         type: array
+      isDefault:
+        description: |-
+          System "default" folders where events land automatically ("Invites
+          created" / "Invites received"). IsDefault folders can't be deleted;
+          DefaultKind is "created" or "received".
+        type: boolean
       isDeleted:
         type: boolean
       name:

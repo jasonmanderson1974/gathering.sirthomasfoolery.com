@@ -3085,11 +3085,18 @@ const docTemplate = `{
                 "color": {
                     "type": "string"
                 },
+                "defaultKind": {
+                    "type": "string"
+                },
                 "eventIds": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "isDefault": {
+                    "description": "System \"default\" folders where events land automatically (\"Invites\ncreated\" / \"Invites received\"). IsDefault folders can't be deleted;\nDefaultKind is \"created\" or \"received\".",
+                    "type": "boolean"
                 },
                 "isDeleted": {
                     "type": "boolean"
