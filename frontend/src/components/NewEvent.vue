@@ -60,10 +60,11 @@
         />
 
         <SlideToggle
-          v-if="daysOnlyEnabled && !edit"
+          v-if="showAvailabilityToggle"
           class="tw-w-full"
-          v-model="daysOnly"
-          :options="daysOnlyOptions"
+          v-model="availabilityMode"
+          :options="availabilityModeOptions"
+          wrap
         />
 
         <div>
@@ -72,85 +73,83 @@
               <div class="tw-mb-2 tw-text-lg tw-text-parchment">
                 What times might work?
               </div>
-              <v-expand-transition>
-                <div v-if="!specificTimesEnabled">
-                  <div
-                    class="tw-mb-2 tw-flex tw-items-baseline tw-justify-center tw-space-x-2"
-                  >
-                    <v-select
-                      :value="startTime"
-                      @input="(t) => (startTime = t.time)"
-                      menu-props="auto"
-                      :items="times"
-                      return-object
-                      hide-details
-                      solo
-                    ></v-select>
-                    <div>to</div>
-                    <v-select
-                      :value="endTime"
-                      @input="(t) => (endTime = t.time)"
-                      menu-props="auto"
-                      :items="times"
-                      return-object
-                      hide-details
-                      solo
-                    ></v-select>
-                  </div>
-                </div>
-              </v-expand-transition>
-              <div class="tw-mb-2">
-                <v-checkbox
-                  v-model="specificTimesEnabled"
-                  messages="Specify the times in the next step"
-                >
+              <v-radio-group
+                v-if="availabilityMode === availabilityModes.DATES_AND_TIMES"
+                v-model="customTimes"
+                class="tw-mb-2 tw-mt-0 tw-pt-0"
+                hide-details
+              >
+                <v-radio :value="false" color="primary">
                   <template v-slot:label>
                     <span
                       class="tw-text-sm"
                       :class="
-                        specificTimesEnabled
+                        !customTimes
                           ? 'tw-text-parchment'
                           : 'tw-text-parchment-dim'
                       "
                     >
-                      Set specific times per day
+                      Same Times Every Day
                     </span>
                   </template>
-                  <template v-slot:message="{ message }">
-                    <v-expand-transition>
-                      <div
-                        v-if="specificTimesEnabled"
-                        class="tw-pointer-events-auto -tw-mt-1 tw-ml-[32px] tw-text-xs tw-text-parchment-dim"
-                      >
-                        {{ message }}
-                      </div>
-                    </v-expand-transition>
-                  </template>
-                </v-checkbox>
+                </v-radio>
                 <v-expand-transition>
-                  <div v-if="specificTimesEnabled" class="tw-ml-[32px]">
-                    <v-checkbox v-model="wholeBlockSelection" hide-details>
-                      <template v-slot:label>
-                        <span
-                          class="tw-text-sm"
-                          :class="
-                            wholeBlockSelection
-                              ? 'tw-text-parchment'
-                              : 'tw-text-parchment-dim'
-                          "
-                        >
-                          Recipients pick whole blocks only
-                        </span>
-                      </template>
-                    </v-checkbox>
+                  <div v-if="!customTimes" class="tw-ml-[32px] tw-mt-2">
                     <div
-                      class="tw-ml-[32px] tw-text-xs tw-text-parchment-dim"
+                      class="tw-flex tw-items-baseline tw-justify-center tw-space-x-2"
                     >
-                      Recipients can only select an entire block, not partial
-                      times
+                      <v-select
+                        :value="startTime"
+                        @input="(t) => (startTime = t.time)"
+                        menu-props="auto"
+                        :items="times"
+                        return-object
+                        hide-details
+                        solo
+                      ></v-select>
+                      <div>to</div>
+                      <v-select
+                        :value="endTime"
+                        @input="(t) => (endTime = t.time)"
+                        menu-props="auto"
+                        :items="times"
+                        return-object
+                        hide-details
+                        solo
+                      ></v-select>
                     </div>
                   </div>
                 </v-expand-transition>
+                <v-radio :value="true" color="primary" class="tw-mt-3">
+                  <template v-slot:label>
+                    <span
+                      class="tw-text-sm"
+                      :class="
+                        customTimes
+                          ? 'tw-text-parchment'
+                          : 'tw-text-parchment-dim'
+                      "
+                    >
+                      Custom Times Every Day
+                    </span>
+                  </template>
+                </v-radio>
+                <v-expand-transition>
+                  <div
+                    v-if="customTimes"
+                    class="tw-ml-[32px] tw-text-xs tw-text-parchment-dim"
+                  >
+                    Specify the times in the next step
+                  </div>
+                </v-expand-transition>
+              </v-radio-group>
+
+              <div
+                v-else-if="availabilityMode === availabilityModes.TIME_BLOCKS"
+                class="tw-mb-2 tw-text-xs tw-text-parchment-dim"
+              >
+                Recipients can only select an entire block, not partial times.
+                Specify the blocks in the next step.
               </div>
             </div>
           </v-expand-transition>
@@ -387,6 +386,11 @@ import HelpDialog from "./HelpDialog.vue"
 import EmailInput from "./event/EmailInput.vue"
 import DatePicker from "@/components/DatePicker.vue"
 import SlideToggle from "./SlideToggle.vue"
+import {
+  availabilityModes,
+  getAvailabilityFields,
+  getAvailabilityMode,
+} from "./availabilityModes"
 import AlertText from "@/components/AlertText.vue"
 import OverflowGradient from "@/components/OverflowGradient.vue"
 import { guestUserId } from "@/constants"
@@ -428,19 +432,21 @@ export default {
     name: "",
     startTime: 9,
     endTime: 17,
-    specificTimesEnabled: false,
-    wholeBlockSelection: false,
     loading: false,
     selectedDays: [],
     selectedDaysOfWeek: [],
     startOnMonday: prefersStartOnMonday(),
     notificationsEnabled: true,
 
-    daysOnly: false,
-    daysOnlyOptions: Object.freeze([
-      { text: "Dates and times", value: false },
-      { text: "Dates only", value: true },
-    ]),
+    // Primary availability mode. `daysOnly`, `specificTimesEnabled` and
+    // `wholeBlockSelection` (the fields the API actually takes) are derived
+    // from this and `customTimes` — see the computed properties below.
+    availabilityModes,
+    availabilityMode: availabilityModes.DATES_AND_TIMES,
+
+    // Only meaningful in DATES_AND_TIMES mode:
+    // false = "Same Times Every Day", true = "Custom Times Every Day"
+    customTimes: false,
 
     // Date options
     dateOptions: Object.freeze({
@@ -478,14 +484,15 @@ export default {
       this.name = this.contactsPayload.name
       this.startTime = this.contactsPayload.startTime
       this.endTime = this.contactsPayload.endTime
-      this.daysOnly = this.contactsPayload.daysOnly
+      this.availabilityMode =
+        this.contactsPayload.availabilityMode ??
+        this.availabilityModes.DATES_AND_TIMES
+      this.customTimes = this.contactsPayload.customTimes ?? false
       this.selectedDateOption = this.contactsPayload.selectedDateOption
       this.selectedDaysOfWeek = this.contactsPayload.selectedDaysOfWeek
       this.selectedDays = this.contactsPayload.selectedDays
       this.notificationsEnabled = this.contactsPayload.notificationsEnabled
       this.timezone = this.contactsPayload.timezone
-      this.specificTimesEnabled = this.contactsPayload.specificTimesEnabled
-      this.wholeBlockSelection = this.contactsPayload.wholeBlockSelection
 
       this.$refs.form.resetValidation()
     }
@@ -497,6 +504,46 @@ export default {
 
   computed: {
     ...mapState(["authUser", "daysOnlyEnabled"]),
+    /** The options shown in the primary availability toggle */
+    availabilityModeOptions() {
+      const options = [
+        {
+          text: "Dates and times",
+          value: this.availabilityModes.DATES_AND_TIMES,
+        },
+        {
+          text: "Dates w/ time blocks",
+          value: this.availabilityModes.TIME_BLOCKS,
+        },
+      ]
+
+      // Switching an existing event into or out of dates-only would change what
+      // its dates mean, so that option is only offered when creating
+      if (this.daysOnlyEnabled && !this.edit) {
+        options.push({
+          text: "Dates only",
+          value: this.availabilityModes.DATES_ONLY,
+        })
+      }
+
+      return options
+    },
+    showAvailabilityToggle() {
+      // A dates-only event being edited has no mode left to switch to
+      return !(this.edit && this.event?.daysOnly)
+    },
+    availabilityFields() {
+      return getAvailabilityFields(this.availabilityMode, this.customTimes)
+    },
+    daysOnly() {
+      return this.availabilityFields.daysOnly
+    },
+    wholeBlockSelection() {
+      return this.availabilityFields.wholeBlockSelection
+    },
+    specificTimesEnabled() {
+      return this.availabilityFields.hasSpecificTimes
+    },
     nameRules() {
       return [(v) => !!v || "Event name is required"]
     },
@@ -545,12 +592,11 @@ export default {
       this.name = ""
       this.startTime = 9
       this.endTime = 17
-      this.specificTimesEnabled = false
-      this.wholeBlockSelection = false
+      this.availabilityMode = this.availabilityModes.DATES_AND_TIMES
+      this.customTimes = false
       this.selectedDays = []
       this.selectedDaysOfWeek = []
       this.notificationsEnabled = true
-      this.daysOnly = false
       this.selectedDateOption = "Specific dates"
       this.emails = []
       this.showAdvancedOptions = false
@@ -582,9 +628,6 @@ export default {
           const date = new Date(`${day} 00:00:00Z`)
           dates.push(date)
         }
-
-        this.specificTimesEnabled = false
-        this.wholeBlockSelection = false
       } else {
         const startTimeString = timeNumToTimeString(this.startTime)
         if (this.selectedDateOption === this.dateOptions.SPECIFIC) {
@@ -618,7 +661,9 @@ export default {
             // corresponds to the user's current timezone offset.
             const refOffset = date.utcOffset()
             const currentOffset = dayjs().tz(this.timezone.value).utcOffset()
-            dates.push(date.subtract(currentOffset - refOffset, 'minutes').toDate())
+            dates.push(
+              date.subtract(currentOffset - refOffset, "minutes").toDate()
+            )
           }
         }
       }
@@ -630,9 +675,7 @@ export default {
         duration: duration,
         dates: dates,
         hasSpecificTimes: this.specificTimesEnabled,
-        wholeBlockSelection: this.specificTimesEnabled
-          ? this.wholeBlockSelection
-          : false,
+        wholeBlockSelection: this.wholeBlockSelection,
         notificationsEnabled: !this.authUser
           ? false
           : this.notificationsEnabled,
@@ -653,9 +696,7 @@ export default {
         eventDuration: duration,
         eventDates: JSON.stringify(dates),
         eventHasSpecificTimes: this.specificTimesEnabled,
-        eventWholeBlockSelection: this.specificTimesEnabled
-          ? this.wholeBlockSelection
-          : false,
+        eventWholeBlockSelection: this.wholeBlockSelection,
         eventNotificationsEnabled: !this.authUser
           ? false
           : this.notificationsEnabled,
@@ -749,7 +790,8 @@ export default {
         name: this.name,
         startTime: this.startTime,
         endTime: this.endTime,
-        daysOnly: this.daysOnly,
+        availabilityMode: this.availabilityMode,
+        customTimes: this.customTimes,
         selectedDays: this.selectedDays,
         selectedDaysOfWeek: this.selectedDaysOfWeek,
         selectedDateOption: this.selectedDateOption,
@@ -787,9 +829,9 @@ export default {
         this.endTime = (this.startTime + this.event.duration) % 24
         this.notificationsEnabled = this.event.notificationsEnabled
         this.blindAvailabilityEnabled = this.event.blindAvailabilityEnabled
-        this.daysOnly = this.event.daysOnly
-        this.specificTimesEnabled = this.event.hasSpecificTimes
-        this.wholeBlockSelection = this.event.wholeBlockSelection
+        const { mode, customTimes } = getAvailabilityMode(this.event)
+        this.availabilityMode = mode
+        this.customTimes = customTimes
         this.startOnMonday = this.event.startOnMonday
         this.collectEmails = this.event.collectEmails
         this.timeIncrement = this.event.timeIncrement ?? 15
@@ -848,9 +890,8 @@ export default {
         name: this.name,
         startTime: this.startTime,
         endTime: this.endTime,
-        specificTimesEnabled: this.specificTimesEnabled,
-        wholeBlockSelection: this.wholeBlockSelection,
-        daysOnly: this.daysOnly,
+        availabilityMode: this.availabilityMode,
+        customTimes: this.customTimes,
         selectedDays: this.selectedDays,
         selectedDaysOfWeek: this.selectedDaysOfWeek,
         selectedDateOption: this.selectedDateOption,
@@ -867,16 +908,13 @@ export default {
         this.name !== this.initialEventData.name ||
         this.startTime !== this.initialEventData.startTime ||
         this.endTime !== this.initialEventData.endTime ||
-        this.specificTimesEnabled !==
-          this.initialEventData.specificTimesEnabled ||
-        this.wholeBlockSelection !==
-          this.initialEventData.wholeBlockSelection ||
+        this.availabilityMode !== this.initialEventData.availabilityMode ||
+        this.customTimes !== this.initialEventData.customTimes ||
         this.selectedDateOption !== this.initialEventData.selectedDateOption ||
         JSON.stringify(this.selectedDays) !==
           JSON.stringify(this.initialEventData.selectedDays) ||
         JSON.stringify(this.selectedDaysOfWeek) !==
           JSON.stringify(this.initialEventData.selectedDaysOfWeek) ||
-        this.daysOnly !== this.initialEventData.daysOnly ||
         this.notificationsEnabled !==
           this.initialEventData.notificationsEnabled ||
         JSON.stringify(this.emails) !==

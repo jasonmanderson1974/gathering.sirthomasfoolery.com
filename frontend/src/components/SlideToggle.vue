@@ -14,7 +14,7 @@
     <template v-for="(tab, i) in options">
       <div
         :key="i"
-        class="tw-flex tw-flex-1 tw-cursor-pointer tw-items-center tw-justify-center tw-gap-1.5 tw-overflow-hidden tw-px-4 tw-py-2.5 tw-text-center tw-text-sm tw-font-medium tw-transition-all"
+        class="tw-flex tw-flex-1 tw-cursor-pointer tw-items-center tw-justify-center tw-gap-1.5 tw-self-stretch tw-overflow-hidden tw-px-4 tw-py-2.5 tw-text-center tw-text-sm tw-font-medium tw-transition-all"
         :class="
           i === index ? tab.activeClass ?? defaultActiveClass : inactiveClass
         "
@@ -22,7 +22,9 @@
         @click="$emit('input', tab.value)"
       >
         <slot :name="'option-' + tab.value" :option="tab" :active="i === index">
-          <span class="tw-line-clamp-1">{{ tab.text }}</span>
+          <span :class="wrap ? 'tw-leading-tight' : 'tw-line-clamp-1'">{{
+            tab.text
+          }}</span>
         </slot>
       </div>
     </template>
@@ -45,6 +47,10 @@ export default {
     //   value: String,
     // }
     options: { type: Array, required: true },
+
+    // Allow option labels to wrap onto multiple lines instead of being clamped
+    // to one. Useful when there are enough options that labels get cramped.
+    wrap: { type: Boolean, default: false },
   },
 
   data() {
