@@ -1,7 +1,7 @@
 <template>
   <div class="tw-mt-8">
     <div
-      class="tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-select-none"
+      class="tw-flex tw-cursor-pointer tw-select-none tw-items-center tw-justify-between"
       @click="open = !open"
     >
       <div class="tw-flex tw-items-center tw-gap-2">
@@ -11,7 +11,8 @@
         </span>
       </div>
       <v-btn icon small class="tw-text-parchment-dim">
-        <v-icon :class="`tw-transition-transform ${open ? 'tw-rotate-180' : ''}`"
+        <v-icon
+          :class="`tw-transition-transform ${open ? 'tw-rotate-180' : ''}`"
           >mdi-chevron-down</v-icon
         >
       </v-btn>
@@ -76,16 +77,21 @@
               </p>
               <ul class="tw-list-disc tw-space-y-2 tw-pl-5">
                 <li>
-                  <strong>Dates and times</strong> vs
-                  <strong>Dates only</strong> — collect exact hours, or just
-                  poll which whole days work when the time of day doesn't
-                  matter.
+                  <strong>Dates and times</strong> — collect exact hours. Then
+                  choose <em>Same Times Every Day</em> to offer one start-to-end
+                  window across every date, or
+                  <em>Custom Times Every Day</em> to paint a different window
+                  for each date in the next step.
                 </li>
                 <li>
-                  <strong>What times might work?</strong> — set one start-to-end
-                  window for every day, or tick
-                  <em>Set specific times per day</em> to paint a different
-                  window per day in the next step.
+                  <strong>Dates w/ time blocks</strong> — you draw the blocks
+                  yourself in the next step, and members can only take a whole
+                  block, never part of one. Good when the slots are fixed — a
+                  two-hour sitting, a shift — and half answers are no use.
+                </li>
+                <li>
+                  <strong>Dates only</strong> — poll which whole days work, with
+                  no times at all, for when the hour doesn't matter.
                 </li>
                 <li>
                   <strong>Specific dates</strong> — drag across the calendar to
@@ -113,6 +119,18 @@
                 overlap, and <strong>best times</strong> highlights the slots
                 that suit the most people. If your calendar is connected, your
                 busy times can be overlaid so you don't double-book.
+              </p>
+              <p class="tw-mb-2">
+                Each cell also carries a <strong>response count</strong> — how
+                many members are free then — coloured green, amber or red as
+                that share of respondents falls. Turn it off with
+                <em>Show response counts</em> in the event's options; it's on by
+                default.
+              </p>
+              <p class="tw-mb-2">
+                If the gathering was called with <strong>time blocks</strong>,
+                you don't paint freely: clicking anywhere inside a block takes
+                the entire block.
               </p>
               <p>
                 You can respond signed-in or as a guest; signing in lets the
@@ -171,26 +189,31 @@
                 setting turns it into a standing fixture. The choices are:
               </p>
               <ul class="tw-list-disc tw-space-y-1 tw-pl-5">
-                <li><strong>Does not repeat</strong> — a one-off (the default).</li>
-                <li><strong>Weekly</strong> — same day &amp; time every week.</li>
                 <li>
-                  <strong>Every 2 weeks</strong> — the same slot on a fortnightly
-                  cadence.
+                  <strong>Does not repeat</strong> — a one-off (the default).
+                </li>
+                <li>
+                  <strong>Weekly</strong> — same day &amp; time every week.
+                </li>
+                <li>
+                  <strong>Every 2 weeks</strong> — the same slot on a
+                  fortnightly cadence.
                 </li>
                 <li><strong>Monthly</strong> — the same date each month.</li>
               </ul>
-              <p class="tw-mt-3 tw-mb-2">
+              <p class="tw-mb-2 tw-mt-3">
                 <strong>It advances itself.</strong> Once an occurrence's start
                 time passes, the gathering automatically rolls forward to the
                 next date — keeping the same time of day — so the event page
                 always shows the <em>next</em> meeting without anyone re-booking
-                it. This happens even on quiet weeks; you don't have to touch it.
+                it. This happens even on quiet weeks; you don't have to touch
+                it.
               </p>
               <ul class="tw-list-disc tw-space-y-2 tw-pl-5">
                 <li>
                   <strong>RSVPs reset each occurrence.</strong> When it rolls
-                  forward, the previous week's going/maybe/can't answers clear so
-                  everyone can RSVP fresh for the new date.
+                  forward, the previous week's going/maybe/can't answers clear
+                  so everyone can RSVP fresh for the new date.
                 </li>
                 <li>
                   <strong>Reminders repeat too.</strong> If you enabled a
@@ -228,8 +251,8 @@
             <v-expansion-panel-content>
               <ul class="tw-list-disc tw-space-y-2 tw-pl-5">
                 <li>
-                  <strong>Time increment</strong> — the grid's resolution (15 or
-                  30 minutes per cell).
+                  <strong>Time increment</strong> — the grid's resolution (15,
+                  30 or 60 minutes per cell).
                 </li>
                 <li>
                   <strong>Collect respondents' email addresses</strong> — ask
@@ -246,7 +269,8 @@
                 </li>
                 <li>
                   <strong>Timezone</strong> — the timezone the event's times are
-                  anchored to; each viewer still sees the grid in their own zone.
+                  anchored to; each viewer still sees the grid in their own
+                  zone.
                 </li>
               </ul>
             </v-expansion-panel-content>
@@ -282,14 +306,14 @@
           <!-- 8. RSVPs, Polls, Chronicle -->
           <v-expansion-panel>
             <v-expansion-panel-header>
-              RSVPs, Polls &amp; The Chronicle
+              RSVPs, Polls, Discussion &amp; The Chronicle
             </v-expansion-panel-header>
             <v-expansion-panel-content>
               <ul class="tw-list-disc tw-space-y-2 tw-pl-5">
                 <li>
-                  <strong>RSVPs</strong> — once a gathering has a confirmed time,
-                  members mark <em>going</em>, <em>maybe</em>, or <em>can't</em>,
-                  and can add plus-ones.
+                  <strong>RSVPs</strong> — once a gathering has a confirmed
+                  time, members mark <em>going</em>, <em>maybe</em>, or
+                  <em>can't</em>, and can add plus-ones.
                 </li>
                 <li>
                   <strong>Polls</strong> — the organiser can attach venue or
@@ -297,12 +321,45 @@
                   <em>where</em> and the <em>what</em>, not just the when.
                 </li>
                 <li>
+                  <strong>Discussion</strong> — every gathering carries a
+                  comment thread beneath it, so the plan can be argued out in
+                  the open rather than scattered across email.
+                </li>
+                <li>
                   <strong>The Chronicle</strong> — every gathering that comes to
-                  pass is archived automatically (with who attended), forming the
-                  club's running history. It's kept separately, so the record
-                  survives even if the original event is later removed.
+                  pass is archived automatically (with who attended), forming
+                  the club's running history. It's kept separately, so the
+                  record survives even if the original event is later removed.
                 </li>
               </ul>
+            </v-expansion-panel-content>
+          </v-expansion-panel>
+
+          <!-- 9. Folders -->
+          <v-expansion-panel>
+            <v-expansion-panel-header>
+              Folders on your dashboard
+            </v-expansion-panel-header>
+            <v-expansion-panel-content>
+              <p class="tw-mb-2">
+                Your dashboard files everything into folders. Two are made for
+                you and can't be renamed or deleted:
+              </p>
+              <ul class="tw-list-disc tw-space-y-2 tw-pl-5">
+                <li>
+                  <strong>Invites created</strong> — gatherings you called
+                  yourself.
+                </li>
+                <li>
+                  <strong>Invites received</strong> — gatherings someone else
+                  called and invited you to.
+                </li>
+              </ul>
+              <p class="tw-mt-2">
+                Events land in the matching one automatically, but nothing is
+                stuck there: drag an event between the two defaults, or into any
+                folder you make yourself, and the placement is remembered.
+              </p>
             </v-expansion-panel-content>
           </v-expansion-panel>
         </v-expansion-panels>
