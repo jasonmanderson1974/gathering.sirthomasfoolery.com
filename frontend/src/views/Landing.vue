@@ -35,7 +35,9 @@
       </div>
 
       <div class="tw-flex tw-flex-col tw-items-center">
-        <header class="tw-mb-8 tw-flex tw-flex-col tw-items-center tw-text-center">
+        <header
+          class="tw-mb-8 tw-flex tw-flex-col tw-items-center tw-text-center"
+        >
           <SirThomasFoolery :size="104" class="tw-mb-4" />
           <p class="flw-eyebrow tw-mb-2">The Fellowship Presents</p>
           <h1
@@ -190,7 +192,11 @@ export default {
       {
         question: "Does the Fellowship account for timezones?",
         answer:
-          "Indeed, good sir. All hours are rendered in each viewer's own timezone automatically. Should you wish to set it yourself, a timezone selector awaits at the foot of every Gathering.",
+          "Indeed, good sir. All hours are rendered in each viewer's own timezone automatically. Should you wish to set it yourself, a timezone selector sits amongst the Gathering's controls, above the grid — save upon a dates-only Gathering, where no hours are in question.",
+      },
+      {
+        question: "In what manner may I put the question to the Order?",
+        answer: `Three, as the occasion demands. "Dates and times" collects exact hours — one window across every date, or a different window for each. "Dates w/ time blocks" lets you set the sittings yourself, and each man may take only a whole block, never a part of one. "Dates only" asks merely which days serve, when the hour is of no consequence.`,
       },
       {
         question: "How many men may answer a summons?",
@@ -226,8 +232,16 @@ export default {
         ],
       },
       {
+        question: "May a Gathering be made a standing fixture?",
+        answer: `It may. When you settle upon the hour, set "Repeat" to weekly, fortnightly, or monthly, and the Gathering advances itself — once an occasion has passed it rolls forward to the next date of its own accord, with RSVPs cleared and reminders dispatched afresh. No man need book it again.`,
+      },
+      {
+        question: "What becomes of a Gathering once the hour is settled?",
+        answer: `Your fellows mark themselves going, maybe, or unable — plus-ones and all. You may attach polls for the venue or the entertainment, and a discussion thread sits beneath for the arguing of details. Once the day has passed, the Gathering is entered into The Chronicle, the Order's standing record of what came to pass.`,
+      },
+      {
         question: `I should like only myself to see the replies.`,
-        answer: `But of course — tick "Only show responses to event creator" under Advanced Options when calling your Gathering, and your fellows shall see neither names nor availability of one another.`,
+        answer: `But of course — tick "Hide responses from respondents" under Advanced Options when calling your Gathering, and your fellows shall see neither names nor availability of one another until they have answered themselves.`,
         authRequired: true,
       },
       {
@@ -237,7 +251,7 @@ export default {
       },
       {
         question: `How do I prompt the laggards to reply?`,
-        answer: `Open the "Email Reminders" section when calling your Gathering and enter each man's address. Reminders are dispatched on the day of creation, the day following, and three days hence. <br><br>You shall also be notified once the whole Order has answered.`,
+        answer: `Open the "Email reminders" section when calling your Gathering and enter each man's address. Reminders are dispatched on the day of creation, the day following, and three days hence. <br><br>You shall also be notified once the whole Order has answered.`,
         authRequired: true,
       },
     ],
