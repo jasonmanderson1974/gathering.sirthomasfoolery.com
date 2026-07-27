@@ -20,7 +20,6 @@ import (
 	"sirtom/server/responses"
 	"sirtom/server/services/calendar"
 	"sirtom/server/services/gcloud"
-	"sirtom/server/services/listmonk"
 	"sirtom/server/utils"
 )
 
@@ -37,8 +36,6 @@ func InitEvents(router *gin.RouterGroup) {
 	eventRouter.DELETE("/:eventId/response", deleteEventResponse)
 	eventRouter.POST("/:eventId/rename-user", renameUser)
 	eventRouter.POST("/:eventId/responded", userResponded)
-	eventRouter.POST("/:eventId/decline", middleware.AuthRequired(), declineInvite)
-	eventRouter.GET("/:eventId/calendar-availabilities", middleware.AuthRequired(), getCalendarAvailabilities)
 	eventRouter.DELETE("/:eventId", middleware.AuthRequired(), deleteEvent)
 	eventRouter.POST("/:eventId/duplicate", middleware.AuthRequired(), duplicateEvent)
 	eventRouter.POST("/:eventId/archive", middleware.AuthRequired(), archiveEvent)
@@ -58,7 +55,7 @@ func InitEvents(router *gin.RouterGroup) {
 // @Tags events
 // @Accept json
 // @Produce json
-// @Param payload body object{name=string,duration=float32,dates=[]string,type=models.EventType,isSignUpForm=bool,signUpBlocks=[]models.SignUpBlock,notificationsEnabled=bool,blindAvailabilityEnabled=bool,daysOnly=bool,wholeBlockSelection=bool,remindees=[]string,sendEmailAfterXResponses=int,when2meetHref=string,timeIncrement=int,attendees=[]string} true "Object containing info about the event to create"
+// @Param payload body object{name=string,duration=float32,dates=[]string,type=models.EventType,isSignUpForm=bool,signUpBlocks=[]models.SignUpBlock,notificationsEnabled=bool,blindAvailabilityEnabled=bool,daysOnly=bool,wholeBlockSelection=bool,remindees=[]string,sendEmailAfterXResponses=int,when2meetHref=string,timeIncrement=int} true "Object containing info about the event to create"
 // @Success 201 {object} object{eventId=string}
 // @Router /events [post]
 func createEvent(c *gin.Context) {
@@ -91,7 +88,6 @@ func createEvent(c *gin.Context) {
 		Location                 *string  `json:"location"`
 
 		// Only for availability groups
-		Attendees []string `json:"attendees"`
 	}{}
 	if err := c.Bind(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
@@ -181,50 +177,6 @@ func createEvent(c *gin.Context) {
 		event.Remindees = &remindees
 	}
 
-	attendees := make([]models.Attendee, 0)
-	if payload.Type == models.GROUP {
-
-		if signedIn {
-			// Add owner as attendee
-			attendees = append(attendees, models.Attendee{Email: user.Email, Declined: utils.FalsePtr(), EventId: event.Id})
-		}
-
-		// Add attendees and send email
-		if len(payload.Attendees) > 0 {
-			// Determine owner name
-			var ownerName string
-			if signedIn {
-				ownerName = user.FirstName
-			} else {
-				ownerName = "Somebody"
-			}
-
-			// Add attendees to attendees array and send invite emails
-			availabilityGroupInviteEmailId := 9
-			for _, email := range payload.Attendees {
-				listmonk.SendEmailAddSubscriberIfNotExist(email, availabilityGroupInviteEmailId, bson.M{
-					"ownerName": ownerName,
-					"groupName": event.Name,
-					"groupUrl":  fmt.Sprintf("%s/g/%s", utils.GetBaseUrl(), event.GetId()),
-				}, false)
-				attendees = append(attendees, models.Attendee{Email: email, Declined: utils.FalsePtr(), EventId: event.Id})
-			}
-
-		}
-
-		if len(attendees) > 0 {
-			attendeeDocs := make([]interface{}, len(attendees))
-			for i, attendee := range attendees {
-				attendeeDocs[i] = attendee
-			}
-			if _, err := db.AttendeesCollection.InsertMany(context.Background(), attendeeDocs); err != nil {
-				logger.StdErr.Println(err)
-				c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-				return
-			}
-		}
-	}
-
 	// Insert event
 	result, err := db.EventsCollection.InsertOne(context.Background(), event)
 	if err != nil {
@@ -251,7 +203,7 @@ func createEvent(c *gin.Context) {
 // @Tags events
 // @Produce json
 // @Param eventId path string true "Event ID"
-// @Param payload body object{name=string,description=string,duration=float32,dates=[]string,type=models.EventType,signUpBlocks=[]models.SignUpBlock,notificationsEnabled=bool,blindAvailabilityEnabled=bool,daysOnly=bool,wholeBlockSelection=bool,remindees=[]string,sendEmailAfterXResponses=int,attendees=[]string} true "Object containing info about the event to update"
+// @Param payload body object{name=string,description=string,duration=float32,dates=[]string,type=models.EventType,signUpBlocks=[]models.SignUpBlock,notificationsEnabled=bool,blindAvailabilityEnabled=bool,daysOnly=bool,wholeBlockSelection=bool,remindees=[]string,sendEmailAfterXResponses=int} true "Object containing info about the event to update"
 // @Success 200
 // @Router /events/{eventId} [put]
 func editEvent(c *gin.Context) {
@@ -284,7 +236,6 @@ func editEvent(c *gin.Context) {
 		CollectEmails            *bool    `json:"collectEmails"`
 
 		// Only for availability groups
-		Attendees []string `json:"attendees"`
 	}{}
 	if err := c.Bind(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
@@ -380,101 +331,6 @@ func editEvent(c *gin.Context) {
 		}
 
 		event.Remindees = &updatedRemindees
-	}
-
-	// Update attendees
-	if event.Type == models.GROUP {
-		origAttendees, attendeesErr := db.GetAttendees(event.Id.Hex())
-		if attendeesErr != nil {
-			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-			return
-		}
-		added, removed, kept := utils.FindAddedRemovedKept(payload.Attendees, utils.Map(origAttendees, func(a models.Attendee) string { return a.Email }))
-
-		// Determine owner name
-		var ownerName string
-		var owner *models.User
-		if event.OwnerId != primitive.NilObjectID {
-			var ownerErr error
-			owner, ownerErr = db.GetUserById(event.OwnerId.Hex())
-			if ownerErr != nil {
-				c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-				return
-			}
-			ownerName = owner.FirstName
-		} else {
-			ownerName = "Somebody"
-		}
-
-		if len(removed) > 0 {
-			eventResponses, eventResponsesErr := db.GetEventResponses(event.Id.Hex())
-			if eventResponsesErr != nil {
-				c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-				return
-			}
-
-			// Remove user from responses map
-			for _, removedEmail := range removed {
-				// Only delete response if it isn't the owner of the group
-				if removedEmail.Value != utils.Coalesce(owner).Email {
-					removedUser, removedErr := db.GetUserByEmail(removedEmail.Value)
-					if removedErr != nil {
-						logger.StdErr.Println(removedErr)
-						continue
-					}
-					if removedUser != nil {
-						// Remove response from array
-						for i := range eventResponses {
-							if eventResponses[i].UserId == removedUser.Id.Hex() {
-								db.EventResponsesCollection.DeleteOne(context.Background(), bson.M{
-									"_id": eventResponses[i].Id,
-								})
-								*event.NumResponses--
-								break
-							}
-						}
-					}
-
-					// Remove attendee from attendees collection
-					db.AttendeesCollection.DeleteOne(context.Background(), bson.M{
-						"email":   removedEmail.Value,
-						"eventId": event.Id,
-					})
-				}
-			}
-		}
-
-		for _, addedEmail := range added {
-			// Send invite email
-			availabilityGroupInviteEmailId := 9
-			listmonk.SendEmailAddSubscriberIfNotExist(addedEmail.Value, availabilityGroupInviteEmailId, bson.M{
-				"ownerName": ownerName,
-				"groupName": event.Name,
-				"groupUrl":  fmt.Sprintf("%s/g/%s", utils.GetBaseUrl(), event.GetId()),
-			}, false)
-			if _, err := db.AttendeesCollection.InsertOne(context.Background(), models.Attendee{
-				Email:    addedEmail.Value,
-				Declined: utils.FalsePtr(),
-				EventId:  event.Id,
-			}); err != nil {
-				logger.StdErr.Println(err)
-			}
-		}
-
-		// Send group update emails
-		if len(added) > 0 {
-			emails := utils.Map(added, func(a utils.ElementWithIndex[string]) string { return a.Value })
-			addedAttendeeEmailId := 11
-
-			for _, keptEmail := range kept {
-				listmonk.SendEmailAddSubscriberIfNotExist(keptEmail.Value, addedAttendeeEmailId, bson.M{
-					"ownerName": ownerName,
-					"groupName": event.Name,
-					"groupUrl":  fmt.Sprintf("%s/g/%s", utils.GetBaseUrl(), event.GetId()),
-					"emails":    emails,
-				}, false)
-			}
-		}
 	}
 
 	// Update event object
@@ -615,15 +471,6 @@ func getEvent(c *gin.Context) {
 		event.SignUpResponses[userId] = response
 	}
 
-	if event.Type == models.GROUP {
-		attendees, attendeesErr := db.GetAttendees(event.Id.Hex())
-		if attendeesErr != nil {
-			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-			return
-		}
-		event.Attendees = &attendees
-	}
-
 	// Determine if the requester is the event owner
 	ownerSesh := event.OwnerId.Hex()
 	session := sessions.Default(c)
@@ -641,7 +488,7 @@ func getEvent(c *gin.Context) {
 		stripSensitiveUserFields(response.User)
 		if !showEmails {
 			response.Email = ""
-			if response.User != nil && !shouldKeepGroupResponseUserEmails(event, userSesh, isOwner) {
+			if response.User != nil {
 				response.User.Email = ""
 			}
 		}
@@ -651,7 +498,7 @@ func getEvent(c *gin.Context) {
 		stripSensitiveUserFields(response.User)
 		if !showEmails {
 			response.Email = ""
-			if response.User != nil && !shouldKeepGroupResponseUserEmails(event, userSesh, isOwner) {
+			if response.User != nil {
 				response.User.Email = ""
 			}
 		}

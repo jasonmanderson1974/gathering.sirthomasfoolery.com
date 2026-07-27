@@ -16,8 +16,6 @@ const (
 	UserNotFriends        string = "user-not-friends"
 	UserNotEventOwner     string = "user-not-event-owner"
 	RemindeeEmailNotFound string = "remindee-email-not-found"
-	AttendeeEmailNotFound string = "attendee-email-not-found"
-	EventNotGroup         string = "event-not-group"
 	InvalidCredentials    string = "invalid-credentials"
 	OtpExpired            string = "otp-expired"
 	OtpInvalidCode        string = "otp-invalid-code"

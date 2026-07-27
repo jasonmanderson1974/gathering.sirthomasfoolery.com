@@ -105,7 +105,7 @@ func getResponses(c *gin.Context) {
 		stripSensitiveUserFields(response.User)
 		if !showEmails {
 			response.Email = ""
-			if response.User != nil && !shouldKeepGroupResponseUserEmails(event, userSesh, isOwner) {
+			if response.User != nil {
 				response.User.Email = ""
 			}
 		}
@@ -249,60 +249,6 @@ func updateEventResponse(c *gin.Context) {
 				CalendarOptions:         payload.CalendarOptions,
 			}
 
-			if event.Type == models.GROUP {
-				user, userErr := db.GetUserById(userIdString)
-				if userErr != nil {
-					c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-					return
-				}
-
-				// Set declined to false (in case user declined group in the past)
-				if user != nil {
-					db.AttendeesCollection.UpdateOne(context.Background(), bson.M{
-						"email":   user.Email,
-						"eventId": event.Id,
-					}, bson.M{
-						"$set": bson.M{
-							"declined": false,
-						},
-					})
-				}
-
-				// Update manual availability
-				_, existingResponse := findResponse(eventResponses, userIdString)
-				if existingResponse != nil {
-					response.ManualAvailability = existingResponse.ManualAvailability
-				}
-				if response.ManualAvailability == nil {
-					manualAvailability := make(map[primitive.DateTime][]primitive.DateTime)
-					response.ManualAvailability = &manualAvailability
-				}
-
-				// Replace availability on days that already exist in manual availability map
-				for day := range utils.Coalesce(response.ManualAvailability) {
-					for payloadDay, availableTimes := range utils.Coalesce(payload.ManualAvailability) {
-						// Check if day is between start and end times of the payload day
-						endTime := payloadDay.Time().Add(time.Duration(*event.Duration) * time.Hour)
-						if day.Time().Compare(payloadDay.Time()) >= 0 && day.Time().Compare(endTime) <= 0 {
-							// Replace availability with updated availability
-							delete(*response.ManualAvailability, day)
-							(*response.ManualAvailability)[payloadDay] = availableTimes
-							delete(*payload.ManualAvailability, payloadDay)
-							break
-						}
-					}
-
-					// Break if no more items in manual availability
-					if len(utils.Coalesce(payload.ManualAvailability)) == 0 {
-						break
-					}
-				}
-
-				// Add the rest of manual availability that was not replaced
-				for day, availableTimes := range utils.Coalesce(payload.ManualAvailability) {
-					(*response.ManualAvailability)[day] = availableTimes
-				}
-			}
 		}
 
 		// Check if user has responded to event before (edit response) or not (new response)
@@ -367,7 +313,7 @@ func updateEventResponse(c *gin.Context) {
 	}
 
 	// Send notification emails
-	if (utils.Coalesce(event.NotificationsEnabled) || event.Type == models.GROUP) && !userHasResponded && userIdString != event.OwnerId.Hex() {
+	if utils.Coalesce(event.NotificationsEnabled) && !userHasResponded && userIdString != event.OwnerId.Hex() {
 		// Send email asynchronously
 		go func() {
 			// Recover from panics
@@ -398,15 +344,7 @@ func updateEventResponse(c *gin.Context) {
 				respondentName = fmt.Sprintf("%s %s", respondent.FirstName, respondent.LastName)
 			}
 
-			if event.Type == models.GROUP {
-				someoneRespondedEmailId := 13
-				listmonk.SendEmail(creator.Email, someoneRespondedEmailId, bson.M{
-					"groupName":      event.Name,
-					"ownerName":      creator.FirstName,
-					"respondentName": respondentName,
-					"groupUrl":       fmt.Sprintf("%s/g/%s", utils.GetBaseUrl(), event.GetId()),
-				})
-			} else {
+			{
 				someoneRespondedEmailId := 10
 				listmonk.SendEmail(creator.Email, someoneRespondedEmailId, bson.M{
 					"eventName":      event.Name,
@@ -548,24 +486,6 @@ func deleteEventResponse(c *gin.Context) {
 			}
 		}
 
-		// If this event is a Group, also make the attendee "leave the group" by setting "declined" to true
-		if event.Type == models.GROUP {
-			user, userErr := db.GetUserById(userIdString)
-			if userErr != nil {
-				c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-				return
-			}
-			if user != nil {
-				db.AttendeesCollection.UpdateOne(context.Background(), bson.M{
-					"email":   user.Email,
-					"eventId": event.Id,
-				}, bson.M{
-					"$set": bson.M{
-						"declined": true,
-					},
-				})
-			}
-		}
 	}
 
 	// Update responses in mongodb
@@ -717,60 +637,6 @@ func userResponded(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{})
 }
 
-// @Summary Decline the current user's invite to the event
-// @Tags events
-// @Accept json
-// @Produce json
-// @Param eventId path string true "Event ID"
-// @Success 200
-// @Router /events/{eventId}/decline [post]
-func declineInvite(c *gin.Context) {
-	// Fetch event
-	eventId := c.Param("eventId")
-	event, eventErr := db.GetEventById(eventId)
-	if eventErr != nil {
-		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-		return
-	}
-	if event == nil {
-		c.JSON(http.StatusNotFound, responses.Error{Error: errs.EventNotFound})
-		return
-	}
-
-	// Ensure that event is a group
-	if event.Type != models.GROUP {
-		c.JSON(http.StatusBadRequest, responses.Error{Error: errs.EventNotGroup})
-		return
-	}
-
-	// Get current user
-	userInterface, _ := c.Get("authUser")
-	user := userInterface.(*models.User)
-
-	// Check if user is in attendees array
-	attendee := db.AttendeesCollection.FindOne(context.Background(), bson.M{
-		"email":   user.Email,
-		"eventId": event.Id,
-	})
-	if attendee == nil {
-		// User not in attendees array
-		c.JSON(http.StatusNotFound, responses.Error{Error: errs.AttendeeEmailNotFound})
-		return
-	}
-
-	// Decline invite
-	db.AttendeesCollection.UpdateOne(context.Background(), bson.M{
-		"email":   user.Email,
-		"eventId": event.Id,
-	}, bson.M{
-		"$set": bson.M{
-			"declined": true,
-		},
-	})
-
-	c.JSON(http.StatusOK, gin.H{})
-}
-
 // Helper function to find a response by userId
 func findResponse(responses []models.EventResponse, userId string) (int, *models.Response) {
 	for i, resp := range responses {
@@ -779,37 +645,6 @@ func findResponse(responses []models.EventResponse, userId string) (int, *models
 		}
 	}
 	return -1, nil
-}
-
-// shouldKeepGroupResponseUserEmails is true for signed-in group owners and invitees
-// so clients can match pending attendees to respondents when collectEmails is off.
-func shouldKeepGroupResponseUserEmails(event *models.Event, userSesh string, isOwner bool) bool {
-	if event.Type != models.GROUP || userSesh == "" {
-		return false
-	}
-	if isOwner {
-		return true
-	}
-	user, _ := db.GetUserById(userSesh)
-	if user == nil {
-		return false
-	}
-	viewerEmail := utils.NormalizeEmail(user.Email)
-	if viewerEmail == "" {
-		return false
-	}
-	var attendees []models.Attendee
-	if event.Attendees != nil {
-		attendees = *event.Attendees
-	} else {
-		attendees, _ = db.GetAttendees(event.Id.Hex())
-	}
-	for _, a := range attendees {
-		if utils.NormalizeEmail(a.Email) == viewerEmail {
-			return true
-		}
-	}
-	return false
 }
 
 // stripSensitiveUserFields removes fields from a User that should never be

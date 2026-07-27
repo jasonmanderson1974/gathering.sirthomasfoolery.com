@@ -422,29 +422,6 @@ func getEvents(c *gin.Context) {
 		eventIds = append(eventIds, eventResponse.EventId)
 	}
 
-	// Get all the event ids that the user is an attendee of
-	cursor, err = db.AttendeesCollection.Find(context.Background(), bson.M{"email": user.Email, "declined": false})
-	if err != nil {
-		logger.StdErr.Println(err)
-		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-		return
-	}
-	defer cursor.Close(context.Background())
-	hasRespondedEventIds := make(models.Set[primitive.ObjectID])
-	for cursor.Next(context.Background()) {
-		var attendee models.Attendee
-		if err := cursor.Decode(&attendee); err != nil {
-			logger.StdErr.Println(err)
-			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-			return
-		}
-		if utils.Contains(eventIds, attendee.EventId) {
-			hasRespondedEventIds[attendee.EventId] = struct{}{}
-		} else {
-			eventIds = append(eventIds, attendee.EventId)
-		}
-	}
-
 	cursor, err = db.EventsCollection.Find(
 		context.Background(),
 		bson.M{
@@ -474,17 +451,6 @@ func getEvents(c *gin.Context) {
 		logger.StdErr.Println(err)
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 		return
-	}
-
-	for i, event := range events {
-		// Set the hasResponded field for availability groups
-		if event.Type == models.GROUP {
-			if _, ok := hasRespondedEventIds[event.Id]; ok {
-				events[i].HasResponded = utils.TruePtr()
-			} else {
-				events[i].HasResponded = utils.FalsePtr()
-			}
-		}
 	}
 
 	// File any events that aren't in a folder yet into the user's default

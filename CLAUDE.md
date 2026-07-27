@@ -68,9 +68,9 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
 - `logger/` — wraps log file (`logs.log`) + stdout via `gin.DefaultWriter`.
 
 ### Frontend (Vue 2 SPA)
-- `src/router/index.js` — routes (`Landing`, `Home`, `Event`, `Group`, `Friends`, `Settings`, `SignIn`/`SignUp`/`Auth`, `StripeRedirect`, etc. — see `src/views/`).
-- `src/store/index.js` — single (non-modular) Vuex store holding auth user, events, folders, feature flags (`groupsEnabled`, `daysOnlyEnabled`, `overlayAvailabilitiesEnabled`, `enablePaywall`, etc.), and dialog/snackbar state.
-- `src/components/` — organized by feature folder (`event/`, `groups/`, `home/`, `landing/`, `pricing/`, `settings/`, `schedule_overlap/`, `calendar_permission_dialogs/`, `sign_up_form/`, `general/`) plus top-level shared components.
+- `src/router/index.js` — routes (`Landing`, `Home`, `Event`, `SignUp`, `Friends`, `Settings`, `SignIn`/`SignUp`/`Auth`, `StripeRedirect`, etc. — see `src/views/`).
+- `src/store/index.js` — single (non-modular) Vuex store holding auth user, events, folders, feature flags (`daysOnlyEnabled`, `signUpFormEnabled`, `overlayAvailabilitiesEnabled`, `enablePaywall`, etc.), and dialog/snackbar state.
+- `src/components/` — organized by feature folder (`event/`, `home/`, `landing/`, `pricing/`, `settings/`, `schedule_overlap/`, `calendar_permission_dialogs/`, `sign_up_form/`, `general/`) plus top-level shared components.
 - `src/utils/` — date math (`date_utils.js`, uses `dayjs`/`moment`/`spacetime`), `fetch_utils.js` (API client), `plugin_utils.js` (handles the postMessage plugin API — see `PLUGIN_API_README.md`), `sign_in_utils.js`, `location_utils.js`, `services/` (`EventService.js`, `FolderService.js` — thin wrappers over `fetch_utils` for event and folder API calls).
 - Tailwind + Vuetify coexist; `tailwind.config.js` purges `src/**/*.{vue,js,...}`.
 - Service worker is registered via `register-service-worker`; `kill-sw.js` at the repo root is a kill switch script if needed.

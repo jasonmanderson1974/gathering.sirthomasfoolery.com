@@ -53,17 +53,6 @@
           :folder-id="folderId"
           @signIn="$emit('signIn')"
         />
-        <NewGroup
-          v-else-if="tab === 'group'"
-          ref="group"
-          :key="`group-${value}`"
-          :event="event"
-          :edit="edit"
-          @input="handleDialogInput"
-          :show-help="!_noTabs"
-          :folder-id="folderId"
-          :contactsPayload="this.type == 'group' ? contactsPayload : {}"
-        />
         <NewSignUp
           v-if="tab === 'signup'"
           ref="signup"
@@ -84,7 +73,6 @@
 import { isPhone } from "@/utils"
 import NewEvent from "@/components/NewEvent.vue"
 import UnsavedChangesDialog from "@/components/general/UnsavedChangesDialog.vue"
-import NewGroup from "./NewGroup.vue"
 import NewSignUp from "./NewSignUp.vue"
 import { mapState } from "vuex"
 
@@ -95,7 +83,7 @@ export default {
 
   props: {
     value: { type: Boolean, required: true },
-    type: { type: String, default: "event" }, // Either "event" or "group"
+    type: { type: String, default: "event" }, // Either "event" or "signup"
     event: { type: Object },
     edit: { type: Boolean, default: false },
     contactsPayload: { type: Object, default: () => ({}) },
@@ -105,7 +93,6 @@ export default {
 
   components: {
     NewEvent,
-    NewGroup,
     NewSignUp,
     UnsavedChangesDialog,
   },
@@ -113,27 +100,26 @@ export default {
   data() {
     return {
       tab: this.type,
-      tabs: [
-        { title: "Event", type: "event" },
-        { title: "Sign up form", type: "signup" },
-        { title: "Availability group", type: "group" },
-      ],
 
       unsavedChangesDialog: false,
     }
   },
 
   computed: {
-    ...mapState(["groupsEnabled", "signUpFormEnabled"]),
+    ...mapState(["signUpFormEnabled"]),
     isPhone() {
       return isPhone(this.$vuetify)
     },
-    _noTabs() {
-      if (!this.groupsEnabled) {
-        return true
-      } else {
-        return this.noTabs
+    tabs() {
+      const tabs = [{ title: "Event", type: "event" }]
+      if (this.signUpFormEnabled) {
+        tabs.push({ title: "Sign up form", type: "signup" })
       }
+      return tabs
+    },
+    _noTabs() {
+      // Nothing to switch between when only one kind can be created
+      return this.noTabs || this.tabs.length <= 1
     },
   },
 
@@ -153,28 +139,6 @@ export default {
   },
 
   watch: {
-    groupsEnabled: {
-      immediate: true,
-      handler() {
-        this.tabs = [
-          { title: "Event", type: "event" },
-          { title: "Sign up form", type: "signup" },
-        ]
-        if (this.groupsEnabled) {
-          this.tabs.push({ title: "Availability group", type: "group" })
-        }
-      },
-    },
-    signUpFormEnabled: {
-      immediate: true,
-      handler() {
-        this.tabs = [{ title: "Event", type: "event" }]
-        if (this.signUpFormEnabled) {
-          this.tabs.push({ title: "Sign up form", type: "signup" })
-        }
-        this.tabs.push({ title: "Availability group", type: "group" })
-      },
-    },
     value: {
       immediate: true,
       handler() {

@@ -25,32 +25,28 @@ func SendEventCreatedMessage(insertedId string, creator string, event models.Eve
 		event.Type,
 	)
 
-	if event.Type == models.GROUP {
-		eventInfoText += fmt.Sprintf("\n*Num attendees*: %v", numAttendees)
-	} else {
-		daysOnly := utils.Coalesce(event.DaysOnly)
-		notificationsEnabled := utils.Coalesce(event.NotificationsEnabled)
-		numRemindees := len(utils.Coalesce(event.Remindees))
-		blindAvailabilityEnabled := utils.Coalesce(event.BlindAvailabilityEnabled)
-		sendEmailAfterXResponses := utils.Coalesce(event.SendEmailAfterXResponses)
-		when2meetHref := utils.Coalesce(event.When2meetHref)
+	daysOnly := utils.Coalesce(event.DaysOnly)
+	notificationsEnabled := utils.Coalesce(event.NotificationsEnabled)
+	numRemindees := len(utils.Coalesce(event.Remindees))
+	blindAvailabilityEnabled := utils.Coalesce(event.BlindAvailabilityEnabled)
+	sendEmailAfterXResponses := utils.Coalesce(event.SendEmailAfterXResponses)
+	when2meetHref := utils.Coalesce(event.When2meetHref)
 
-		eventInfoText += fmt.Sprintln("*Days only*:", daysOnly)
-		if notificationsEnabled {
-			eventInfoText += fmt.Sprintln("*Notifications enabled*:", notificationsEnabled)
-		}
-		if numRemindees > 0 {
-			eventInfoText += fmt.Sprintln("*Num remindees*:", numRemindees)
-		}
-		if blindAvailabilityEnabled {
-			eventInfoText += fmt.Sprintln("*Blind availability*:", blindAvailabilityEnabled)
-		}
-		if sendEmailAfterXResponses > 0 {
-			eventInfoText += fmt.Sprintln("*Send email after X responses*:", sendEmailAfterXResponses)
-		}
-		if len(when2meetHref) > 0 {
-			eventInfoText += fmt.Sprintf("*When2meet URL*: https://when2meet.com%s\n", when2meetHref)
-		}
+	eventInfoText += fmt.Sprintln("*Days only*:", daysOnly)
+	if notificationsEnabled {
+		eventInfoText += fmt.Sprintln("*Notifications enabled*:", notificationsEnabled)
+	}
+	if numRemindees > 0 {
+		eventInfoText += fmt.Sprintln("*Num remindees*:", numRemindees)
+	}
+	if blindAvailabilityEnabled {
+		eventInfoText += fmt.Sprintln("*Blind availability*:", blindAvailabilityEnabled)
+	}
+	if sendEmailAfterXResponses > 0 {
+		eventInfoText += fmt.Sprintln("*Send email after X responses*:", sendEmailAfterXResponses)
+	}
+	if len(when2meetHref) > 0 {
+		eventInfoText += fmt.Sprintf("*When2meet URL*: https://when2meet.com%s\n", when2meetHref)
 	}
 
 	response := commands.Response{Blocks: []bson.M{

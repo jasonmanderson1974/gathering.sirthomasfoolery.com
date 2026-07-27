@@ -52,7 +52,7 @@
                     <div
                       v-for="(day, i) in monthDays"
                       :key="day.time"
-                      class="timeslot tw-aspect-square tw-flex tw-flex-col tw-items-center tw-justify-center tw-text-sm sm:tw-text-base"
+                      class="timeslot tw-flex tw-aspect-square tw-flex-col tw-items-center tw-justify-center tw-text-sm sm:tw-text-base"
                       :class="dayTimeslotClassStyle[i].class"
                       :style="dayTimeslotClassStyle[i].style"
                       v-on="dayTimeslotVon[i]"
@@ -213,7 +213,7 @@
                       <div :key="i" class="tw-flex-1 tw-bg-wood-deep">
                         <div class="tw-text-center">
                           <div
-                            v-if="isSpecificDates || isGroup"
+                            v-if="isSpecificDates"
                             class="tw-text-[12px] tw-font-light tw-capitalize tw-text-parchment-dim sm:tw-text-xs"
                           >
                             {{ day.dateString }}
@@ -255,11 +255,7 @@
                           <div
                             :key="d"
                             class="tw-relative tw-flex-1"
-                            :class="
-                              ((isGroup && loadingCalendarEvents) ||
-                                loadingResponses.loading) &&
-                              'tw-opacity-50'
-                            "
+                            :class="loadingResponses.loading && 'tw-opacity-50'"
                           >
                             <!-- Timeslots -->
                             <div
@@ -373,14 +369,8 @@
                                   :blockStyle="getTimeBlockStyle(calendarEvent)"
                                   :key="calendarEvent.id"
                                   :calendarEvent="calendarEvent"
-                                  :isGroup="isGroup"
-                                  :isEditingAvailability="
-                                    state === states.EDIT_AVAILABILITY
-                                  "
                                   :noEventNames="noEventNames"
-                                  :transitionName="
-                                    isGroup ? '' : 'fade-transition'
-                                  "
+                                  transitionName="fade-transition"
                                 />
                               </template>
                             </template>
@@ -422,7 +412,9 @@
                                 signUpBlocksByDay[d + page * maxDaysPerPage]
                               "
                               :blocksToAdd="
-                                signUpBlocksToAddByDay[d + page * maxDaysPerPage]
+                                signUpBlocksToAddByDay[
+                                  d + page * maxDaysPerPage
+                                ]
                               "
                               @block-click="handleSignUpBlockClick"
                             />
@@ -663,7 +655,7 @@
                 </div>
                 <div class="tw-flex tw-flex-col tw-gap-3">
                   <AvailabilityTypeToggle
-                    v-if="!isGroup && !isPhone"
+                    v-if="!isPhone"
                     class="tw-w-full"
                     v-model="availabilityType"
                   />
@@ -679,13 +671,7 @@
                   :toggleState="true"
                   :eventId="event._id"
                   :calendar-events-map="calendarEventsMap"
-                  :syncWithBackend="!isGroup"
-                  :allowAddCalendarAccount="!isGroup"
-                  @toggleCalendarAccount="toggleCalendarAccount"
-                  @toggleSubCalendarAccount="toggleSubCalendarAccount"
-                  :initialCalendarAccountsData="
-                    isGroup ? sharedCalendarAccounts : authUser.calendarAccounts
-                  "
+                  :initialCalendarAccountsData="authUser.calendarAccounts"
                 ></CalendarAccounts>
 
                 <div v-if="showOverlayAvailabilityToggle">
@@ -746,20 +732,11 @@
                           <v-card-text
                             class="tw-flex tw-flex-col tw-gap-6 tw-pb-8 tw-pt-2"
                           >
-                            <AlertText v-if="isGroup" class="-tw-mb-4">
-                              Calendar options will only updated for the current
-                              group
-                            </AlertText>
-
-                            <BufferTimeSwitch
-                              :bufferTime.sync="bufferTime"
-                              :syncWithBackend="!isGroup"
-                            />
+                            <BufferTimeSwitch :bufferTime.sync="bufferTime" />
 
                             <WorkingHoursToggle
                               :workingHours.sync="workingHours"
                               :timezone="curTimezone"
-                              :syncWithBackend="!isGroup"
                             />
                           </v-card-text>
                         </v-card>
@@ -786,19 +763,15 @@
                         v-on="on"
                         class="tw-cursor-pointer tw-text-sm tw-text-red"
                       >
-                        {{ !isGroup ? "Delete availability" : "Leave group" }}
+                        Delete availability
                       </span>
                     </template>
 
                     <v-card>
                       <v-card-title>Are you sure?</v-card-title>
                       <v-card-text class="tw-text-sm tw-text-parchment-dim"
-                        >Are you sure you want to
-                        {{
-                          !isGroup
-                            ? "delete your availability from this event?"
-                            : "leave this group?"
-                        }}</v-card-text
+                        >Are you sure you want to delete your availability from
+                        this event?</v-card-text
                       >
                       <v-card-actions>
                         <v-spacer />
@@ -812,7 +785,7 @@
                             $emit('deleteAvailability')
                             deleteAvailabilityDialog = false
                           "
-                          >{{ !isGroup ? "Delete" : "Leave" }}</v-btn
+                          >Delete</v-btn
                         >
                       </v-card-actions>
                     </v-card>
@@ -834,7 +807,6 @@
                   :respondents="respondents"
                   :parsedResponses="parsedResponses"
                   :isOwner="isOwner"
-                  :isGroup="isGroup"
                   :attendees="event.attendees"
                   :showCalendarEvents.sync="showCalendarEvents"
                   :responsesFormatted="responsesFormatted"
@@ -919,7 +891,7 @@
 
           <!-- Fixed pos availability toggle (mobile) -->
           <v-expand-transition>
-            <div v-if="!isGroup && editing && !isSignUp">
+            <div v-if="editing && !isSignUp">
               <div class="tw-bg-leather tw-p-4">
                 <AvailabilityTypeToggle
                   class="tw-w-full"
@@ -961,7 +933,6 @@
                   :respondents="respondents"
                   :parsedResponses="parsedResponses"
                   :isOwner="isOwner"
-                  :isGroup="isGroup"
                   :attendees="event.attendees"
                   :showCalendarEvents.sync="showCalendarEvents"
                   :responsesFormatted="responsesFormatted"
@@ -1159,9 +1130,6 @@ export default {
     addingAvailabilityAsGuest: { type: Boolean, default: false }, // Whether the signed in user is adding availability as a guest
 
     initialTimezone: { type: Object, default: () => ({}) },
-
-    // Availability Groups
-    calendarAvailabilities: { type: Object, default: () => ({}) },
   },
   data() {
     return {
@@ -1189,7 +1157,6 @@ export default {
       curTimeslotAvailability: {}, // The users available for the current timeslot
       curRespondent: "", // Id of the active respondent (set on hover)
       curRespondents: [], // Id of currently selected respondents (set on click)
-      sharedCalendarAccounts: {}, // The user's calendar accounts for changing calendar options for groups
       fetchedResponses: {}, // Responses fetched from the server for the dates currently shown
       loadingResponses: { loading: false, lastFetched: new Date().getTime() }, // Whether we're currently fetching the responses
       responsesFormatted: new Map(), // Map where date/time is mapped to the people that are available then
@@ -1281,9 +1248,6 @@ export default {
       /* Variables for hint */
       hintState: true,
 
-      /** Groups */
-      manualAvailability: {},
-
       /** Constants */
       months: [
         "jan",
@@ -1349,9 +1313,7 @@ export default {
       let events = []
       let event
 
-      const calendarAccounts = this.isGroup
-        ? this.sharedCalendarAccounts
-        : this.authUser.calendarAccounts
+      const calendarAccounts = this.authUser.calendarAccounts
 
       // Adds events from calendar accounts that are enabled
       for (const id in calendarAccounts) {
@@ -1367,7 +1329,7 @@ export default {
               // authUser doesn't contain the subCalendar, so push event to events without checking if subcalendar is enabled
               // and queue the authUser to be refreshed
               events.push(event)
-              if (!this.hasRefreshedAuthUser && !this.isGroup) {
+              if (!this.hasRefreshedAuthUser) {
                 this.refreshAuthUser()
               }
               continue
@@ -1391,26 +1353,6 @@ export default {
       )
 
       return calendarEventsByDay
-    },
-    /** [SPECIFIC TO GROUPS] Returns an object mapping user ids to their calendar events separated by the day they occur on */
-    groupCalendarEventsByDay() {
-      if (this.event.type !== eventTypes.GROUP) return {}
-
-      const userIdToEventsByDay = {}
-      for (const userId in this.event.responses) {
-        if (userId === this.authUser._id) {
-          userIdToEventsByDay[userId] = this.calendarEventsByDay
-        } else if (userId in this.calendarAvailabilities) {
-          userIdToEventsByDay[userId] = splitTimeBlocksByDay(
-            this.event,
-            this.calendarAvailabilities[userId],
-            this.weekOffset,
-            this.timezoneOffset
-          )
-        }
-      }
-
-      return userIdToEventsByDay
     },
     curRespondentsSet() {
       return new Set(this.curRespondents)
@@ -1517,7 +1459,7 @@ export default {
             this.months[offsetDate.getUTCMonth()]
           } ${offsetDate.getUTCDate()}`
           dayString = this.daysOfWeek[offsetDate.getUTCDay()]
-        } else if (this.isGroup || this.isWeekly) {
+        } else if (this.isWeekly) {
           const tmpDate = dateToDowDate(
             this.event.dates,
             offsetDate,
@@ -1737,9 +1679,6 @@ export default {
     isWeekly() {
       return this.event.type === eventTypes.DOW
     },
-    isGroup() {
-      return this.event.type === eventTypes.GROUP
-    },
     isSignUp() {
       return this.event.isSignUpForm
     },
@@ -1799,50 +1738,6 @@ export default {
     /** Parses the responses to the gathering, makes necessary changes based on the type of event, and returns it */
     parsedResponses() {
       const parsed = {}
-
-      // Return calendar availability if group
-      if (this.event.type === eventTypes.GROUP) {
-        for (const userId in this.event.responses) {
-          const calendarEventsByDay = this.groupCalendarEventsByDay[userId]
-          if (calendarEventsByDay) {
-            // Get manual availability and convert to DOW dates
-            const fetchedManualAvailability = this.getManualAvailabilityDow(
-              this.fetchedResponses[userId]?.manualAvailability
-            )
-            const curManualAvailability =
-              userId === this.authUser._id
-                ? this.getManualAvailabilityDow(this.manualAvailability)
-                : {}
-
-            // Get availability from calendar events and use manual availability on the
-            // "touched" days
-            const availability = this.getAvailabilityFromCalendarEvents({
-              calendarEventsByDay,
-              includeTouchedAvailability: true,
-              fetchedManualAvailability: fetchedManualAvailability ?? {},
-              curManualAvailability: curManualAvailability ?? {},
-              calendarOptions:
-                userId === this.authUser._id
-                  ? {
-                      bufferTime: this.bufferTime,
-                      workingHours: this.workingHours,
-                    }
-                  : this.fetchedResponses[userId]?.calendarOptions ?? undefined,
-            })
-
-            parsed[userId] = {
-              ...this.event.responses[userId],
-              availability: availability,
-            }
-          } else {
-            parsed[userId] = {
-              ...this.event.responses[userId],
-              availability: new Set(),
-            }
-          }
-        }
-        return parsed
-      }
 
       // Return only current user availability if using blind availabilities and user is not owner
       if (this.event.blindAvailabilityEnabled && !this.isOwner) {
@@ -1915,7 +1810,10 @@ export default {
     /** The specific times grouped into contiguous blocks (whole-block mode) */
     specificTimeBlocks() {
       if (!this.isWholeBlockSelection) return []
-      return getSpecificTimeBlocks([...this.specificTimesSet], this.timeslotDuration)
+      return getSpecificTimeBlocks(
+        [...this.specificTimesSet],
+        this.timeslotDuration
+      )
     },
     /** Map from a slot's ms timestamp to the block containing it */
     slotToBlock() {
@@ -2101,13 +1999,10 @@ export default {
         return lastDayOfCurMonth.getTime() < lastDay.getTime()
       }
 
-      return (
-        this.allDays.length - (this.page + 1) * this.maxDaysPerPage > 0 ||
-        this.event.type === eventTypes.GROUP
-      )
+      return this.allDays.length - (this.page + 1) * this.maxDaysPerPage > 0
     },
     hasPrevPage() {
-      return this.page > 0 || this.event.type === eventTypes.GROUP
+      return this.page > 0
     },
     /** Returns whether the event has more than one page */
     hasPages() {
@@ -2128,8 +2023,6 @@ export default {
     hintText() {
       if (this.isPhone) {
         switch (this.state) {
-          case this.isGroup && this.states.EDIT_AVAILABILITY:
-            return "Toggle which calendars are used. Tap and drag to edit your availability."
           case this.states.EDIT_AVAILABILITY: {
             const daysOrTimes = this.event.daysOnly ? "days" : "times"
             if (this.availabilityType === availabilityTypes.IF_NEEDED) {
@@ -2145,8 +2038,6 @@ export default {
       }
 
       switch (this.state) {
-        case this.isGroup && this.states.EDIT_AVAILABILITY:
-          return "Toggle which calendars are used. Click and drag to edit your availability."
         case this.states.EDIT_AVAILABILITY: {
           const daysOrTimes = this.event.daysOnly ? "days" : "times"
           if (this.availabilityType === availabilityTypes.IF_NEEDED) {
@@ -2164,7 +2055,7 @@ export default {
       return !this.hintState || localStorage[this.hintStateLocalStorageKey]
     },
     hintStateLocalStorageKey() {
-      return `closedHintText${this.state}` + ("&isGroup" ? this.isGroup : "")
+      return `closedHintText${this.state}`
     },
     hintTextShown() {
       return this.showHintText && this.hintText != "" && !this.hintClosed
@@ -2254,7 +2145,7 @@ export default {
     showLoader() {
       return (
         // Loading calendar events
-        ((this.isGroup || this.alwaysShowCalendarEvents || this.editing) &&
+        ((this.alwaysShowCalendarEvents || this.editing) &&
           this.loadingCalendarEvents) ||
         // Loading responses
         this.loadingResponses.loading
@@ -2364,7 +2255,7 @@ export default {
       return (
         !this.addingAvailabilityAsGuest &&
         this.calendarPermissionGranted &&
-        (this.isGroup || (!this.isGroup && !this.userHasResponded))
+        !this.userHasResponded
       )
     },
 
@@ -2552,16 +2443,12 @@ export default {
         startDate.getMinutes() + this.timeslotDuration * numRows
       )
 
-      if (this.isWeekly || this.isGroup) {
+      if (this.isWeekly) {
         // Determine offset based on current day of the week.
         // People expect the event to be scheduled in the future, not the past, which is why this check exists
         let offset = 0
-        if (this.isGroup) {
-          offset = this.weekOffset
-        } else if (this.isWeekly) {
-          if (new Date().getDay() > startDate.getDay()) {
-            offset = 1
-          }
+        if (new Date().getDay() > startDate.getDay()) {
+          offset = 1
         }
 
         // Transform startDate and endDate to be the current week offset
@@ -2634,34 +2521,12 @@ export default {
     // -----------------------------------
     nextPage(e) {
       e.stopImmediatePropagation()
-      if (this.event.type === eventTypes.GROUP) {
-        // Go to next page if there are still more days left to see
-        // Otherwise, update week offset
-        if ((this.page + 1) * this.maxDaysPerPage < this.allDays.length) {
-          this.page++
-        } else {
-          this.page = 0
-          this.$emit("update:weekOffset", this.weekOffset + 1)
-        }
-      } else {
-        this.page++
-      }
+      this.page++
       this.pageHasChanged = true
     },
     prevPage(e) {
       e.stopImmediatePropagation()
-      if (this.event.type === eventTypes.GROUP) {
-        // Go to prev page if there is a prev page
-        // Otherwise, update week offset
-        if (this.page > 0) {
-          this.page--
-        } else {
-          this.page = Math.ceil(this.allDays.length / this.maxDaysPerPage) - 1
-          this.$emit("update:weekOffset", this.weekOffset - 1)
-        }
-      } else {
-        this.page--
-      }
+      this.page--
       this.pageHasChanged = true
     },
     //#endregion
@@ -2680,127 +2545,6 @@ export default {
     closeHint() {
       this.hintState = false
       localStorage[this.hintStateLocalStorageKey] = true
-    },
-    //#endregion
-
-    // -----------------------------------
-    //#region Group
-    // -----------------------------------
-
-    /** Toggles calendar account - in groups to enable/disable calendars */
-    toggleCalendarAccount(payload) {
-      this.sharedCalendarAccounts[
-        getCalendarAccountKey(payload.email, payload.calendarType)
-      ].enabled = payload.enabled
-      this.sharedCalendarAccounts = JSON.parse(
-        JSON.stringify(this.sharedCalendarAccounts)
-      )
-    },
-
-    /** Toggles sub calendar account - in groups to enable/disable sub calendars */
-    toggleSubCalendarAccount(payload) {
-      this.sharedCalendarAccounts[
-        getCalendarAccountKey(payload.email, payload.calendarType)
-      ].subCalendars[payload.subCalendarId].enabled = payload.enabled
-      this.sharedCalendarAccounts = JSON.parse(
-        JSON.stringify(this.sharedCalendarAccounts)
-      )
-    },
-
-    /** Sets the initial sharedCalendarAccounts object */
-    initSharedCalendarAccounts() {
-      if (!this.authUser) return
-
-      // Init shared calendar accounts to current calendar accounts
-      this.sharedCalendarAccounts = JSON.parse(
-        JSON.stringify(this.authUser.calendarAccounts)
-      )
-
-      // Disable all calendars
-      for (const id in this.sharedCalendarAccounts) {
-        this.sharedCalendarAccounts[id].enabled = false
-        if (this.sharedCalendarAccounts[id].subCalendars) {
-          for (const subCalendarId in this.sharedCalendarAccounts[id]
-            .subCalendars) {
-            this.sharedCalendarAccounts[id].subCalendars[
-              subCalendarId
-            ].enabled = false
-          }
-        }
-      }
-
-      // Enable calendars based on responses
-      if (this.authUser._id in this.event.responses) {
-        const enabledCalendars =
-          this.event.responses[this.authUser._id].enabledCalendars
-
-        for (const id in enabledCalendars) {
-          this.sharedCalendarAccounts[id].enabled = true
-
-          enabledCalendars[id].forEach((subCalendarId) => {
-            this.sharedCalendarAccounts[id].subCalendars[
-              subCalendarId
-            ].enabled = true
-          })
-        }
-      }
-    },
-
-    /** Based on the date, determine whether it has been touched */
-    isTouched(date, availability = [...this.availability]) {
-      const start = new Date(date)
-      const end = new Date(date)
-      end.setHours(end.getHours() + this.event.duration)
-
-      for (const a of availability) {
-        const availableTime = new Date(a).getTime()
-        if (
-          start.getTime() <= availableTime &&
-          availableTime <= end.getTime()
-        ) {
-          return true
-        }
-      }
-
-      return false
-    },
-
-    /** Returns a subset of availability for the current date */
-    getAvailabilityForColumn(column, availability = [...this.availability]) {
-      const subset = new Set()
-      const availabilitySet = new Set(availability)
-      for (
-        let r = 0;
-        r < this.splitTimes[0].length + this.splitTimes[1].length;
-        ++r
-      ) {
-        const date = this.getDateFromRowCol(r, column)
-        if (!date) continue
-
-        if (availabilitySet.has(date.getTime())) {
-          subset.add(date.getTime())
-        }
-      }
-
-      return subset
-    },
-
-    /** Returns a copy of the manual availability, converted to dow dates */
-    getManualAvailabilityDow(manualAvailability = this.manualAvailability) {
-      if (!manualAvailability) return null
-
-      const manualAvailabilityDow = {}
-      for (const time in manualAvailability) {
-        const dowTime = dateToDowDate(
-          this.event.dates,
-          new Date(parseInt(time)),
-          this.weekOffset
-        ).getTime()
-        manualAvailabilityDow[dowTime] = [...manualAvailability[time]].map(
-          (a) => dateToDowDate(this.event.dates, new Date(a), this.weekOffset)
-        )
-      }
-      return manualAvailabilityDow
     },
     //#endregion
 
@@ -3004,7 +2748,6 @@ export default {
     event: {
       immediate: true,
       handler() {
-        this.initSharedCalendarAccounts()
         this.fetchResponses()
       },
     },
@@ -3079,27 +2822,11 @@ export default {
         this.setTimeslotSize()
       })
     },
-    weekOffset() {
-      if (this.event.type === eventTypes.GROUP) {
-        this.fetchResponses()
-      }
-    },
     hideIfNeeded() {
       this.getResponsesFormatted()
     },
     parsedResponses() {
-      // Theoretically, parsed responses should only be changing for groups
       this.getResponsesFormatted()
-
-      // Repopulate user availability when editing availability (this happens when switching weeks in a group)
-      if (
-        this.event.type === eventTypes.GROUP &&
-        this.state === this.states.EDIT_AVAILABILITY &&
-        this.authUser
-      ) {
-        this.availability = new Set()
-        this.populateUserAvailability(this.authUser._id)
-      }
     },
     showBestTimes() {
       this.onShowBestTimesChange()
@@ -3170,18 +2897,6 @@ export default {
       this.workingHours =
         this.authUser?.calendarOptions?.workingHours ??
         calendarOptionsDefaults.workingHours
-      if (this.isGroup) {
-        if (this.event.responses[this.authUser._id]?.calendarOptions) {
-          // Update calendar options if user has changed them for this specific group
-          const { bufferTime, workingHours } =
-            this.event.responses[this.authUser._id].calendarOptions
-          if (bufferTime) this.bufferTime = bufferTime
-          if (workingHours) this.workingHours = workingHours
-        } else {
-          this.bufferTime = calendarOptionsDefaults.bufferTime
-          this.workingHours = calendarOptionsDefaults.workingHours
-        }
-      }
     }
 
     // Set initial calendar max scroll

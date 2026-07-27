@@ -29,14 +29,6 @@ export default {
       type: Object,
       required: true,
     },
-    isGroup: {
-      type: Boolean,
-      required: true,
-    },
-    isEditingAvailability: {
-      type: Boolean,
-      required: true,
-    },
     noEventNames: {
       type: Boolean,
       required: true,
@@ -49,22 +41,13 @@ export default {
   computed: {
     containerClass() {
       if (this.calendarEvent.free) {
-        return this.isGroup && !this.isEditingAvailability
-          ? "tw-border-white tw-bg-light-blue tw-opacity-50"
-          : "tw-border-dashed tw-border-blue"
+        return "tw-border-dashed tw-border-blue"
       } else {
-        return this.isGroup && !this.isEditingAvailability
-          ? "tw-border-white tw-bg-light-blue"
-          : "tw-border-blue"
+        return "tw-border-blue"
       }
     },
     textColor() {
-      const color =
-        this.isGroup && !this.isEditingAvailability
-          ? "white"
-          : this.noEventNames
-          ? "dark-gray"
-          : "blue"
+      const color = this.noEventNames ? "dark-gray" : "blue"
       return `tw-text-${color}`
     },
   },

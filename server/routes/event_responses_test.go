@@ -122,32 +122,6 @@ func TestStripSensitiveUserFields_NilSafe(t *testing.T) {
 	stripSensitiveUserFields(nil)
 }
 
-// shouldKeepGroupResponseUserEmails — cover the DB-free guard branches. The
-// invitee-matching branch hits Mongo (db.GetUserById) and is left to the
-// DB-backed handler tests.
-func TestShouldKeepGroupResponseUserEmails_NonGroupIsFalse(t *testing.T) {
-	event := &models.Event{Type: models.DOW}
-	if shouldKeepGroupResponseUserEmails(event, "someUserId", true) {
-		t.Fatal("non-group event must never keep emails")
-	}
-}
-
-func TestShouldKeepGroupResponseUserEmails_EmptySessionIsFalse(t *testing.T) {
-	event := &models.Event{Type: models.GROUP}
-	if shouldKeepGroupResponseUserEmails(event, "", true) {
-		t.Fatal("empty session must not keep emails")
-	}
-}
-
-func TestShouldKeepGroupResponseUserEmails_OwnerIsTrue(t *testing.T) {
-	// Owner of a group with a session set: true without any DB lookup (the
-	// isOwner check short-circuits before db.GetUserById).
-	event := &models.Event{Type: models.GROUP, OwnerId: primitive.NewObjectID()}
-	if !shouldKeepGroupResponseUserEmails(event, "ownerSessionId", true) {
-		t.Fatal("group owner with a session must keep emails")
-	}
-}
-
 // filterResponsesForBlindAvailability encodes who may see whose availability —
 // a privacy rule that's easy to regress. Cover the full matrix.
 func boolPtrTest(b bool) *bool { return &b }

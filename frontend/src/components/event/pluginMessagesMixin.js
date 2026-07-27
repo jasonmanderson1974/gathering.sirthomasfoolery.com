@@ -1,7 +1,6 @@
 import {
   get,
   post,
-  dateToDowDate,
   sendPluginError,
   sendPluginSuccess,
   isValidPluginMessage,
@@ -49,15 +48,6 @@ export default {
     async setSlots(event) {
       const requestId = event.data?.requestId
       const command = "set-slots"
-      if (this.isGroup) {
-        sendPluginError(
-          requestId,
-          command,
-          "Group events are not supported yet"
-        )
-        return
-      }
-
       // Validation: Check event exists
       if (!this.event) {
         sendPluginError(requestId, command, "Event not loaded yet")
@@ -466,35 +456,11 @@ export default {
 
       // Calculate timeMin and timeMax using the same logic as fetchResponses in ScheduleOverlap
       let timeMin, timeMax
-      if (this.event.type === eventTypes.GROUP) {
-        if (this.event.dates.length > 0) {
-          // Fetch the date range for the current week
-          timeMin = new Date(this.event.dates[0])
-          timeMax = new Date(this.event.dates[this.event.dates.length - 1])
-          timeMax.setDate(timeMax.getDate() + 1)
-
-          // Convert dow dates to discrete dates
-          timeMin = dateToDowDate(
-            this.event.dates,
-            timeMin,
-            this.weekOffset,
-            true
-          )
-          timeMax = dateToDowDate(
-            this.event.dates,
-            timeMax,
-            this.weekOffset,
-            true
-          )
-        }
-      } else {
-        // For non-GROUP events, use the event dates directly
-        if (this.event.dates.length > 0) {
-          // Fetch the entire time range of availabilities
-          timeMin = new Date(this.event.dates[0])
-          timeMax = new Date(this.event.dates[this.event.dates.length - 1])
-          timeMax.setDate(timeMax.getDate() + 1)
-        }
+      if (this.event.dates.length > 0) {
+        // Fetch the entire time range of availabilities
+        timeMin = new Date(this.event.dates[0])
+        timeMax = new Date(this.event.dates[this.event.dates.length - 1])
+        timeMax.setDate(timeMax.getDate() + 1)
       }
 
       if (!timeMin || !timeMax) {

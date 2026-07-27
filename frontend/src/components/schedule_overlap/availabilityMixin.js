@@ -1,5 +1,4 @@
-import { getDateHoursOffset, dateToDowDate, get } from "@/utils"
-import { eventTypes } from "@/constants"
+import { getDateHoursOffset, get } from "@/utils"
 
 /**
  * Aggregate-availability fetch/format methods for ScheduleOverlap.
@@ -19,34 +18,11 @@ export default {
       }
 
       let timeMin, timeMax
-      if (this.event.type === eventTypes.GROUP) {
-        if (this.event.dates.length > 0) {
-          // Fetch the date range for the current week
-          timeMin = new Date(this.event.dates[0])
-          timeMax = new Date(this.event.dates[this.event.dates.length - 1])
-          timeMax.setDate(timeMax.getDate() + 1)
-
-          // Convert dow dates to discrete dates
-          timeMin = dateToDowDate(
-            this.event.dates,
-            timeMin,
-            this.weekOffset,
-            true
-          )
-          timeMax = dateToDowDate(
-            this.event.dates,
-            timeMax,
-            this.weekOffset,
-            true
-          )
-        }
-      } else {
-        if (this.allDays.length > 0) {
-          // Fetch the entire time range of availabilities
-          timeMin = new Date(this.allDays[0].dateObject)
-          timeMax = new Date(this.allDays[this.allDays.length - 1].dateObject)
-          timeMax.setDate(timeMax.getDate() + 1)
-        }
+      if (this.allDays.length > 0) {
+        // Fetch the entire time range of availabilities
+        timeMin = new Date(this.allDays[0].dateObject)
+        timeMax = new Date(this.allDays[this.allDays.length - 1].dateObject)
+        timeMax.setDate(timeMax.getDate() + 1)
       }
 
       if (!timeMin || !timeMax) return

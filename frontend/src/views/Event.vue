@@ -47,16 +47,6 @@
         no-tabs
       />
 
-      <!-- Group invitation dialog -->
-      <InvitationDialog
-        v-if="isGroup"
-        v-model="invitationDialog"
-        :group="event"
-        :calendarPermissionGranted="calendarPermissionGranted"
-        @refreshEvent="refreshEvent"
-        @setAvailabilityAutomatically="setAvailabilityAutomatically"
-      ></InvitationDialog>
-
       <!-- Pages Not Visited dialog -->
       <v-dialog
         v-model="pagesNotVisitedDialog"
@@ -100,19 +90,15 @@
             <EventHeader
               :event="event"
               :canEdit="canEdit"
-              :isGroup="isGroup"
               :isSignUp="isSignUp"
               :isEditing="isEditing"
               :dateString="dateString"
               :actionButtonText="actionButtonText"
-              :weekOffset="weekOffset"
               :loading="loading"
               :userHasResponded="userHasResponded"
               :selectedGuestRespondent="selectedGuestRespondent"
               :availabilityBtnOpacity="availabilityBtnOpacity"
               @edit-event="editEvent"
-              @reset-week-offset="resetWeekOffset"
-              @refresh-calendar="refreshCalendar"
               @copy-link="copyLink"
               @edit-guest-availability="editGuestAvailability"
               @add-availability="addAvailability"
@@ -159,7 +145,6 @@
             :loadingCalendarEvents="loading"
             :calendarEventsMap="calendarEventsMap"
             :calendarPermissionGranted="calendarPermissionGranted"
-            :calendar-availabilities="calendarAvailabilities"
             :weekOffset.sync="weekOffset"
             :curGuestId="curGuestId"
             :initial-timezone="initialTimezone"
@@ -185,17 +170,11 @@
         </div>
       </div>
 
-
-
-
-      <div
-        class="tw-h-8"
-      ></div>
+      <div class="tw-h-8"></div>
       <!-- Bottom bar for phones -->
       <EventBottomBar
         v-if="!isSettingSpecificTimes && isPhone && (!isSignUp || canEdit)"
         :event="event"
-        :isGroup="isGroup"
         :isSignUp="isSignUp"
         :isEditing="isEditing"
         :isScheduling="isScheduling"
@@ -251,7 +230,6 @@ import {
 import isWebview from "is-ua-webview"
 import SignInNotSupportedDialog from "@/components/SignInNotSupportedDialog.vue"
 import MarkAvailabilityDialog from "@/components/calendar_permission_dialogs/MarkAvailabilityDialog.vue"
-import InvitationDialog from "@/components/groups/InvitationDialog.vue"
 import EventHeader from "@/components/event/EventHeader.vue"
 import EventBottomBar from "@/components/event/EventBottomBar.vue"
 import EventDescription from "@/components/event/EventDescription.vue"
@@ -291,7 +269,6 @@ export default {
     NewDialog,
     SignInNotSupportedDialog,
     MarkAvailabilityDialog,
-    InvitationDialog,
     EventHeader,
     EventBottomBar,
     EventDescription,
@@ -309,7 +286,6 @@ export default {
     guestDialog: false,
     signUpForSlotDialog: false,
     editEventDialog: false,
-    invitationDialog: false,
     pagesNotVisitedDialog: false,
 
     loading: true,
@@ -328,9 +304,6 @@ export default {
 
     availabilityBtnOpacity: 1,
     hasRefetchedAuthUserCalendarEvents: false,
-
-    // Availability Groups
-    calendarAvailabilities: {}, // maps userId to their calendar events
 
     // Sign Up Forms
     currSignUpBlock: null,
@@ -379,15 +352,11 @@ export default {
     isWeekly() {
       return this.event?.type === eventTypes.DOW
     },
-    isGroup() {
-      return this.event?.type === eventTypes.GROUP
-    },
     isSignUp() {
       return this.event?.isSignUpForm
     },
     eventType() {
-      if (this.isGroup) return "group"
-      else if (this.isSignUp) return "signup"
+      if (this.isSignUp) return "signup"
       else return "event"
     },
     areUnsavedChanges() {
@@ -404,7 +373,7 @@ export default {
     },
     actionButtonText() {
       if (this.isSignUp) return "Edit slots"
-      else if (this.userHasResponded || this.isGroup) return "Edit availability"
+      else if (this.userHasResponded) return "Edit availability"
       return "Mark availability"
     },
     isSettingSpecificTimes() {
@@ -479,7 +448,7 @@ export default {
         await this.scheduleOverlapComponent.deleteAvailability()
       }
 
-      this.showInfo(this.isGroup ? "Left group!" : "Availability deleted!")
+      this.showInfo("Availability deleted!")
       this.scheduleOverlapComponent.stopEditing()
     },
 
@@ -622,9 +591,7 @@ export default {
           // Request permission if calendar permissions not yet granted
           signInParams = {
             state: {
-              type: this.isGroup
-                ? authTypes.GROUP_ADD_AVAILABILITY
-                : authTypes.EVENT_ADD_AVAILABILITY,
+              type: authTypes.EVENT_ADD_AVAILABILITY,
               eventId: this.eventId,
             },
             selectAccount: false,
@@ -785,45 +752,6 @@ export default {
       this.scheduleOverlapComponent?.setAvailabilityAutomatically()
     },
 
-    /** Refresh calendar availabilities of everybody in the group */
-    async fetchCalendarAvailabilities() {
-      if (this.event.type !== eventTypes.GROUP) return
-
-      // this.calendarAvailabilities = {}
-      const curWeekOffset = this.weekOffset
-      return getCalendarEventsMap(this.event, {
-        weekOffset: curWeekOffset,
-        eventId: this.event._id,
-      })
-        .then((calendarAvailabilities) => {
-          // Don't update calendar availabilities if user
-          // selected a different weekoffset by the time these calendar events load
-          if (curWeekOffset !== this.weekOffset) return
-
-          this.calendarAvailabilities = calendarAvailabilities
-
-          // Fix DST bug
-          for (const userId in this.calendarAvailabilities) {
-            for (const index in this.calendarAvailabilities[userId]) {
-              const event = this.calendarAvailabilities[userId][index]
-              const startDate = new Date(event.startDate)
-              const endDate = new Date(event.endDate)
-              if (doesDstExist(startDate) && !isDstObserved(startDate)) {
-                startDate.setHours(startDate.getHours() - 1)
-                endDate.setHours(endDate.getHours() - 1)
-              }
-              this.calendarAvailabilities[userId][index].startDate =
-                startDate.toISOString()
-              this.calendarAvailabilities[userId][index].endDate =
-                endDate.toISOString()
-            }
-          }
-        })
-        .catch((err) => {
-          console.error(err)
-        })
-    },
-
     /** Fetch current user's calendar events */
     async fetchAuthUserCalendarEvents() {
       if (!this.authUser) {
@@ -856,10 +784,7 @@ export default {
           this.calendarEventsMap = eventsMap
 
           // Fix DST bug
-          if (
-            this.event.type === eventTypes.GROUP ||
-            this.event.type === eventTypes.DOW
-          ) {
+          if (this.event.type === eventTypes.DOW) {
             for (const calendarId in this.calendarEventsMap) {
               for (const index in this.calendarEventsMap[calendarId]
                 .calendarEvents) {
@@ -922,7 +847,6 @@ export default {
     /** Refreshes calendar avaliabilities and fetches current user calendar events */
     refreshCalendar() {
       const promises = []
-      promises.push(this.fetchCalendarAvailabilities())
       promises.push(this.fetchAuthUserCalendarEvents())
 
       const curWeekOffset = this.weekOffset
@@ -1003,33 +927,6 @@ export default {
       await this.refreshEvent()
       await this.checkOwnerPremium()
 
-      // Redirect if we're at the wrong route
-      if (this.event.type === eventTypes.GROUP) {
-        if (this.$route.name === "event") {
-          this.$router.replace({
-            name: "group",
-            params: {
-              groupId: this.eventId,
-              initialTimezone: this.initialTimezone,
-              fromSignIn: this.fromSignIn,
-              contactsPayload: this.contactsPayload,
-            },
-          })
-        }
-      } else {
-        if (this.$route.name === "group") {
-          this.$router.replace({
-            name: "event",
-            params: {
-              eventId: this.eventId,
-              initialTimezone: this.initialTimezone,
-              fromSignIn: this.fromSignIn,
-              contactsPayload: this.contactsPayload,
-            },
-          })
-        }
-      }
-
       const fromEditEvent = localStorage.getItem(
         `from-edit-event-${this.event._id}`
       )
@@ -1047,7 +944,6 @@ export default {
     }
 
     const promises = []
-    promises.push(this.fetchCalendarAvailabilities())
     promises.push(this.fetchAuthUserCalendarEvents())
 
     this.loading = true
@@ -1084,12 +980,8 @@ export default {
         this.scheduleOverlapComponentLoaded = true
 
         // Put into editing mode if just signed in
-        if ((this.fromSignIn || this.editingMode) && !this.isGroup) {
+        if (this.fromSignIn || this.editingMode) {
           this.scheduleOverlapComponent.startEditing()
-        }
-
-        if (this.isGroup && !this.userHasResponded) {
-          this.invitationDialog = true
         }
       }
     },

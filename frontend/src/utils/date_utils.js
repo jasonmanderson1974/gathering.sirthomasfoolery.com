@@ -73,7 +73,7 @@ export const getDateRangeStringForEvent = (event) => {
   let timezone = localStorage["timezone"]
   if (timezone) timezone = JSON.parse(timezone)
 
-  if (event.type === eventTypes.DOW || event.type === eventTypes.GROUP) {
+  if (event.type === eventTypes.DOW) {
     let s = ""
 
     const dayAbbreviations = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -194,7 +194,7 @@ export const getDateHoursOffset = (date, hoursOffset) => {
 
 /** Returns the date used to derive timezone offsets for the current event view */
 export const getTimezoneReferenceDateForEvent = (event, weekOffset = 0) => {
-  if (event.type === eventTypes.DOW || event.type === eventTypes.GROUP) {
+  if (event.type === eventTypes.DOW) {
     const referenceDate = new Date()
     referenceDate.setDate(referenceDate.getDate() + weekOffset * 7)
     referenceDate.setHours(12, 0, 0, 0)
@@ -260,10 +260,9 @@ export const getSpecificTimesDayStarts = (eventDates, curTimezone) => {
 
       let isConsecutive = true
       if (prevDay) {
-        isConsecutive = prevDay.add(1, "day").isSame(
-          getDateInTimezone(localDate, curTimezone),
-          "day"
-        )
+        isConsecutive = prevDay
+          .add(1, "day")
+          .isSame(getDateInTimezone(localDate, curTimezone), "day")
       }
 
       days.push({
@@ -467,7 +466,9 @@ export const convertToUTC = (dateTimeString, timezoneValue) => {
     // Convert to UTC
     return dateInTimezone.utc().toDate()
   } catch (err) {
-    throw new Error(`Failed to convert timezone: ${err.message}. Timezone: ${timezoneValue}`)
+    throw new Error(
+      `Failed to convert timezone: ${err.message}. Timezone: ${timezoneValue}`
+    )
   }
 }
 
@@ -478,7 +479,12 @@ export const convertToUTC = (dateTimeString, timezoneValue) => {
  * @param {number} eventDuration - Event duration in hours
  * @returns {boolean} - Whether the date/time is within the event's range
  */
-export const isTimeWithinEventRange = (dateTime, eventDates, eventStartTime, eventDuration) => {
+export const isTimeWithinEventRange = (
+  dateTime,
+  eventDates,
+  eventStartTime,
+  eventDuration
+) => {
   const slotDate = new Date(dateTime)
   const slotDateOnly = new Date(
     slotDate.getUTCFullYear(),
@@ -531,7 +537,7 @@ export const isTimeWithinEventRange = (dateTime, eventDates, eventStartTime, eve
  */
 export const convertUTCSlotsToLocalISO = (slots, timezoneValue = null) => {
   if (!slots || !Array.isArray(slots)) return []
-  
+
   return slots.map((slot) => {
     try {
       const date = dayjs.utc(slot)
@@ -619,7 +625,7 @@ export const getCalendarEventsMap = async (
       new Date(event.dates[event.dates.length - 1]),
       2
     ).toISOString()
-  } else if (event.type === eventTypes.DOW || event.type === eventTypes.GROUP) {
+  } else if (event.type === eventTypes.DOW) {
     // Get all calendar events for the current week offsetted by weekOffset
     const firstDate = dateToDowDate(
       event.dates,
@@ -699,7 +705,7 @@ export const processTimeBlocks = (
   // Put timeBlocks into the correct format
   timeBlocks = JSON.parse(JSON.stringify(timeBlocks)) // Make a copy so we don't mutate original array
   timeBlocks = timeBlocks.map((e) => {
-    if (eventType === eventTypes.DOW || eventType === eventTypes.GROUP) {
+    if (eventType === eventTypes.DOW) {
       e.startDate = dateToDowDate(
         dates,
         e.startDate,
@@ -889,9 +895,7 @@ export const processTimeBlocks = (
 export const getCalendarAccountKey = (email, calendarType) => {
   const trimmed = String(email ?? "").trim()
   const keyPart =
-    calendarType === calendarTypes.ICS
-      ? trimmed
-      : trimmed.toLowerCase()
+    calendarType === calendarTypes.ICS ? trimmed : trimmed.toLowerCase()
   return `${keyPart}_${calendarType}`
 }
 
@@ -1015,7 +1019,7 @@ export const validateDOWPayload = (slots, skipSameDayCheck = false) => {
         error: `Slot at index ${i} has invalid end time: hours must be 0-24`,
       }
     }
-    
+
     if (endHour === 24) {
       if (endMinute !== 0 || endSecond !== 0) {
         return {
@@ -1024,12 +1028,7 @@ export const validateDOWPayload = (slots, skipSameDayCheck = false) => {
         }
       }
     } else {
-      if (
-        endMinute < 0 ||
-        endMinute > 59 ||
-        endSecond < 0 ||
-        endSecond > 59
-      ) {
+      if (endMinute < 0 || endMinute > 59 || endSecond < 0 || endSecond > 59) {
         return {
           valid: false,
           error: `Slot at index ${i} has invalid end time: minutes and seconds must be 0-59`,
@@ -1038,21 +1037,31 @@ export const validateDOWPayload = (slots, skipSameDayCheck = false) => {
     }
 
     // Format date part (YYYY-MM-DD) for validation
-    const startDateStr = `${startYear}-${String(startMonth).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`
-    const endDateStr = `${endYear}-${String(endMonth).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`
+    const startDateStr = `${startYear}-${String(startMonth).padStart(
+      2,
+      "0"
+    )}-${String(startDay).padStart(2, "0")}`
+    const endDateStr = `${endYear}-${String(endMonth).padStart(
+      2,
+      "0"
+    )}-${String(endDay).padStart(2, "0")}`
 
     // Validate dates belong to hardcoded DOW dates
     if (!validDOWDates.has(startDateStr)) {
       return {
         valid: false,
-        error: `Slot at index ${i} has invalid start date: ${startDateStr}. Must be one of the hardcoded DOW dates: ${Array.from(validDOWDates).join(", ")}`,
+        error: `Slot at index ${i} has invalid start date: ${startDateStr}. Must be one of the hardcoded DOW dates: ${Array.from(
+          validDOWDates
+        ).join(", ")}`,
       }
     }
 
     if (!validDOWDates.has(endDateStr)) {
       return {
         valid: false,
-        error: `Slot at index ${i} has invalid end date: ${endDateStr}. Must be one of the hardcoded DOW dates: ${Array.from(validDOWDates).join(", ")}`,
+        error: `Slot at index ${i} has invalid end date: ${endDateStr}. Must be one of the hardcoded DOW dates: ${Array.from(
+          validDOWDates
+        ).join(", ")}`,
       }
     }
 
@@ -1071,9 +1080,9 @@ export const validateDOWPayload = (slots, skipSameDayCheck = false) => {
     if (endHour === 24) {
       // Convert 24:00:00 to next day 00:00:00 for proper comparison
       const endDate = dayjs(slot.end.substring(0, 10)) // Get just the date part
-      endTimeString = endDate.add(1, 'day').format('YYYY-MM-DDTHH:mm:ss')
+      endTimeString = endDate.add(1, "day").format("YYYY-MM-DDTHH:mm:ss")
     }
-    
+
     const startDateTime = dayjs(slot.start)
     const endDateTime = dayjs(endTimeString)
 
@@ -1084,7 +1093,10 @@ export const validateDOWPayload = (slots, skipSameDayCheck = false) => {
       }
     }
 
-    if (endDateTime.isBefore(startDateTime) || endDateTime.isSame(startDateTime)) {
+    if (
+      endDateTime.isBefore(startDateTime) ||
+      endDateTime.isSame(startDateTime)
+    ) {
       return {
         valid: false,
         error: `Slot at index ${i} has end time that is before or equal to start time`,

@@ -706,7 +706,6 @@ export default {
         state: {
           type: authTypes.EVENT_CONTACTS,
           eventId: this.event ? this.event.shortId ?? this.event._id : "",
-          openNewGroup: false,
           payload,
         },
         requestContactsPermission: true,

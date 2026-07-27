@@ -21,7 +21,7 @@
         </template>
       </v-switch>
       <v-switch
-        v-if="numResponses >= 1 && !isGroup"
+        v-if="numResponses >= 1"
         inset
         id="hide-if-needed-toggle"
         :input-value="hideIfNeeded"
@@ -43,20 +43,7 @@
         hide-details
       >
         <template v-slot:label>
-          <div class="tw-text-sm tw-text-parchment">
-            Show response counts
-          </div>
-        </template>
-      </v-switch>
-      <v-switch
-        v-if="showCalendarEvents !== undefined && isGroup && !isPhone"
-        inset
-        :input-value="showCalendarEvents"
-        @change="(val) => $emit('update:showCalendarEvents', Boolean(val))"
-        hide-details
-      >
-        <template v-slot:label>
-          <div class="tw-text-sm tw-text-parchment">Overlay calendar events</div>
+          <div class="tw-text-sm tw-text-parchment">Show response counts</div>
         </template>
       </v-switch>
 
@@ -79,7 +66,6 @@
 
 <script>
 import { isPhone } from "@/utils"
-import { eventTypes } from "@/constants"
 import ExpandableSection from "@/components/ExpandableSection.vue"
 
 export default {
@@ -96,16 +82,12 @@ export default {
     showResponseCounts: { type: Boolean, default: true },
     numResponses: { type: Number, required: true },
     showEventOptions: { type: Boolean, required: true },
-    showCalendarEvents: { type: Boolean, default: false },
     startCalendarOnMonday: { type: Boolean, default: false },
   },
 
   computed: {
     isPhone() {
       return isPhone(this.$vuetify)
-    },
-    isGroup() {
-      return this.event.type === eventTypes.GROUP
     },
   },
 }

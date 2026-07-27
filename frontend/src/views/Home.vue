@@ -34,7 +34,6 @@
 <script>
 import EventType from "@/components/EventType.vue"
 import BottomFab from "@/components/BottomFab.vue"
-import CreateSpeedDial from "@/components/CreateSpeedDial.vue"
 import Dashboard from "@/components/home/Dashboard.vue"
 import { mapState, mapActions, mapMutations, mapGetters } from "vuex"
 import { eventTypes } from "@/constants"
@@ -50,7 +49,6 @@ export default {
   components: {
     EventType,
     BottomFab,
-    CreateSpeedDial,
     Dashboard,
   },
 
@@ -59,7 +57,6 @@ export default {
       type: Object,
       default: () => ({}),
     },
-    openNewGroup: { type: Boolean, default: false },
   },
 
   data: () => ({
@@ -69,15 +66,14 @@ export default {
   mounted() {
     // If coming from enabling contacts, show the dialog. Checks if contactsPayload is not an Observer.
     this.setNewDialogOptions({
-      show: Object.keys(this.contactsPayload).length > 0 || this.openNewGroup,
+      show: Object.keys(this.contactsPayload).length > 0,
       contactsPayload: this.contactsPayload,
-      openNewGroup: this.openNewGroup,
       eventOnly: false,
     })
   },
 
   computed: {
-    ...mapState(["events", "authUser", "groupsEnabled"]),
+    ...mapState(["events", "authUser"]),
     ...mapGetters(["canCreateEvents"]),
     eventsNotEmpty() {
       return this.events.length > 0

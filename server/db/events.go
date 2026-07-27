@@ -110,34 +110,6 @@ func GetEventResponses(eventId string) ([]models.EventResponse, error) {
 	return eventResponses, nil
 }
 
-func GetAttendees(eventId string) ([]models.Attendee, error) {
-	objectId, err := primitive.ObjectIDFromHex(eventId)
-	if err != nil {
-		// eventId is malformatted
-		return []models.Attendee{}, nil
-	}
-
-	result, err := AttendeesCollection.Find(context.Background(), bson.M{
-		"eventId": objectId,
-	})
-	if err != nil {
-		logger.StdErr.Println(err)
-		return []models.Attendee{}, err
-	}
-	if result.Err() == mongo.ErrNoDocuments {
-		// Attendees do not exist!
-		return []models.Attendee{}, nil
-	}
-
-	var attendees []models.Attendee
-	if err := result.All(context.Background(), &attendees); err != nil {
-		logger.StdErr.Println(err)
-		return []models.Attendee{}, err
-	}
-
-	return attendees, nil
-}
-
 // Returns events that have a confirmed gathering time still in the future, a
 // reminder enabled, and no reminder yet sent. The reminder scheduler
 // (services/reminders) does the lead-time windowing in Go on the returned set.

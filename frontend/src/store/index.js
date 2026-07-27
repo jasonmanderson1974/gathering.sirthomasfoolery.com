@@ -25,7 +25,6 @@ export default new Vuex.Store({
     featureFlagsLoaded: false,
 
     // Feature flags
-    groupsEnabled: true,
     signUpFormEnabled: false,
     daysOnlyEnabled: true,
     overlayAvailabilitiesEnabled: true,
@@ -34,7 +33,6 @@ export default new Vuex.Store({
     newDialogOptions: {
       show: false,
       contactsPayload: {},
-      openNewGroup: false,
       eventOnly: false,
       folderId: null,
     },
@@ -66,9 +64,6 @@ export default new Vuex.Store({
 
     setFeatureFlagsLoaded(state, loaded) {
       state.featureFlagsLoaded = loaded
-    },
-    setGroupsEnabled(state, enabled) {
-      state.groupsEnabled = enabled
     },
     setSignUpFormEnabled(state, enabled) {
       state.signUpFormEnabled = enabled
@@ -106,18 +101,11 @@ export default new Vuex.Store({
 
     setNewDialogOptions(
       state,
-      {
-        show = false,
-        contactsPayload = {},
-        openNewGroup = false,
-        eventOnly = true,
-        folderId = null,
-      }
+      { show = false, contactsPayload = {}, eventOnly = true, folderId = null }
     ) {
       state.newDialogOptions = {
         show,
         contactsPayload,
-        openNewGroup,
         eventOnly,
         folderId,
       }
@@ -154,7 +142,6 @@ export default new Vuex.Store({
       commit("setNewDialogOptions", {
         show: true,
         contactsPayload: {},
-        openNewGroup: false,
         eventOnly: eventOnly,
         folderId: folderId,
       })

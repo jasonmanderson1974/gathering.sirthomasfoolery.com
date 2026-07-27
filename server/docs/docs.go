@@ -442,12 +442,6 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "attendees": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "string"
-                                    }
-                                },
                                 "blindAvailabilityEnabled": {
                                     "type": "boolean"
                                 },
@@ -615,12 +609,6 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "attendees": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "string"
-                                    }
-                                },
                                 "blindAvailabilityEnabled": {
                                     "type": "boolean"
                                 },
@@ -738,57 +726,6 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK"
-                    }
-                }
-            }
-        },
-        "/events/{eventId}/calendar-availabilities": {
-            "get": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "events"
-                ],
-                "summary": "Return a map mapping user id to their calendar events that they have enabled for the given time range",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Event ID",
-                        "name": "eventId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Lower bound for event's start time to filter by",
-                        "name": "timeMin",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Upper bound for event's end time to filter by",
-                        "name": "timeMax",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "object",
-                                "additionalProperties": {
-                                    "$ref": "#/definitions/calendar.CalendarEventsWithError"
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -940,34 +877,6 @@ const docTemplate = `{
                                 }
                             }
                         }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    }
-                }
-            }
-        },
-        "/events/{eventId}/decline": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "events"
-                ],
-                "summary": "Decline the current user's invite to the event",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Event ID",
-                        "name": "eventId",
-                        "in": "path",
-                        "required": true
                     }
                 ],
                 "responses": {
@@ -2674,23 +2583,6 @@ const docTemplate = `{
         "models.AppleCalendarAuth": {
             "type": "object"
         },
-        "models.Attendee": {
-            "type": "object",
-            "properties": {
-                "_id": {
-                    "type": "string"
-                },
-                "declined": {
-                    "type": "boolean"
-                },
-                "email": {
-                    "type": "string"
-                },
-                "eventId": {
-                    "type": "string"
-                }
-            }
-        },
         "models.BufferTimeOptions": {
             "type": "object",
             "properties": {
@@ -2889,13 +2781,6 @@ const docTemplate = `{
                 "_id": {
                     "type": "string"
                 },
-                "attendees": {
-                    "description": "Attendees for an availability group (fetched from Attendees collection)",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.Attendee"
-                    }
-                },
                 "blindAvailabilityEnabled": {
                     "description": "Whether to enable blind availability",
                     "type": "boolean"
@@ -2948,10 +2833,6 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.GatheringReminder"
                         }
                     ]
-                },
-                "hasResponded": {
-                    "description": "Whether the user has responded to the availability group (fetched based on whether user is in Attendees)",
-                    "type": "boolean"
                 },
                 "hasSpecificTimes": {
                     "description": "Used for specific times for specific dates feature",
@@ -3067,13 +2948,11 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "specific_dates",
-                "dow",
-                "group"
+                "dow"
             ],
             "x-enum-varnames": [
                 "SPECIFIC_DATES",
-                "DOW",
-                "GROUP"
+                "DOW"
             ]
         },
         "models.Folder": {

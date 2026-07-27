@@ -15,8 +15,6 @@ import Event from "./Event.vue"
 import { mapActions, mapState } from "vuex"
 import { get } from "@/utils"
 import { errors } from "@/constants"
-import AccessDenied from "@/components/groups/AccessDenied.vue"
-import NotSignedIn from "@/components/groups/NotSignedIn.vue"
 
 export default {
   name: "SignUp",
@@ -30,11 +28,8 @@ export default {
   },
 
   components: {
-    AccessDenied,
     Event,
-    NotSignedIn,
   },
-
 
   data() {
     return {

@@ -7,12 +7,11 @@ import {
   get,
   getDateDayOffset,
   isDateBetween,
-  generateEnabledCalendarsPayload,
   getISODateString,
   getDateWithTimezone,
   timeNumToTimeString,
 } from "@/utils"
-import { calendarOptionsDefaults, eventTypes } from "@/constants"
+import { calendarOptionsDefaults } from "@/constants"
 import dayjs from "dayjs"
 
 /**
@@ -36,11 +35,6 @@ export default {
     },
     /** resets cur user availability to the response stored on the server */
     resetCurUserAvailability() {
-      if (this.event.type === eventTypes.GROUP) {
-        this.initSharedCalendarAccounts()
-        this.manualAvailability = {}
-      }
-
       this.availability = new Set()
       this.ifNeeded = new Set()
       if (this.userHasResponded) {
@@ -84,9 +78,6 @@ export default {
     /** Returns a set containing the available times based on the given calendar events object */
     getAvailabilityFromCalendarEvents({
       calendarEventsByDay = [],
-      includeTouchedAvailability = false, // Whether to include manual availability for touched days
-      fetchedManualAvailability = {}, // Object mapping unix timestamp to array of manual availability (fetched from server)
-      curManualAvailability = {}, // Manual availability with edits (takes precedence over fetchedManualAvailability)
       calendarOptions = calendarOptionsDefaults, // User id of the user we are getting availability for
     }) {
       const availability = new Set()
@@ -94,42 +85,6 @@ export default {
       for (let i = 0; i < this.allDays.length; ++i) {
         const day = this.allDays[i]
         const date = day.dateObject
-
-        if (includeTouchedAvailability) {
-          const endDate = getDateHoursOffset(
-            date,
-            this.times.length * (this.timeslotDuration / 60)
-          )
-
-          // Check if manual availability has been added for the current date
-          let manualAvailabilityAdded = false
-
-          for (const time in curManualAvailability) {
-            if (date.getTime() <= time && time <= endDate.getTime()) {
-              curManualAvailability[time].forEach((a) => {
-                availability.add(new Date(a).getTime())
-              })
-              delete curManualAvailability[time]
-              manualAvailabilityAdded = true
-              break
-            }
-          }
-
-          if (manualAvailabilityAdded) continue
-
-          for (const time in fetchedManualAvailability) {
-            if (date.getTime() <= time && time <= endDate.getTime()) {
-              fetchedManualAvailability[time].forEach((a) => {
-                availability.add(new Date(a).getTime())
-              })
-              delete fetchedManualAvailability[time]
-              manualAvailabilityAdded = true
-              break
-            }
-          }
-
-          if (manualAvailabilityAdded) continue
-        }
 
         // Calculate buffer time
         const bufferTimeInMS = calendarOptions.bufferTime.enabled
@@ -264,36 +219,19 @@ export default {
       this.availabilityAnimEnabled = false
     },
     async submitAvailability(guestPayload = { name: "", email: "" }) {
-      let payload = {}
+      const payload = {}
 
-      let type = ""
-      // If this is a group submit enabled calendars, otherwise submit availability
-      if (this.isGroup) {
-        type = "group availability and calendars"
-        payload = generateEnabledCalendarsPayload(this.sharedCalendarAccounts)
-        payload.manualAvailability = {}
-        for (const day of Object.keys(this.manualAvailability)) {
-          payload.manualAvailability[day] = [
-            ...this.manualAvailability[day],
-          ].map((a) => new Date(a))
-        }
-        payload.calendarOptions = {
-          bufferTime: this.bufferTime,
-          workingHours: this.workingHours,
-        }
+      const type = "availability"
+      payload.availability = this.availabilityArray
+      payload.ifNeeded = this.ifNeededArray
+      if (this.authUser && !this.addingAvailabilityAsGuest) {
+        payload.guest = false
       } else {
-        type = "availability"
-        payload.availability = this.availabilityArray
-        payload.ifNeeded = this.ifNeededArray
-        if (this.authUser && !this.addingAvailabilityAsGuest) {
-          payload.guest = false
-        } else {
-          payload.guest = true
-          payload.name = guestPayload.name
-          payload.email = guestPayload.email
+        payload.guest = true
+        payload.name = guestPayload.name
+        payload.email = guestPayload.email
 
-          localStorage[this.guestNameKey] = guestPayload.name
-        }
+        localStorage[this.guestNameKey] = guestPayload.name
       }
 
       await post(`/events/${this.event._id}/response`, payload)
@@ -402,8 +340,7 @@ export default {
       }
       await _delete(`/events/${this.event._id}/response`, payload)
       this.availability = new Set()
-      if (this.isGroup) this.$router.replace({ name: "home" })
-      else this.refreshEvent()
+      this.refreshEvent()
     },
   },
 }

@@ -35,7 +35,7 @@ Inherited from Timeful:
 - "Available" vs. "If needed" times
 - Determine when a subset of people are available
 - Schedule across time zones
-- Duplicating polls, availability groups, CSV export
+- Duplicating polls, CSV export
 - Only show responses to the event creator
 
 Added in this build (for a ~40-person club):

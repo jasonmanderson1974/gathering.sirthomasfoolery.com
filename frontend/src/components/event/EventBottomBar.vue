@@ -1,7 +1,5 @@
 <template>
-  <div
-    class="tw-fixed tw-bottom-0 tw-z-20 tw-flex tw-w-full tw-flex-col"
-  >
+  <div class="tw-fixed tw-bottom-0 tw-z-20 tw-flex tw-w-full tw-flex-col">
     <div
       class="tw-flex tw-h-[4rem] tw-w-full tw-items-center tw-px-4"
       :class="`${isIOS ? 'tw-pb-2' : ''} ${
@@ -18,7 +16,7 @@
         >
         <v-spacer />
         <v-btn
-          v-if="!isGroup && !authUser && selectedGuestRespondent"
+          v-if="!authUser && selectedGuestRespondent"
           class="tw-bg-leather tw-text-brass tw-transition-opacity"
           :style="{ opacity: availabilityBtnOpacity }"
           @click="$emit('edit-guest-availability')"
@@ -48,7 +46,11 @@
         </v-btn>
       </template>
       <template v-else-if="isScheduling">
-        <v-btn text class="tw-text-white" @click="$emit('cancel-schedule-event')">
+        <v-btn
+          text
+          class="tw-text-white"
+          @click="$emit('cancel-schedule-event')"
+        >
           Cancel
         </v-btn>
         <v-spacer />
@@ -80,7 +82,6 @@ export default {
 
   props: {
     event: { type: Object, required: true },
-    isGroup: { type: Boolean, default: false },
     isSignUp: { type: Boolean, default: false },
     isEditing: { type: Boolean, default: false },
     isScheduling: { type: Boolean, default: false },

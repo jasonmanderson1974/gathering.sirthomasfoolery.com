@@ -1,5 +1,5 @@
-import { isBetween, dateToDowDate } from "@/utils"
-import { availabilityTypes, eventTypes } from "@/constants"
+import { isBetween } from "@/utils"
+import { availabilityTypes } from "@/constants"
 import {
   clampRow as clampRowPure,
   clampCol as clampColPure,
@@ -167,53 +167,6 @@ export default {
                 // Add / remove time from availability set
                 this.availability.delete(date.getTime())
                 this.ifNeeded.delete(date.getTime())
-              }
-            }
-
-            // Edit manualAvailability set if event is a GROUP
-            if (this.event.type === eventTypes.GROUP) {
-              const discreteDate = dateToDowDate(
-                this.event.dates,
-                date,
-                this.weekOffset,
-                true
-              )
-              const startDateOfDay = dateToDowDate(
-                this.event.dates,
-                this.days[c].dateObject,
-                this.weekOffset,
-                true
-              )
-
-              // If date not touched, then add all of the existing calendar availabilities and mark it as touched
-              if (!(startDateOfDay.getTime() in this.manualAvailability)) {
-                // Create new set
-                this.manualAvailability[startDateOfDay.getTime()] = new Set()
-
-                // Add the existing calendar availabilities
-                const existingAvailability = this.getAvailabilityForColumn(c)
-                for (const a of existingAvailability) {
-                  const convertedDate = dateToDowDate(
-                    this.event.dates,
-                    new Date(a),
-                    this.weekOffset,
-                    true
-                  )
-                  this.manualAvailability[startDateOfDay.getTime()].add(
-                    convertedDate.getTime()
-                  )
-                }
-              }
-
-              // Add / remove time from manual availability set
-              if (this.dragType === this.DRAG_TYPES.ADD) {
-                this.manualAvailability[startDateOfDay.getTime()].add(
-                  discreteDate.getTime()
-                )
-              } else if (this.dragType === this.DRAG_TYPES.REMOVE) {
-                this.manualAvailability[startDateOfDay.getTime()].delete(
-                  discreteDate.getTime()
-                )
               }
             }
           }

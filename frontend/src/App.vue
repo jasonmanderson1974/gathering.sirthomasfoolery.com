@@ -10,7 +10,7 @@
     />
     <NewDialog
       v-model="newDialogOptions.show"
-      :type="newDialogOptions.openNewGroup ? 'group' : 'event'"
+      type="event"
       :contactsPayload="newDialogOptions.contactsPayload"
       :no-tabs="newDialogOptions.eventOnly"
       :folder-id="newDialogOptions.folderId"
@@ -209,17 +209,8 @@ html {
 
 <script>
 import { mapMutations, mapState, mapActions, mapGetters } from "vuex"
-import {
-  get,
-  isPhone,
-  signInGoogle,
-  signInOutlook,
-} from "@/utils"
-import {
-  authTypes,
-  calendarTypes,
-  eventTypes,
-} from "@/constants"
+import { get, isPhone, signInGoogle, signInOutlook } from "@/utils"
+import { authTypes, calendarTypes, eventTypes } from "@/constants"
 import AutoSnackbar from "@/components/AutoSnackbar"
 import AuthUserMenu from "@/components/AuthUserMenu.vue"
 import SignInNotSupportedDialog from "@/components/SignInNotSupportedDialog.vue"
@@ -288,10 +279,7 @@ export default {
       "setSignUpFormEnabled",
       "setFeatureFlagsLoaded",
     ]),
-    ...mapActions([
-      "getEvents",
-      "createNew",
-    ]),
+    ...mapActions(["getEvents", "createNew"]),
     handleScroll(e) {
       this.scrollY = window.scrollY
     },
@@ -302,11 +290,7 @@ export default {
       this.createNew({ eventOnly })
     },
     signIn() {
-      if (
-        this.$route.name === "event" ||
-        this.$route.name === "group" ||
-        this.$route.name === "signUp"
-      ) {
+      if (this.$route.name === "event" || this.$route.name === "signUp") {
         if (isWebview(navigator.userAgent)) {
           this.webviewDialog = true
           return
@@ -318,21 +302,12 @@ export default {
       }
     },
     _signIn(calendarType) {
-      if (
-        this.$route.name === "event" ||
-        this.$route.name === "group" ||
-        this.$route.name === "signUp"
-      ) {
+      if (this.$route.name === "event" || this.$route.name === "signUp") {
         let state
         if (this.$route.name === "event") {
           state = {
             eventId: this.$route.params.eventId,
             type: authTypes.EVENT_SIGN_IN,
-          }
-        } else if (this.$route.name === "group") {
-          state = {
-            groupId: this.$route.params.groupId,
-            type: authTypes.GROUP_SIGN_IN,
           }
         }
         if (calendarType === calendarTypes.GOOGLE) {

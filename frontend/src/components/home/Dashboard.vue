@@ -2,17 +2,11 @@
   <div class="tw-rounded-md tw-px-6 tw-py-4 sm:tw-mx-4 sm:tw-bg-leather/40">
     <div class="tw-mb-3 tw-flex tw-items-center tw-justify-between">
       <div class="tw-flex tw-flex-col">
-        <div
-          class="tw-text-xl tw-font-medium tw-text-parchment sm:tw-text-2xl"
-        >
+        <div class="tw-text-xl tw-font-medium tw-text-parchment sm:tw-text-2xl">
           Dashboard
         </div>
       </div>
-      <v-btn
-        text
-        @click="openCreateFolderDialog"
-        class="tw-text-parchment-dim"
-      >
+      <v-btn text @click="openCreateFolderDialog" class="tw-text-parchment-dim">
         <v-icon class="tw-text-lg">mdi-folder-plus</v-icon>
         <span class="tw-ml-2">New folder</span>
       </v-btn>
@@ -95,10 +89,7 @@
         </div>
         <div v-show="folderOpenState[folder.id]">
           <draggable
-            :list="[
-              ...eventsByFolder[folder.id].groups,
-              ...eventsByFolder[folder.id].events,
-            ]"
+            :list="eventsByFolder[folder.id].events"
             group="events"
             @end="onEnd"
             :data-folder-id="
@@ -118,26 +109,12 @@
           >
             <template v-slot:header>
               <div
-                v-if="
-                  eventsByFolder[folder.id].groups.length === 0 &&
-                  eventsByFolder[folder.id].events.length === 0
-                "
+                v-if="eventsByFolder[folder.id].events.length === 0"
                 class="tw-absolute tw-left-0 tw-py-4 tw-text-sm tw-text-parchment-dim"
                 :class="folder.type === 'regular' ? 'tw-ml-8' : 'tw-ml-7'"
               >
                 {{ folder.emptyMessage }}
               </div>
-            </template>
-            <template v-if="eventsByFolder[folder.id].groups.length > 0">
-              <EventItem
-                v-for="event in eventsByFolder[folder.id].groups"
-                :key="event._id"
-                :id="event._id"
-                :event="event"
-                :folder-id="folder.id"
-                class="item"
-              />
-              <div class="tw-col-span-full"></div>
             </template>
             <EventItem
               v-for="event in eventsByFolder[folder.id].events"
@@ -186,7 +163,7 @@
             hide-details
           ></v-text-field>
           <div class="tw-mt-4">
-            <span class="tw-text-parchment-dim tw-text-sm">Color</span>
+            <span class="tw-text-sm tw-text-parchment-dim">Color</span>
             <div class="tw-mt-2 tw-flex tw-gap-x-3">
               <div
                 v-for="color in folderColors"
@@ -217,7 +194,7 @@
 <script>
 import { mapState, mapActions } from "vuex"
 import draggable from "vuedraggable"
-import { eventTypes, folderColors } from "@/constants"
+import { folderColors } from "@/constants"
 import EventItem from "@/components/EventItem.vue"
 import DashboardFaq from "@/components/home/DashboardFaq.vue"
 import ObjectID from "bson-objectid"
@@ -244,7 +221,7 @@ export default {
     }
   },
   computed: {
-    ...mapState(["authUser", "events", "groupsEnabled", "folders"]),
+    ...mapState(["authUser", "events", "folders"]),
     orderedFolders() {
       return [...this.folders].sort((a, b) => {
         return a.name.localeCompare(b.name)
@@ -266,31 +243,22 @@ export default {
       const eventsByFolder = {}
       const allEventIds = new Set(this.allEvents.map((e) => e._id))
 
-      eventsByFolder["no-folder"] = { groups: [], events: [] }
-      eventsByFolder["archived"] = { groups: [], events: [] }
+      eventsByFolder["no-folder"] = { events: [] }
+      eventsByFolder["archived"] = { events: [] }
 
       this.folders.forEach((folder) => {
-        eventsByFolder[folder._id] = { groups: [], events: [] }
+        eventsByFolder[folder._id] = { events: [] }
         for (const eventId of folder.eventIds) {
           const event = this.allEventsMap[eventId]
           if (event) {
             if (event.isArchived) {
-              if (event.type === eventTypes.GROUP) {
-                eventsByFolder["archived"].groups.push(event)
-              } else {
-                eventsByFolder["archived"].events.push(event)
-              }
+              eventsByFolder["archived"].events.push(event)
             } else {
-              if (event.type === eventTypes.GROUP) {
-                eventsByFolder[folder._id].groups.push(event)
-              } else {
-                eventsByFolder[folder._id].events.push(event)
-              }
+              eventsByFolder[folder._id].events.push(event)
             }
             allEventIds.delete(eventId)
           }
         }
-        eventsByFolder[folder._id].groups.sort(this.sortEvents)
         eventsByFolder[folder._id].events.sort(this.sortEvents)
       })
 
@@ -299,11 +267,7 @@ export default {
         if (!event) continue
 
         if (event.isArchived) {
-          if (event.type === eventTypes.GROUP) {
-            eventsByFolder["archived"].groups.push(event)
-          } else {
-            eventsByFolder["archived"].events.push(event)
-          }
+          eventsByFolder["archived"].events.push(event)
           continue
         }
 
@@ -314,21 +278,14 @@ export default {
         const target = isOwner ? this.createdFolder : this.receivedFolder
         const bucketId =
           target && eventsByFolder[target._id] ? target._id : "no-folder"
-        if (event.type === eventTypes.GROUP) {
-          eventsByFolder[bucketId].groups.push(event)
-        } else {
-          eventsByFolder[bucketId].events.push(event)
-        }
+        eventsByFolder[bucketId].events.push(event)
       }
 
-      eventsByFolder["no-folder"].groups.sort(this.sortEvents)
       eventsByFolder["no-folder"].events.sort(this.sortEvents)
-      eventsByFolder["archived"].groups.sort(this.sortEvents)
       eventsByFolder["archived"].events.sort(this.sortEvents)
       // Re-sort default folder buckets that may have received unfiled events
       for (const f of [this.createdFolder, this.receivedFolder]) {
         if (f && eventsByFolder[f._id]) {
-          eventsByFolder[f._id].groups.sort(this.sortEvents)
           eventsByFolder[f._id].events.sort(this.sortEvents)
         }
       }
@@ -384,10 +341,7 @@ export default {
       })
 
       // "No folder" only as a safety net if something actually landed there
-      if (
-        this.eventsByFolder["no-folder"].groups.length > 0 ||
-        this.eventsByFolder["no-folder"].events.length > 0
-      ) {
+      if (this.eventsByFolder["no-folder"].events.length > 0) {
         folders.push({
           id: "no-folder",
           type: "no-folder",

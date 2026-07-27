@@ -24,17 +24,6 @@ definitions:
     type: object
   models.AppleCalendarAuth:
     type: object
-  models.Attendee:
-    properties:
-      _id:
-        type: string
-      declined:
-        type: boolean
-      email:
-        type: string
-      eventId:
-        type: string
-    type: object
   models.BufferTimeOptions:
     properties:
       enabled:
@@ -173,11 +162,6 @@ definitions:
     properties:
       _id:
         type: string
-      attendees:
-        description: Attendees for an availability group (fetched from Attendees collection)
-        items:
-          $ref: '#/definitions/models.Attendee'
-        type: array
       blindAvailabilityEnabled:
         description: Whether to enable blind availability
         type: boolean
@@ -219,10 +203,6 @@ definitions:
         allOf:
         - $ref: '#/definitions/models.GatheringReminder'
         description: Pre-gathering reminder email config/state (paired with ScheduledEvent)
-      hasResponded:
-        description: Whether the user has responded to the availability group (fetched
-          based on whether user is in Attendees)
-        type: boolean
       hasSpecificTimes:
         description: Used for specific times for specific dates feature
         type: boolean
@@ -312,12 +292,10 @@ definitions:
     enum:
     - specific_dates
     - dow
-    - group
     type: string
     x-enum-varnames:
     - SPECIFIC_DATES
     - DOW
-    - GROUP
   models.Folder:
     properties:
       _id:
@@ -920,10 +898,6 @@ paths:
         required: true
         schema:
           properties:
-            attendees:
-              items:
-                type: string
-              type: array
             blindAvailabilityEnabled:
               type: boolean
             dates:
@@ -1018,10 +992,6 @@ paths:
         required: true
         schema:
           properties:
-            attendees:
-              items:
-                type: string
-              type: array
             blindAvailabilityEnabled:
               type: boolean
             dates:
@@ -1086,41 +1056,6 @@ paths:
         "200":
           description: OK
       summary: Archive an event
-      tags:
-      - events
-  /events/{eventId}/calendar-availabilities:
-    get:
-      consumes:
-      - application/json
-      parameters:
-      - description: Event ID
-        in: path
-        name: eventId
-        required: true
-        type: string
-      - description: Lower bound for event's start time to filter by
-        in: query
-        name: timeMin
-        required: true
-        type: string
-      - description: Upper bound for event's end time to filter by
-        in: query
-        name: timeMax
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              additionalProperties:
-                $ref: '#/definitions/calendar.CalendarEventsWithError'
-              type: object
-            type: object
-      summary: Return a map mapping user id to their calendar events that they have
-        enabled for the given time range
       tags:
       - events
   /events/{eventId}/comments:
@@ -1223,24 +1158,6 @@ paths:
         "200":
           description: OK
       summary: Edits the caller's own comment
-      tags:
-      - events
-  /events/{eventId}/decline:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Event ID
-        in: path
-        name: eventId
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-      summary: Decline the current user's invite to the event
       tags:
       - events
   /events/{eventId}/duplicate:

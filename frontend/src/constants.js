@@ -42,9 +42,6 @@ export const authTypes = Object.freeze({
   EVENT_SIGN_IN_LINK_APPLE: "event-sign-in-link-apple", // Sign in to link apple calendar
   EVENT_SIGN_IN: "event-sign-in", // Top right sign in button on event page
   EVENT_CONTACTS: "event-contacts", // Enable contacts
-  GROUP_ADD_AVAILABILITY: "group-add-availability",
-  GROUP_SIGN_IN: "group-sign-in",
-  GROUP_CREATE: "group-create",
   ADD_CALENDAR_ACCOUNT: "add-calendar-account",
   ADD_CALENDAR_ACCOUNT_FROM_EDIT: "add-calendar-account-from-edit",
   UPGRADE: "upgrade",
@@ -53,7 +50,6 @@ export const authTypes = Object.freeze({
 export const eventTypes = Object.freeze({
   SPECIFIC_DATES: "specific_dates",
   DOW: "dow",
-  GROUP: "group",
 })
 
 export const availabilityTypes = Object.freeze({
@@ -70,7 +66,7 @@ export const calendarTypes = Object.freeze({
   GOOGLE: "google",
   APPLE: "apple",
   OUTLOOK: "outlook",
-  ICS: "ics"
+  ICS: "ics",
 })
 
 export const upgradeDialogTypes = Object.freeze({
@@ -205,4 +201,5 @@ export const guestUserId = "000000000000000000000000"
 
 export const numFreeEvents = 3
 
-export const urlRegex = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)/
+export const urlRegex =
+  /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)/

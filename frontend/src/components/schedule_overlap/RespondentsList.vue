@@ -5,9 +5,7 @@
         Your response
       </template>
       <template v-else>
-        <div class="tw-mr-1 tw-text-lg">
-          {{ !isGroup ? "Responses" : "Members" }}
-        </div>
+        <div class="tw-mr-1 tw-text-lg">Responses</div>
         <div class="tw-font-normal">
           <template v-if="curRespondents.length === 0">
             {{
@@ -144,9 +142,7 @@
                 class="tw-absolute tw-right-0 tw-transition-none group-hover:tw-opacity-100 group-[&:has(.email-hover-target:hover)]:!tw-opacity-0"
                 :class="isPhone ? 'tw-opacity-100' : 'tw-opacity-0'"
               >
-                <template
-                  v-if="isPhone && (isGuest(user) || (isOwner && !isGroup))"
-                >
+                <template v-if="isPhone && (isGuest(user) || isOwner)">
                   <v-menu right offset-x>
                     <template v-slot:activator="{ on, attrs }">
                       <v-btn icon v-on="on" v-bind="attrs">
@@ -166,7 +162,7 @@
                         </v-list-item-title>
                       </v-list-item>
                       <v-list-item
-                        v-if="isOwner && !isGroup"
+                        v-if="isOwner"
                         @click="() => showDeleteAvailabilityDialog(user)"
                       >
                         <v-list-item-title class="tw-flex tw-items-center">
@@ -189,7 +185,7 @@
                     ><v-icon small color="#4F4F4F">mdi-pencil</v-icon></v-btn
                   >
                   <v-btn
-                    v-if="isOwner && !isGroup"
+                    v-if="isOwner"
                     small
                     icon
                     class="tw-bg-white"
@@ -221,29 +217,9 @@
       >
         * if needed
       </div>
-      <div
-        v-if="!maxHeight && pendingUsers.length > 0"
-        class="tw-mb-4 sm:tw-mb-6"
-      >
-        <div class="tw-mb-2 tw-flex tw-items-center tw-font-medium">
-          <div class="tw-mr-1 tw-text-lg">Pending</div>
-          <div class="tw-font-normal">({{ pendingUsers.length }})</div>
-        </div>
-        <div>
-          <div v-for="user in pendingUsers" :key="user.email">
-            <div class="tw-relative tw-flex tw-items-center">
-              <v-icon class="tw-ml-1 tw-mr-3" small>mdi-account</v-icon>
-              <div class="tw-mr-1 tw-text-sm tw-transition-all">
-                {{ user.email }}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
       <template v-if="!isPhone">
         <v-btn
           v-if="
-            !isGroup &&
             (authUser || guestAddedAvailability) &&
             (!event.blindAvailabilityEnabled || isOwner)
           "
@@ -291,10 +267,6 @@
           @update:showResponseCounts="
             (val) => $emit('update:showResponseCounts', val)
           "
-          :showCalendarEvents="showCalendarEvents"
-          @update:showCalendarEvents="
-            (val) => $emit('update:showCalendarEvents', val)
-          "
           :startCalendarOnMonday="startCalendarOnMonday"
           @update:startCalendarOnMonday="
             (val) => $emit('update:startCalendarOnMonday', val)
@@ -317,8 +289,7 @@
         <v-card-text class="tw-text-sm tw-text-parchment-dim"
           >Are you sure you want to delete
           <strong>{{ userToDelete?.firstName }}</strong
-          >'s availability from this
-          {{ isGroup ? "group" : "event" }}?</v-card-text
+          >'s availability from this event?</v-card-text
         >
         <v-card-actions>
           <v-spacer />
@@ -338,25 +309,10 @@
       </v-card>
     </v-dialog>
 
-    <v-switch
-      v-if="isGroup && isPhone"
-      :class="maxHeight && 'tw-mt-2'"
-      class="tw-mb-4"
-      inset
-      :input-value="showCalendarEvents"
-      @change="(val) => $emit('update:showCalendarEvents', Boolean(val))"
-      hide-details
-    >
-      <template v-slot:label>
-        <div class="tw-text-sm tw-text-parchment">Overlay calendar events</div>
-      </template>
-    </v-switch>
-
     <v-btn
       v-if="
         !maxHeight &&
         isPhone &&
-        !isGroup &&
         (authUser || guestAddedAvailability) &&
         (!event.blindAvailabilityEnabled || isOwner)
       "
@@ -395,7 +351,12 @@ import ExportCsvMenu from "./ExportCsvMenu.vue"
 export default {
   name: "RespondentsList",
 
-  components: { UserAvatarContent, EventOptions, OverflowGradient, ExportCsvMenu },
+  components: {
+    UserAvatarContent,
+    EventOptions,
+    OverflowGradient,
+    ExportCsvMenu,
+  },
 
   props: {
     eventId: { type: String, required: true },
@@ -411,9 +372,6 @@ export default {
     parsedResponses: { type: Object, required: true },
     isOwner: { type: Boolean, required: true },
     maxHeight: { type: Number },
-    isGroup: { type: Boolean, required: true },
-    attendees: { type: Array, default: () => [] },
-    showCalendarEvents: { type: Boolean, required: true },
     responsesFormatted: { type: Map, required: true },
     timezone: { type: Object, required: true },
     showBestTimes: { type: Boolean, required: true },
@@ -442,7 +400,7 @@ export default {
   computed: {
     ...mapState(["authUser"]),
     allowExportCsv() {
-      if (this.isGroup || this.isPhone) return false
+      if (this.isPhone) return false
 
       return this.event.blindAvailabilityEnabled
         ? this.isOwner && this.respondents.length > 0
@@ -475,20 +433,6 @@ export default {
           numUsers++
       }
       return numUsers
-    },
-    pendingUsers() {
-      if (!this.isGroup) return []
-
-      const respondentEmailsSet = new Set(
-        this.respondents.map((r) => r.email.toLowerCase())
-      )
-
-      return this.attendees.filter((a) => {
-        if (!a.declined && !respondentEmailsSet.has(a.email.toLowerCase())) {
-          return true
-        }
-        return false
-      })
     },
     showIfNeededStar() {
       if (this.hideIfNeeded) {

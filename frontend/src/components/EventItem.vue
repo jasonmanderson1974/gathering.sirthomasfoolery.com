@@ -20,9 +20,7 @@
           }"
         >
           <v-icon :color="isOwner ? 'green' : 'grey'">{{
-            isGroup
-              ? "mdi-account-group"
-              : isDow
+            isDow
               ? "mdi-calendar-range"
               : event.daysOnly
               ? "mdi-calendar-month"
@@ -37,17 +35,7 @@
         </div>
       </div>
       <div class="tw-min-w-max">
-        <div
-          v-if="isGroup && !userHasResponded"
-          class="tw-inline-block tw-text-sm tw-italic tw-text-parchment-dim"
-        >
-          Invited
-        </div>
-        <v-chip
-          v-else
-          small
-          class="tw-m-0.5 tw-bg-leather tw-text-parchment-dim"
-        >
+        <v-chip small class="tw-m-0.5 tw-bg-leather tw-text-parchment-dim">
           <v-icon left small> mdi-account-multiple </v-icon>
           {{ this.event.numResponses }}
         </v-chip>
@@ -73,12 +61,7 @@
               </v-list-item-content>
             </v-list-item>
             <v-divider />
-            <v-dialog
-              v-if="!isGroup"
-              v-model="duplicateDialog"
-              width="400"
-              persistent
-            >
+            <v-dialog v-model="duplicateDialog" width="400" persistent>
               <template v-slot:activator="{ on, attrs }">
                 <v-list-item id="duplicate-event-btn" v-bind="attrs" v-on="on">
                   <v-list-item-content>
@@ -238,9 +221,6 @@ export default {
     isOwner() {
       return this.event.ownerId === this.authUser._id
     },
-    isGroup() {
-      return this.event.type === eventTypes.GROUP
-    },
     isDow() {
       return this.event.type === eventTypes.DOW
     },
@@ -248,24 +228,20 @@ export default {
       return this.event.isSignUpForm
     },
     linkTo() {
-      if (this.isGroup) {
-        return "group"
-      } else if (this.isSignUp) {
+      if (this.isSignUp) {
         return "signUp"
       }
 
       return "event"
     },
     identifier() {
-      if (this.isGroup) {
-        return "groupId"
-      } else if (this.isSignUp) {
+      if (this.isSignUp) {
         return "signUpId"
       }
       return "eventId"
     },
     typeText() {
-      return this.isGroup ? "group" : "event"
+      return "event"
     },
     userHasResponded() {
       return this.event.hasResponded ?? false

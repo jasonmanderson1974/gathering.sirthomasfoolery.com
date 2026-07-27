@@ -11,7 +11,6 @@ type EventType string
 const (
 	SPECIFIC_DATES EventType = "specific_dates"
 	DOW            EventType = "dow"
-	GROUP          EventType = "group"
 )
 
 // Object containing information associated with the remindee
@@ -305,12 +304,6 @@ type Event struct {
 
 	// Remindees
 	Remindees *[]Remindee `json:"remindees" bson:"remindees,omitempty"`
-
-	// Attendees for an availability group (fetched from Attendees collection)
-	Attendees *[]Attendee `json:"attendees" bson:"-"`
-
-	// Whether the user has responded to the availability group (fetched based on whether user is in Attendees)
-	HasResponded *bool `json:"hasResponded" bson:"-"`
 }
 
 func (e *Event) GetId() string {
