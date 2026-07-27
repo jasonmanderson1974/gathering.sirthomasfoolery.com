@@ -2375,6 +2375,7 @@ const docTemplate = `{
         },
         "/user/searchContacts": {
             "get": {
+                "description": "Missing contacts access is not an error: the response is 200 with\nhasContactsAccess=false and no contacts, so the client can drop the\nsuggestions quietly instead of logging a failed request on every mount.",
                 "produces": [
                     "application/json"
                 ],
@@ -2395,10 +2396,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.User"
-                            }
+                            "$ref": "#/definitions/responses.SearchContacts"
                         }
                     }
                 }
@@ -3359,6 +3357,20 @@ const docTemplate = `{
             ],
             "properties": {
                 "error": {}
+            }
+        },
+        "responses.SearchContacts": {
+            "type": "object",
+            "properties": {
+                "contacts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.User"
+                    }
+                },
+                "hasContactsAccess": {
+                    "type": "boolean"
+                }
             }
         },
         "routes.CreateFolderResponse": {

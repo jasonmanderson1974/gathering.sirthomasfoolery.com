@@ -12,6 +12,25 @@ import (
 	"sirtom/server/utils"
 )
 
+// IsAccessError reports whether err means the user simply can't be searched for
+// contacts — no Google account linked, or the contacts scope never granted. There's
+// nothing to surface to the caller in that case: the suggestion list is just empty.
+func IsAccessError(err *errs.GoogleAPIError) bool {
+	if err == nil {
+		return false
+	}
+	switch err.Code {
+	case 401, 403:
+		// Not authenticated for, or not permitted, the People API.
+		return true
+	case 400:
+		// Our own "no (Google) calendar account linked" preconditions, and Google's
+		// equivalent. Other 400s are malformed requests and stay errors.
+		return err.Status == "FAILED_PRECONDITION"
+	}
+	return false
+}
+
 func SearchContacts(user *models.User, query string) ([]models.User, *errs.GoogleAPIError) {
 	type Person struct {
 		Names []struct {

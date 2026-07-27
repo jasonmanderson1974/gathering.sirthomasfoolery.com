@@ -84,12 +84,14 @@ export default {
 
   mounted() {
     // Send a warmup request to update cache and check if contacts permissions are enabled
-    get(`/user/searchContacts?query=`).catch((err) => {
-      // User has not granted contacts permissions
-      if (err.error?.code === 403 || err.error?.code === 401) {
+    get(`/user/searchContacts?query=`)
+      .then(({ hasContactsAccess }) => {
+        this.hasContactsAccess = hasContactsAccess
+      })
+      .catch(() => {
+        // Suggestions are a nice-to-have — treat any failure as "no suggestions"
         this.hasContactsAccess = false
-      }
-    })
+      })
 
     this.remindees = this.addedEmails
   },
@@ -110,12 +112,17 @@ export default {
       if (this.hasContactsAccess) {
         if (this.timeout) clearTimeout(this.timeout)
         this.timeout = setTimeout(() => {
-          get(`/user/searchContacts?query=${this.query}`).then((results) => {
-            this.searchedContacts = results
-            this.searchedContacts.map((contact) => {
-              contact["queryString"] = this.contactToQueryString(contact)
+          get(`/user/searchContacts?query=${this.query}`)
+            .then(({ contacts, hasContactsAccess }) => {
+              this.hasContactsAccess = hasContactsAccess
+              this.searchedContacts = contacts
+              this.searchedContacts.map((contact) => {
+                contact["queryString"] = this.contactToQueryString(contact)
+              })
             })
-          })
+            .catch(() => {
+              this.searchedContacts = []
+            })
         }, this.searchDebounceTime)
       }
     },

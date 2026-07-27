@@ -592,6 +592,15 @@ definitions:
     required:
     - error
     type: object
+  responses.SearchContacts:
+    properties:
+      contacts:
+        items:
+          $ref: '#/definitions/models.User'
+        type: array
+      hasContactsAccess:
+        type: boolean
+    type: object
   routes.CreateFolderResponse:
     properties:
       id:
@@ -2170,6 +2179,10 @@ paths:
       - user
   /user/searchContacts:
     get:
+      description: |-
+        Missing contacts access is not an error: the response is 200 with
+        hasContactsAccess=false and no contacts, so the client can drop the
+        suggestions quietly instead of logging a failed request on every mount.
       parameters:
       - description: Query to search for
         in: query
@@ -2182,9 +2195,7 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/models.User'
-            type: array
+            $ref: '#/definitions/responses.SearchContacts'
       summary: Searches the user's contacts based on the given query
       tags:
       - user

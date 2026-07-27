@@ -184,12 +184,14 @@ export default {
     this.emailSuggestions = this.respondents.map(() => [])
 
     // Send a warmup request to update cache and check if contacts permissions are enabled
-    get(`/user/searchContacts?query=`).catch((err) => {
-      // User has not granted contacts permissions
-      if (err.error?.code === 403) {
+    get(`/user/searchContacts?query=`)
+      .then(({ hasContactsAccess }) => {
+        this.hasContactsAccess = hasContactsAccess
+      })
+      .catch(() => {
+        // Suggestions are a nice-to-have — treat any failure as "no suggestions"
         this.hasContactsAccess = false
-      }
-    })
+      })
   },
 
   computed: {
@@ -236,9 +238,14 @@ export default {
       if (this.hasContactsAccess) {
         clearTimeout(this.timeouts[emailsIndex])
         this.timeouts[emailsIndex] = setTimeout(() => {
-          get(`/user/searchContacts?query=${query}`).then((results) => {
-            this.$set(this.emailSuggestions, emailsIndex, results)
-          })
+          get(`/user/searchContacts?query=${query}`)
+            .then(({ contacts, hasContactsAccess }) => {
+              this.hasContactsAccess = hasContactsAccess
+              this.$set(this.emailSuggestions, emailsIndex, contacts)
+            })
+            .catch(() => {
+              this.$set(this.emailSuggestions, emailsIndex, [])
+            })
         }, 300)
       }
     },

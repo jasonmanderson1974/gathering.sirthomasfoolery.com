@@ -954,10 +954,13 @@ func toggleSubCalendar(c *gin.Context) {
 }
 
 // @Summary Searches the user's contacts based on the given query
+// @Description Missing contacts access is not an error: the response is 200 with
+// @Description hasContactsAccess=false and no contacts, so the client can drop the
+// @Description suggestions quietly instead of logging a failed request on every mount.
 // @Tags user
 // @Produce json
 // @Param query query string true "Query to search for"
-// @Success 200 {object} []models.User
+// @Success 200 {object} responses.SearchContacts
 // @Router /user/searchContacts [get]
 func searchContacts(c *gin.Context) {
 	// Bind query parameters
@@ -971,13 +974,23 @@ func searchContacts(c *gin.Context) {
 	userInterface, _ := c.Get("authUser")
 	user := userInterface.(*models.User)
 
-	contacts, googleError := contacts.SearchContacts(user, payload.Query)
+	results, googleError := contacts.SearchContacts(user, payload.Query)
 	if googleError != nil {
+		if contacts.IsAccessError(googleError) {
+			c.JSON(http.StatusOK, responses.SearchContacts{
+				Contacts:          []models.User{},
+				HasContactsAccess: false,
+			})
+			return
+		}
 		c.JSON(googleError.Code, responses.Error{Error: *googleError})
 		return
 	}
 
-	c.JSON(http.StatusOK, contacts)
+	c.JSON(http.StatusOK, responses.SearchContacts{
+		Contacts:          results,
+		HasContactsAccess: true,
+	})
 }
 
 // @Summary Deletes the currently signed in user
