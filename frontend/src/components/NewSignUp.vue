@@ -55,12 +55,12 @@
           required
         />
 
-        <!-- <SlideToggle
+        <SlideToggle
           v-if="daysOnlyEnabled && !edit"
           class="tw-w-full"
-          v-model="daysOnly"
-          :options="daysOnlyOptions"
-        /> -->
+          v-model="availabilityMode"
+          :options="availabilityModeOptions"
+        />
 
         <div>
           <v-expand-transition>
@@ -358,6 +358,11 @@ import HelpDialog from "./HelpDialog.vue"
 import EmailInput from "./event/EmailInput.vue"
 import DatePicker from "@/components/DatePicker.vue"
 import SlideToggle from "./SlideToggle.vue"
+import {
+  availabilityModes,
+  getAvailabilityFields,
+  getAvailabilityMode,
+} from "./availabilityModes"
 import AlertText from "@/components/AlertText.vue"
 import OverflowGradient from "@/components/OverflowGradient.vue"
 
@@ -403,11 +408,11 @@ export default {
     startOnMonday: false,
     notificationsEnabled: false,
 
-    daysOnly: false,
-    daysOnlyOptions: Object.freeze([
-      { text: "Dates and times", value: false },
-      { text: "Dates only", value: true },
-    ]),
+    // Sign up sheets are always block based (the owner draws the blocks in the
+    // next step), so the time block and custom time modes don't apply here —
+    // only whether the sheet has times at all. `daysOnly` is derived from this.
+    availabilityModes,
+    availabilityMode: availabilityModes.DATES_AND_TIMES,
 
     // Date options
     dateOptions: Object.freeze({
@@ -444,7 +449,9 @@ export default {
       this.name = this.contactsPayload.name
       this.startTime = this.contactsPayload.startTime
       this.endTime = this.contactsPayload.endTime
-      this.daysOnly = this.contactsPayload.daysOnly
+      this.availabilityMode =
+        this.contactsPayload.availabilityMode ??
+        this.availabilityModes.DATES_AND_TIMES
       this.selectedDateOption = this.contactsPayload.selectedDateOption
       this.selectedDaysOfWeek = this.contactsPayload.selectedDaysOfWeek
       this.selectedDays = this.contactsPayload.selectedDays
@@ -461,6 +468,18 @@ export default {
 
   computed: {
     ...mapState(["authUser", "daysOnlyEnabled"]),
+    availabilityModeOptions() {
+      return [
+        {
+          text: "Dates and times",
+          value: this.availabilityModes.DATES_AND_TIMES,
+        },
+        { text: "Dates only", value: this.availabilityModes.DATES_ONLY },
+      ]
+    },
+    daysOnly() {
+      return getAvailabilityFields(this.availabilityMode, false).daysOnly
+    },
     nameRules() {
       return [(v) => !!v || "Event name is required"]
     },
@@ -509,7 +528,7 @@ export default {
       this.selectedDays = []
       this.selectedDaysOfWeek = []
       this.notificationsEnabled = false
-      this.daysOnly = false
+      this.availabilityMode = this.availabilityModes.DATES_AND_TIMES
       this.selectedDateOption = "Specific dates"
       this.emails = []
       this.showAdvancedOptions = false
@@ -676,7 +695,7 @@ export default {
         name: this.name,
         startTime: this.startTime,
         endTime: this.endTime,
-        daysOnly: this.daysOnly,
+        availabilityMode: this.availabilityMode,
         selectedDays: this.selectedDays,
         selectedDaysOfWeek: this.selectedDaysOfWeek,
         selectedDateOption: this.selectedDateOption,
@@ -714,7 +733,7 @@ export default {
         this.endTime = (this.startTime + this.event.duration) % 24
         this.notificationsEnabled = this.event.notificationsEnabled
         this.blindAvailabilityEnabled = this.event.blindAvailabilityEnabled
-        this.daysOnly = this.event.daysOnly
+        this.availabilityMode = getAvailabilityMode(this.event).mode
 
         if (
           this.event.sendEmailAfterXResponses !== null &&
@@ -770,7 +789,7 @@ export default {
         name: this.name,
         startTime: this.startTime,
         endTime: this.endTime,
-        daysOnly: this.daysOnly,
+        availabilityMode: this.availabilityMode,
         selectedDays: this.selectedDays,
         selectedDaysOfWeek: this.selectedDaysOfWeek,
         selectedDateOption: this.selectedDateOption,
@@ -791,7 +810,7 @@ export default {
           JSON.stringify(this.initialEventData.selectedDays) ||
         JSON.stringify(this.selectedDaysOfWeek) !==
           JSON.stringify(this.initialEventData.selectedDaysOfWeek) ||
-        this.daysOnly !== this.initialEventData.daysOnly ||
+        this.availabilityMode !== this.initialEventData.availabilityMode ||
         this.notificationsEnabled !==
           this.initialEventData.notificationsEnabled ||
         JSON.stringify(this.emails) !==
