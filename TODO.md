@@ -9,6 +9,11 @@
 > **2026-07-27: second full review** added items **A16–A23**, **B4–B5**, **E3–E10** — headlined by
 > **E3** (require sign-in for ALL event access; remove the anonymous guest flow), which reverses the
 > "guest responses left open" decision and subsumes a batch of IDOR findings.
+>
+> **2026-07-28:** cleared the cheap, E3-independent security batch — **B4** (CI was skipping 3 test
+> files), **E5** (`session.Save()` errors), **E6** (phone/role/RSVP-email/remindee leaks in
+> `getEvent`). Suggested next: the **deletion sweep** (E4 + A18 + A19, optionally E7) *before* E3,
+> since it removes an unauthenticated crash route and shrinks the surface E3 has to gate.
 
 Priority legend: **P0** = do first (correctness / risk / cheap-and-high-value) ·
 **P1** = high value · **P2** = moderate · **P3** = nice-to-have.
@@ -417,14 +422,12 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   fetch/format/animate logic (now in `availabilityMixin`/`currentAvailabilityMixin`) is still
   `this`-dependent and would need the same extract-pure-core treatment to be unit-testable.
 
-- [ ] **B4 · Three existing Go test files never run in CI.** `S` · **P0** (zero-cost win)
-  `.github/workflows/backend-ci.yml` tests `./models/ ./routes/ ./utils/ ./db/
-  ./services/reminders/` — omitting `./services/calendar/`, `./services/contacts/`,
-  `./services/microsoftgraph/`, which all **contain tests** (`ics_generate_test.go`,
-  `contacts_test.go`, `microsoftgraph_test.go`). The workflow comment says those services "need
-  external credentials" — true of the packages, not these tests (`ics_generate_test.go` is pure
-  logic covering the C3 ICS generator). Add the three paths to the CI test command (and to the
-  DEVELOPMENT.md local-test command).
+- [x] **B4 · Three existing Go test files never run in CI.** `S` · **P0 — DONE 2026-07-28.**
+  `backend-ci.yml` now also tests `./services/calendar/ ./services/contacts/
+  ./services/microsoftgraph/` (all three pass locally). The old comment's "need external
+  credentials" was true of the *packages*, not their tests — all three are pure logic. The
+  `DEVELOPMENT.md` local-test command had drifted further still (it was also missing
+  `./services/reminders/`); both lists are now identical, with a note to keep them in sync.
 
 - [ ] **B5 · Work down the golangci-lint errcheck backlog; flip lint to blocking.** `M` · **P2**
   The backend lint step is still `continue-on-error: true` over the **112-issue backlog A8
@@ -1045,21 +1048,37 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   `isPremiumUser` question. The webhook's signature verification (`stripe.go:283-296`) is the only
   properly-secured piece — it goes too.
 
-- [ ] **E5 · `session.Save()` errors discarded at 5 sites.** `S` · **P1**
-  `auth.go:319,336,577`, `user.go:992`, and the worst one — `middleware/auth.go:45`, the
-  **struck-off-member revocation path**: if `Save` fails there, the `session.Delete("userId")` is
-  never persisted and the revoked cookie stays live. On sign-in, a failed Save returns 200 with no
-  cookie ("sign-in did nothing"). Log + return 500 (or at minimum log) at each site. Part of the
-  errcheck class B5 tracks.
+- [x] **E5 · `session.Save()` errors discarded at 5 sites.** `S` · **P1 — DONE 2026-07-28**
+  (build/vet clean, full suite green with DB-gated tests actually running). Handled by impact
+  rather than uniformly:
+  - `middleware/auth.go` (struck-off-member revocation) — **log**. The request is denied either
+    way; the risk is that an unpersisted `Delete` leaves the revoked cookie live for the *next*
+    request, which must not be silent. Changing the response here would be wrong (it's already 401).
+  - `auth.go signInHelper` — **propagates** (`return models.User{}, err`); it already returns an
+    error, so no signature change.
+  - `auth.go` OTP sign-in and `signOut` — **500**. Both previously returned 200 while the cookie
+    state was the opposite of what the response claimed.
+  - `user.go deleteAccount` — **log only**: the account row is already gone, so `AuthRequired`
+    401s the stale cookie on its next use.
+  Knocks 5 off the errcheck backlog **B5** tracks.
 
-- [ ] **E6 · PII leaks in `getEvent` to non-owners.** `S` · **P1**
-  `stripSensitiveUserFields` (`event_responses.go:642-650`) nils calendar/billing fields but **not
-  `Phone`** (`models/user.go:16`) or `Role` — respondents' phone numbers are returned to any event
-  viewer. `event.Rsvps` serializes `Rsvp.Email` (`models/event.go:193,307`) unfiltered by the
-  `showEmails`/`collectEmails` logic that guards `responsesMap`; `Remindees` emails
-  (`models/event.go:18,323`) serialize to any viewer. Independent of E3 (the leaks would persist
-  to signed-in guests) and safe to fix first: add `Phone`/`Role` to the strip, apply the same
-  owner/`collectEmails` email rule to `Rsvps` and `Remindees`.
+- [x] **E6 · PII leaks in `getEvent` to non-owners.** `S` · **P1 — DONE 2026-07-28** (build/vet
+  clean, full suite green). All three channels confirmed present and fixed:
+  - `stripSensitiveUserFields` now also clears **`Phone`** and **`Role`** — unconditionally, since
+    an event response only needs to identify the respondent. Checked first that nothing on the
+    frontend reads either *from event responses*: the directory reads `member.phone` from
+    `/admin/allowlist`, `Settings` reads `authUser.phone`, and `role` is only consumed for the
+    signed-in `authUser` (`store/role_getters.js`) and in `MemberAdmin`.
+  - **`Rsvps`**: `Rsvp.Email` now follows the same `showEmails` (`isOwner && collectEmails`) rule as
+    responses. The RSVP itself still serializes — `GatheringRsvp.vue` renders status/name/guestCount
+    and never reads `.email`.
+  - **`Remindees`**: now owner-only (`event.Remindees = nil` otherwise). The owner still needs it —
+    `NewEvent.vue:565` prefills the invite field from it when editing. The json tag has no
+    `omitempty`, so non-owners get an explicit `null`, which that call site already handles.
+  - **Tests**: `routes/events_pii_db_test.go` — DB-gated matrix over non-owner / anonymous / owner
+    with `collectEmails` / owner without, plus the phone+role strip. **5 of the 6 fail without the
+    change** (verified by stashing the fix); the 6th is deliberately green both ways as the guard
+    against over-stripping the owner's own view.
 
 - [ ] **E7 · Slackbot endpoint: no Slack signature verification (or just delete it).** `S` · **P2**
   `POST /api/slackbot` (`slackbot/slackbot.go:56`, `execCommand` :65-106) is unauthenticated, does
