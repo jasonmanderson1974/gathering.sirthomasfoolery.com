@@ -31,7 +31,15 @@ func commentsTestRouter() *gin.Engine {
 	return r
 }
 
-// insertTestUser creates a user with the given role and registers cleanup.
+// insertTestUser creates a user with the given role, puts them on the
+// allowlist, and registers cleanup of both.
+//
+// The allowlist entry matters: AuthRequired enforces the roll on every request
+// and only fails open while the list is empty. Without it these tests pass
+// against an empty database and return 401 not-invited against one holding any
+// real entries — a restored production dump, say — which looks like a broken
+// handler rather than a test-data problem. The @example.test emails cannot
+// collide with real entries, so cleanup only removes what was added here.
 func insertTestUser(t *testing.T, role models.Role, email string) primitive.ObjectID {
 	t.Helper()
 	id := primitive.NewObjectID()
@@ -42,6 +50,12 @@ func insertTestUser(t *testing.T, role models.Role, email string) primitive.Obje
 		t.Fatalf("insert user %s: %v", email, err)
 	}
 	t.Cleanup(func() { deleteTestUser(id) })
+
+	if err := db.AddToAllowlist(email, "tester", role); err != nil {
+		t.Fatalf("allowlist %s: %v", email, err)
+	}
+	t.Cleanup(func() { db.RemoveFromAllowlist(email) })
+
 	return id
 }
 
