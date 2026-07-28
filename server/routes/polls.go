@@ -206,14 +206,14 @@ func deletePoll(c *gin.Context) {
 // @Produce json
 // @Param eventId path string true "Event ID"
 // @Param pollId path string true "Poll ID"
-// @Param payload body object{optionIds=[]string,guest=bool,name=string} true "Chosen option ids + voter identity"
+// @Param payload body object{optionIds=[]string} true "Chosen option ids"
 // @Success 200
 // @Router /events/{eventId}/polls/{pollId}/vote [post]
 func votePoll(c *gin.Context) {
+	// E3: the vote is keyed to the session. `guest`/`name` are gone — they let
+	// any caller vote as anyone, and stuff the roster with arbitrary names.
 	payload := struct {
 		OptionIds []string `json:"optionIds"`
-		Guest     *bool    `json:"guest" binding:"required"`
-		Name      string   `json:"name"`
 	}{}
 	if err := c.Bind(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
@@ -243,17 +243,15 @@ func votePoll(c *gin.Context) {
 		return
 	}
 
-	key, _, keyOk := responderKey(c, *payload.Guest, payload.Name)
+	key, _, keyOk := responderKey(c)
 	if !keyOk {
 		return
 	}
 
-	// Resolve the display name shown in the voter roster.
-	displayName := strings.TrimSpace(payload.Name)
-	if !*payload.Guest {
-		if user, err := db.GetUserById(key); err == nil && user != nil {
-			displayName = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
-		}
+	// The roster name comes from the account, never from the request body.
+	displayName := key
+	if user, err := db.GetUserById(key); err == nil && user != nil {
+		displayName = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
 	}
 
 	if err := applyPollVote(&event.Polls[pollIdx], key, displayName, payload.OptionIds); err != nil {

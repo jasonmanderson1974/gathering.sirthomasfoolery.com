@@ -1,14 +1,18 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"sirtom/server/db"
 	"sirtom/server/errs"
 	"sirtom/server/middleware"
 	"sirtom/server/models"
@@ -237,5 +241,200 @@ func TestCreateEvent_AcceptsKnownTypeEndToEnd(t *testing.T) {
 	}
 	if id, err := primitive.ObjectIDFromHex(resp.EventId); err == nil {
 		t.Cleanup(func() { cleanupEvent(id) })
+	}
+}
+
+// --- E3 phase 2: anonymous guest semantics removed ---------------------------
+
+// Responses are keyed by user-id for members and by display name for guests in
+// the SAME map, so an ObjectID-shaped on-behalf name would collide with, and
+// overwrite, a member's response.
+func TestValidOnBehalfName(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		want bool
+	}{
+		{"Greg", true},
+		{"Mary-Anne O'Brien", true},
+		{"", false},
+		{"507f1f77bcf86cd799439011", false}, // lowercase hex ObjectID
+		{"507F1F77BCF86CD799439011", false}, // uppercase
+		{"507f1f77bcf86cd79943901", true},   // 23 chars — not an ObjectID
+		{"507f1f77bcf86cd7994390111", true}, // 25 chars — not an ObjectID
+		{"507f1f77bcf86cd79943901g", true},  // 24 chars but not hex
+	} {
+		if got := validOnBehalfName(tc.name); got != tc.want {
+			t.Errorf("validOnBehalfName(%q) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A signed-in caller must not be able to overwrite a member's response by
+// submitting that member's user id as an on-behalf "guest" name.
+func TestUpdateEventResponse_RejectsObjectIDShapedGuestName(t *testing.T) {
+	requireDB(t)
+	victimId := primitive.NewObjectID()
+	callerId := insertTestUser(t, models.RoleMember, "onbehalf-caller@example.test")
+
+	eventId := primitive.NewObjectID()
+	if _, err := db.EventsCollection.InsertOne(context.Background(), models.Event{
+		Id: eventId, Type: models.SPECIFIC_DATES, OwnerId: primitive.NewObjectID(),
+		NumResponses: intPtrTest(0),
+	}); err != nil {
+		t.Fatalf("insert event: %v", err)
+	}
+	t.Cleanup(func() { cleanupEvent(eventId) })
+
+	r := newTestRouter()
+	registerTestLogin(r)
+	r.POST("/events/:eventId/response", middleware.AuthRequired(), updateEventResponse)
+
+	body := `{"guest":true,"name":"` + victimId.Hex() + `","availability":[]}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/events/"+eventId.Hex()+"/response", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(loginAs(t, r, callerId.Hex()))
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("ObjectID-shaped guest name: got %d, want 400 (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+// A plain on-behalf name still works — only anonymous use and impersonation are
+// gone, not the spouse-without-an-account flow.
+func TestUpdateEventResponse_AllowsPlainOnBehalfName(t *testing.T) {
+	requireDB(t)
+	callerId := insertTestUser(t, models.RoleMember, "onbehalf-ok@example.test")
+
+	eventId := primitive.NewObjectID()
+	if _, err := db.EventsCollection.InsertOne(context.Background(), models.Event{
+		Id: eventId, Type: models.SPECIFIC_DATES, OwnerId: primitive.NewObjectID(),
+		NumResponses: intPtrTest(0),
+	}); err != nil {
+		t.Fatalf("insert event: %v", err)
+	}
+	t.Cleanup(func() { cleanupEvent(eventId) })
+
+	r := newTestRouter()
+	registerTestLogin(r)
+	r.POST("/events/:eventId/response", middleware.AuthRequired(), updateEventResponse)
+
+	body := `{"guest":true,"name":"Mary","availability":[]}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/events/"+eventId.Hex()+"/response", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(loginAs(t, r, callerId.Hex()))
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("on-behalf entry should still work: got %d (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+// Deleting a by-name response is acting on someone else's data. Previously this
+// branch had no authorization at all.
+func TestDeleteEventResponse_GuestBranchRequiresOwner(t *testing.T) {
+	requireDB(t)
+	strangerId := insertTestUser(t, models.RoleMember, "stranger@example.test")
+
+	eventId := primitive.NewObjectID()
+	if _, err := db.EventsCollection.InsertOne(context.Background(), models.Event{
+		Id: eventId, Type: models.SPECIFIC_DATES, OwnerId: primitive.NewObjectID(),
+		NumResponses: intPtrTest(1),
+	}); err != nil {
+		t.Fatalf("insert event: %v", err)
+	}
+	t.Cleanup(func() { cleanupEvent(eventId) })
+
+	r := newTestRouter()
+	registerTestLogin(r)
+	r.DELETE("/events/:eventId/response", middleware.AuthRequired(), deleteEventResponse)
+
+	body := `{"guest":true,"name":"Mary","userId":""}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/events/"+eventId.Hex()+"/response", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(loginAs(t, r, strangerId.Hex()))
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("non-owner deleting a named response: got %d, want 403 (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+// Same for renaming, which was unauthenticated entirely.
+func TestRenameUser_RequiresOwner(t *testing.T) {
+	requireDB(t)
+	strangerId := insertTestUser(t, models.RoleMember, "rename-stranger@example.test")
+
+	eventId := primitive.NewObjectID()
+	if _, err := db.EventsCollection.InsertOne(context.Background(), models.Event{
+		Id: eventId, Type: models.SPECIFIC_DATES, OwnerId: primitive.NewObjectID(),
+	}); err != nil {
+		t.Fatalf("insert event: %v", err)
+	}
+	t.Cleanup(func() { cleanupEvent(eventId) })
+
+	r := newTestRouter()
+	registerTestLogin(r)
+	r.POST("/events/:eventId/rename-user", middleware.AuthRequired(), renameUser)
+
+	body := `{"oldName":"Mary","newName":"Mary S"}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/events/"+eventId.Hex()+"/rename-user", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(loginAs(t, r, strangerId.Hex()))
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("non-owner renaming: got %d, want 403 (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+// The RSVP is keyed to the session, so a spoofed name in the body is ignored.
+func TestRsvp_IgnoresSpoofedName(t *testing.T) {
+	requireDB(t)
+	callerId := insertTestUser(t, models.RoleMember, "rsvp-caller@example.test")
+
+	eventId := primitive.NewObjectID()
+	start := primitive.NewDateTimeFromTime(time.Now().Add(48 * time.Hour))
+	if _, err := db.EventsCollection.InsertOne(context.Background(), models.Event{
+		Id: eventId, Type: models.SPECIFIC_DATES, OwnerId: primitive.NewObjectID(),
+		ScheduledEvent: &models.CalendarEvent{StartDate: start, EndDate: start},
+	}); err != nil {
+		t.Fatalf("insert event: %v", err)
+	}
+	t.Cleanup(func() { cleanupEvent(eventId) })
+
+	r := newTestRouter()
+	registerTestLogin(r)
+	r.POST("/events/:eventId/rsvp", middleware.AuthRequired(), rsvpToEvent)
+
+	body := `{"status":"going","guest":true,"name":"NotMe","email":"attacker@example.test"}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/events/"+eventId.Hex()+"/rsvp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(loginAs(t, r, callerId.Hex()))
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("rsvp: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+
+	var reloaded models.Event
+	if err := db.EventsCollection.FindOne(context.Background(),
+		bson.M{"_id": eventId}).Decode(&reloaded); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if _, spoofed := reloaded.Rsvps["NotMe"]; spoofed {
+		t.Error("the request-body name was used as the RSVP key — RSVPs must be session-keyed")
+	}
+	rsvp, ok := reloaded.Rsvps[callerId.Hex()]
+	if !ok {
+		t.Fatalf("expected an RSVP keyed to the caller, got keys %v", reloaded.Rsvps)
+	}
+	if rsvp.Email == "attacker@example.test" {
+		t.Error("email came from the request body — it must come from the account")
 	}
 }

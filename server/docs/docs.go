@@ -1226,19 +1226,13 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Chosen option ids + voter identity",
+                        "description": "Chosen option ids",
                         "name": "payload",
                         "in": "body",
                         "required": true,
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "guest": {
-                                    "type": "boolean"
-                                },
-                                "name": {
-                                    "type": "string"
-                                },
                                 "optionIds": {
                                     "type": "array",
                                     "items": {
@@ -1549,21 +1543,15 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "RSVP status + responder identity",
+                        "description": "RSVP status",
                         "name": "payload",
                         "in": "body",
                         "required": true,
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "email": {
-                                    "type": "string"
-                                },
-                                "guest": {
-                                    "type": "boolean"
-                                },
-                                "name": {
-                                    "type": "string"
+                                "guestCount": {
+                                    "type": "integer"
                                 },
                                 "status": {
                                     "type": "string"
@@ -1596,23 +1584,6 @@ const docTemplate = `{
                         "name": "eventId",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "description": "Responder identity",
-                        "name": "payload",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "guest": {
-                                    "type": "boolean"
-                                },
-                                "name": {
-                                    "type": "string"
-                                }
-                            }
-                        }
                     }
                 ],
                 "responses": {

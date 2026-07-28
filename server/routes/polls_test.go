@@ -182,9 +182,10 @@ func TestCreatePoll_OwnerCreatesAndGuestVotes(t *testing.T) {
 		t.Fatalf("expected 2 options, got %d", len(poll.Options))
 	}
 
-	// A signed-in member votes on behalf of a guest by name. The route is gated
-	// now, so the request carries a session; E3 phase 2 removes the by-name
-	// path entirely and keys votes to the session.
+	// E3: the vote is keyed to the session, and the roster name comes from the
+	// account. The old `{"guest":true,"name":"Greg"}` form let any caller vote
+	// as anyone; those fields are ignored now, which this asserts by still
+	// sending a name and expecting it NOT to be used.
 	voterId := insertTestUser(t, models.RoleMember, "poll-voter@example.test")
 	optId := poll.Options[0].Id.Hex()
 	w = httptest.NewRecorder()
@@ -205,8 +206,11 @@ func TestCreatePoll_OwnerCreatesAndGuestVotes(t *testing.T) {
 	if len(reloaded.Polls) != 1 {
 		t.Fatalf("expected 1 poll, got %d", len(reloaded.Polls))
 	}
-	if got := reloaded.Polls[0].Options[0].Votes["Greg"]; got != "Greg" {
-		t.Errorf("expected Greg's vote on option 0, got %q", got)
+	if _, spoofed := reloaded.Polls[0].Options[0].Votes["Greg"]; spoofed {
+		t.Error("the request-body name was used as the vote key — votes must be session-keyed")
+	}
+	if got := reloaded.Polls[0].Options[0].Votes[voterId.Hex()]; got != "Test User" {
+		t.Errorf("vote should be keyed to the voter's id with their account name, got %q", got)
 	}
 }
 

@@ -595,7 +595,6 @@ func getEvent(c *gin.Context) {
 	if userIdInterface != nil {
 		userSesh = userIdInterface.(string)
 	}
-	guestName := c.Query("guestName")
 	isOwner := userSesh != "" && ownerSesh == userSesh
 
 	// Strip sensitive user info from all responses
@@ -686,18 +685,9 @@ func getEvent(c *gin.Context) {
 			}
 			privatizedResponse, err = utils.PrivatizeEventResponse(event, privateFields, partialOmissions)
 		}
-	} else if guestName != "" {
-		// Guest name query parameter exists
-		privateFields := []string{"numResponses"}
-		partialOmissions := []utils.PartialOmission{
-			{
-				FieldName: "responses",
-				KeepKey:   guestName,
-			},
-		}
-		privatizedResponse, err = utils.PrivatizeEventResponse(event, privateFields, partialOmissions)
 	} else {
-		// No session, no guest name - remove all private fields
+		// Unreachable in practice — the route is behind AuthRequired — but keep
+		// the safe default: no session, nothing private.
 		privateFields := []string{"numResponses", "responses", "remindees"}
 		privatizedResponse, err = utils.PrivatizeEventResponse(event, privateFields, []utils.PartialOmission{})
 	}

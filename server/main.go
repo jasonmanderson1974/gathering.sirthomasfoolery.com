@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -23,7 +22,6 @@ import (
 	"sirtom/server/logger"
 	"sirtom/server/routes"
 	"sirtom/server/services/reminders"
-	"sirtom/server/utils"
 
 	swaggerfiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -217,30 +215,13 @@ func validateSessionSecret() {
 
 func noRouteHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// E3: no per-route meta tags. This used to look the event up by id and
+		// put its NAME in the title and og:title — served to anyone, with no
+		// session, which leaked gathering names to crawlers and to anyone who
+		// guessed a short id. Behind a login, per-event OG previews are useless
+		// anyway (nobody unauthenticated can open the link), so the shell just
+		// serves its static default title.
 		params := gin.H{}
-		path := c.Request.URL.Path
-
-		// Determine meta tags based off URL
-		if match := regexp.MustCompile(`\/e\/(\w+)`).FindStringSubmatchIndex(path); match != nil {
-			// /e/:eventId
-			eventId := path[match[2]:match[3]]
-			event, _ := db.GetEventByEitherId(eventId)
-
-			// params["enableStickyFooter"] = true
-
-			if event != nil {
-				title := fmt.Sprintf("%s · The Fellowship", event.Name)
-				params["title"] = title
-				params["ogTitle"] = title
-
-				if len(utils.Coalesce(event.When2meetHref)) > 0 {
-					params["ogImage"] = "/img/when2meetOgImage2.png"
-				}
-			}
-		} else if regexp.MustCompile(`\/g\/`).MatchString(path) {
-			// /g/ routes
-			// params["enableStickyFooter"] = true
-		}
 
 		// The app shell must never be served stale. A browser holding a cached
 		// index.html keeps referencing the previous build's hashed JS/CSS chunks,

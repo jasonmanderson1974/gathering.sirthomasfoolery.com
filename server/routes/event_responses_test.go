@@ -142,7 +142,7 @@ func threeResponseMap() map[string]*models.Response {
 
 func TestFilterBlind_Disabled_ReturnsAll(t *testing.T) {
 	event := &models.Event{OwnerId: primitive.NewObjectID()} // BlindAvailabilityEnabled nil => off
-	got := filterResponsesForBlindAvailability(event, threeResponseMap(), "alice", "")
+	got := filterResponsesForBlindAvailability(event, threeResponseMap(), "alice")
 	if len(got) != 3 {
 		t.Fatalf("blind off: got %d responses, want 3 (all visible)", len(got))
 	}
@@ -151,7 +151,7 @@ func TestFilterBlind_Disabled_ReturnsAll(t *testing.T) {
 func TestFilterBlind_Enabled_OwnerSeesAll(t *testing.T) {
 	ownerId := primitive.NewObjectID()
 	event := &models.Event{OwnerId: ownerId, BlindAvailabilityEnabled: boolPtrTest(true)}
-	got := filterResponsesForBlindAvailability(event, threeResponseMap(), ownerId.Hex(), "")
+	got := filterResponsesForBlindAvailability(event, threeResponseMap(), ownerId.Hex())
 	if len(got) != 3 {
 		t.Fatalf("blind on, owner: got %d, want 3 (owner sees all)", len(got))
 	}
@@ -159,7 +159,7 @@ func TestFilterBlind_Enabled_OwnerSeesAll(t *testing.T) {
 
 func TestFilterBlind_Enabled_NonOwnerSeesOnlyOwn(t *testing.T) {
 	event := &models.Event{OwnerId: primitive.NewObjectID(), BlindAvailabilityEnabled: boolPtrTest(true)}
-	got := filterResponsesForBlindAvailability(event, threeResponseMap(), "alice", "")
+	got := filterResponsesForBlindAvailability(event, threeResponseMap(), "alice")
 	if len(got) != 1 {
 		t.Fatalf("blind on, non-owner: got %d, want 1", len(got))
 	}
@@ -170,26 +170,17 @@ func TestFilterBlind_Enabled_NonOwnerSeesOnlyOwn(t *testing.T) {
 
 func TestFilterBlind_Enabled_NonOwnerWithoutResponseSeesNothing(t *testing.T) {
 	event := &models.Event{OwnerId: primitive.NewObjectID(), BlindAvailabilityEnabled: boolPtrTest(true)}
-	got := filterResponsesForBlindAvailability(event, threeResponseMap(), "carol", "")
+	got := filterResponsesForBlindAvailability(event, threeResponseMap(), "carol")
 	if len(got) != 0 {
 		t.Fatalf("blind on, non-owner w/o a response: got %d, want 0", len(got))
 	}
 }
 
-func TestFilterBlind_Enabled_GuestSeesOnlyOwn(t *testing.T) {
-	event := &models.Event{OwnerId: primitive.NewObjectID(), BlindAvailabilityEnabled: boolPtrTest(true)}
-	got := filterResponsesForBlindAvailability(event, threeResponseMap(), "", "bob")
-	if len(got) != 1 {
-		t.Fatalf("blind on, guest: got %d, want 1", len(got))
-	}
-	if _, ok := got["bob"]; !ok {
-		t.Fatal("guest must see only their own named response")
-	}
-}
-
+// No session means nothing visible. Unreachable through the API now (the route
+// is gated) but it is the function's safe default, so pin it.
 func TestFilterBlind_Enabled_AnonymousSeesNothing(t *testing.T) {
 	event := &models.Event{OwnerId: primitive.NewObjectID(), BlindAvailabilityEnabled: boolPtrTest(true)}
-	got := filterResponsesForBlindAvailability(event, threeResponseMap(), "", "")
+	got := filterResponsesForBlindAvailability(event, threeResponseMap(), "")
 	if len(got) != 0 {
 		t.Fatalf("blind on, anonymous: got %d, want 0 (sees nothing)", len(got))
 	}

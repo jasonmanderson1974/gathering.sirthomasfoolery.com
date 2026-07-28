@@ -1397,16 +1397,12 @@ paths:
         name: pollId
         required: true
         type: string
-      - description: Chosen option ids + voter identity
+      - description: Chosen option ids
         in: body
         name: payload
         required: true
         schema:
           properties:
-            guest:
-              type: boolean
-            name:
-              type: string
             optionIds:
               items:
                 type: string
@@ -1608,17 +1604,6 @@ paths:
         name: eventId
         required: true
         type: string
-      - description: Responder identity
-        in: body
-        name: payload
-        required: true
-        schema:
-          properties:
-            guest:
-              type: boolean
-            name:
-              type: string
-          type: object
       produces:
       - application/json
       responses:
@@ -1639,18 +1624,14 @@ paths:
         name: eventId
         required: true
         type: string
-      - description: RSVP status + responder identity
+      - description: RSVP status
         in: body
         name: payload
         required: true
         schema:
           properties:
-            email:
-              type: string
-            guest:
-              type: boolean
-            name:
-              type: string
+            guestCount:
+              type: integer
             status:
               type: string
           type: object

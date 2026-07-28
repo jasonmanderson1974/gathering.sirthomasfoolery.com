@@ -52,6 +52,10 @@ func InitAuth(router *gin.RouterGroup) {
 // @Accept json
 // @Produce json
 // @Param payload body object{code=string,scope=string,calendarType=string,timezoneOffset=int} true "Object containing the Google authorization code, scope, calendar type, and the user's timezone offset"
+// E3 removed the eventsToLink claim: it existed so a visitor who created an
+// event anonymously could take ownership on sign-in. Anonymous creation is
+// gone, so every event has an owner from the start — and the claim was an
+// unauthenticated write to any ownerless event.
 // @Success 200
 // @Router /auth/sign-in [post]
 func signIn(c *gin.Context) {
@@ -60,7 +64,6 @@ func signIn(c *gin.Context) {
 		Scope          string              `json:"scope" binding:"required"`
 		CalendarType   models.CalendarType `json:"calendarType" binding:"required"`
 		TimezoneOffset *int                `json:"timezoneOffset" binding:"required"`
-		EventsToLink   []string            `json:"eventsToLink"`
 	}{}
 	if err := c.BindJSON(&payload); err != nil {
 		return
@@ -80,14 +83,6 @@ func signIn(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, responses.Error{Error: errs.InvalidIdToken})
 		return
-	}
-
-	// Link events to user
-	for _, eventIdString := range payload.EventsToLink {
-		eventId, err := primitive.ObjectIDFromHex(eventIdString)
-		if err == nil {
-			db.EventsCollection.UpdateOne(context.Background(), bson.M{"_id": eventId, "ownerId": nil}, bson.M{"$set": bson.M{"ownerId": user.Id}})
-		}
 	}
 
 	c.JSON(http.StatusOK, user)

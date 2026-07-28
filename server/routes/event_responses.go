@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -94,7 +95,6 @@ func getResponses(c *gin.Context) {
 	if userIdInterface != nil {
 		userSesh = userIdInterface.(string)
 	}
-	guestName := c.Query("guestName")
 	isOwner := userSesh != "" && ownerSesh == userSesh
 
 	// Strip sensitive user info from all responses
@@ -111,39 +111,35 @@ func getResponses(c *gin.Context) {
 	}
 
 	// Apply blind-availability privacy filtering, then return.
-	c.JSON(http.StatusOK, filterResponsesForBlindAvailability(event, responsesMap, userSesh, guestName))
+	c.JSON(http.StatusOK, filterResponsesForBlindAvailability(event, responsesMap, userSesh))
 }
 
 // filterResponsesForBlindAvailability applies the blind-availability privacy
 // rule and returns the response map that should be sent to the requester. When
-// blind availability is off, everyone sees every response. When it's on: the
-// owner sees all; a logged-in non-owner sees only their own response; a guest
-// (identified by guestName) sees only theirs; an anonymous viewer sees nothing.
-func filterResponsesForBlindAvailability(event *models.Event, responsesMap map[string]*models.Response, userSesh string, guestName string) map[string]*models.Response {
+// blind availability is off, everyone sees every response. When it's on, the
+// owner sees all and everyone else sees only their own response.
+//
+// E3 removed the `?guestName=` branch: it let anyone read a named respondent's
+// availability just by claiming their name, which was the acknowledged
+// incognito bypass of blind availability. Callers are always signed in now, so
+// the session is the only identity.
+func filterResponsesForBlindAvailability(event *models.Event, responsesMap map[string]*models.Response, userSesh string) map[string]*models.Response {
 	if !utils.Coalesce(event.BlindAvailabilityEnabled) {
 		return responsesMap
 	}
 
-	if userSesh != "" {
-		if event.OwnerId.Hex() == userSesh {
-			return responsesMap
-		}
-		filteredMap := make(map[string]*models.Response)
-		if userResponse, exists := responsesMap[userSesh]; exists {
-			filteredMap[userSesh] = userResponse
-		}
-		return filteredMap
+	if userSesh == "" {
+		return make(map[string]*models.Response)
+	}
+	if event.OwnerId.Hex() == userSesh {
+		return responsesMap
 	}
 
-	if guestName != "" {
-		filteredMap := make(map[string]*models.Response)
-		if guestResponse, exists := responsesMap[guestName]; exists {
-			filteredMap[guestName] = guestResponse
-		}
-		return filteredMap
+	filteredMap := make(map[string]*models.Response)
+	if userResponse, exists := responsesMap[userSesh]; exists {
+		filteredMap[userSesh] = userResponse
 	}
-
-	return make(map[string]*models.Response)
+	return filteredMap
 }
 
 // @Summary Updates the current user's availability
@@ -178,6 +174,14 @@ func updateEventResponse(c *gin.Context) {
 		return
 	}
 	payload.Name = sanitizeResponderName(payload.Name)
+	// On-behalf entry (a member filling in availability for a spouse without an
+	// account) stays; only ANONYMOUS use is gone. But responses are keyed by
+	// user-id for members and by display name for guests in the same map, so an
+	// ObjectID-shaped name would overwrite a member's response.
+	if payload.Guest != nil && *payload.Guest && !validOnBehalfName(payload.Name) {
+		c.JSON(http.StatusBadRequest, responses.Error{Error: "invalid-guest-name"})
+		return
+	}
 
 	session := sessions.Default(c)
 	eventId := c.Param("eventId")
@@ -441,6 +445,12 @@ func deleteEventResponse(c *gin.Context) {
 	}
 
 	if *payload.Guest {
+		// Deleting a by-name response is acting on someone else's data, so it
+		// is an owner action. This branch previously had NO authorization: any
+		// caller could delete the first response matching a supplied name.
+		if !requireResponseManager(c, event) {
+			return
+		}
 		if utils.Coalesce(event.IsSignUpForm) {
 			delete(event.SignUpResponses, payload.Name)
 		} else {
@@ -531,6 +541,18 @@ func renameUser(c *gin.Context) {
 	}
 	if event == nil {
 		c.JSON(http.StatusNotFound, responses.Error{Error: errs.EventNotFound})
+		return
+	}
+
+	// Renaming someone else's response is an owner action; this was previously
+	// unauthenticated entirely.
+	if !requireResponseManager(c, event) {
+		return
+	}
+
+	payload.NewName = sanitizeResponderName(payload.NewName)
+	if !validOnBehalfName(payload.NewName) {
+		c.JSON(http.StatusBadRequest, responses.Error{Error: "invalid-guest-name"})
 		return
 	}
 
@@ -726,6 +748,35 @@ func clampGuestCount(status models.RsvpStatus, count int) int {
 	return count
 }
 
+// objectIDShaped matches a 24-character hex string — the wire form of a Mongo
+// ObjectID, and therefore of a member's response key.
+var objectIDShaped = regexp.MustCompile(`^[0-9a-fA-F]{24}$`)
+
+// validOnBehalfName reports whether name is usable as an on-behalf (guest)
+// response key. Responses are keyed by user-id for members and by display name
+// for guests in the SAME map, so a guest name that looks like an ObjectID can
+// collide with — and overwrite — a member's response. Rejecting the shape
+// closes that, and is why on-behalf entry can stay open to signed-in users.
+func validOnBehalfName(name string) bool {
+	return name != "" && !objectIDShaped.MatchString(name)
+}
+
+// requireResponseManager reports whether the caller may act on someone else's
+// response (delete it, rename it). Event owner or admin+ only — this branch
+// previously had no authorization at all, so any caller could delete the first
+// matching response by name.
+func requireResponseManager(c *gin.Context, event *models.Event) bool {
+	user, ok := authUser(c)
+	if !ok {
+		return false
+	}
+	if user.Id == event.OwnerId || user.EffectiveRole().CanManageUsers() {
+		return true
+	}
+	c.JSON(http.StatusForbidden, responses.Error{Error: errs.UserNotEventOwner})
+	return false
+}
+
 // maxResponderNameLength bounds a guest / on-behalf display name. These names
 // become map keys on the event document (responses, RSVPs, poll votes), so an
 // uncapped one inflates the document on every write path a guest can reach.
@@ -742,28 +793,18 @@ func sanitizeResponderName(name string) string {
 	return name
 }
 
-// responderKey resolves the identity key + (for signed-in users) the user id
-// for a guest-or-member action (RSVP, comment), mirroring how updateEventResponse
-// keys guests vs signed-in users. Returns ok=false and writes the response when a
-// guest omits a name or a signed-in caller has no session.
-func responderKey(c *gin.Context, isGuest bool, name string) (key string, userId primitive.ObjectID, ok bool) {
-	if isGuest {
-		name = sanitizeResponderName(name)
-		if name == "" {
-			c.JSON(http.StatusBadRequest, responses.Error{Error: "name-required"})
-			return "", primitive.NilObjectID, false
-		}
-		return name, primitive.NilObjectID, true
-	}
-
-	session := sessions.Default(c)
-	userIdInterface := session.Get("userId")
-	if userIdInterface == nil {
-		c.JSON(http.StatusUnauthorized, responses.Error{Error: errs.NotSignedIn})
+// responderKey resolves the caller's identity key for an RSVP or a poll vote.
+//
+// E3: keyed to the session, always. The old branch that took a caller-supplied
+// name meant anyone could RSVP or vote AS anyone — the name WAS the identity
+// claim, with nothing to back it. Legacy name-keyed entries still render; they
+// simply can't be created or impersonated any more.
+func responderKey(c *gin.Context) (key string, userId primitive.ObjectID, ok bool) {
+	user, uok := authUser(c)
+	if !uok {
 		return "", primitive.NilObjectID, false
 	}
-	id := userIdInterface.(string)
-	return id, utils.StringToObjectID(id), true
+	return user.Id.Hex(), user.Id, true
 }
 
 // @Summary RSVP to a confirmed gathering (going / maybe / no)
@@ -772,15 +813,14 @@ func responderKey(c *gin.Context, isGuest bool, name string) (key string, userId
 // @Accept json
 // @Produce json
 // @Param eventId path string true "Event ID"
-// @Param payload body object{status=string,guest=bool,name=string,email=string} true "RSVP status + responder identity"
+// @Param payload body object{status=string,guestCount=int} true "RSVP status"
 // @Success 200
 // @Router /events/{eventId}/rsvp [post]
 func rsvpToEvent(c *gin.Context) {
+	// E3: the RSVP is keyed to the session. `guest`/`name` are gone — they let
+	// any caller RSVP as anyone.
 	payload := struct {
 		Status     models.RsvpStatus `json:"status" binding:"required"`
-		Guest      *bool             `json:"guest" binding:"required"`
-		Name       string            `json:"name"`
-		Email      string            `json:"email"`
 		GuestCount int               `json:"guestCount"`
 	}{}
 	if err := c.Bind(&payload); err != nil {
@@ -807,7 +847,7 @@ func rsvpToEvent(c *gin.Context) {
 		return
 	}
 
-	key, userId, ok := responderKey(c, *payload.Guest, payload.Name)
+	key, userId, ok := responderKey(c)
 	if !ok {
 		return
 	}
@@ -815,20 +855,13 @@ func rsvpToEvent(c *gin.Context) {
 	rsvp := models.Rsvp{
 		Status:      payload.Status,
 		GuestCount:  clampGuestCount(payload.Status, payload.GuestCount),
-		Email:       payload.Email,
+		UserId:      userId,
 		RespondedAt: primitive.NewDateTimeFromTime(time.Now()),
 	}
-	if *payload.Guest {
-		rsvp.Name = payload.Name
-	} else {
-		rsvp.UserId = userId
-		// Backfill identity from the account so the roster + reminder have it.
-		if user, err := db.GetUserById(key); err == nil && user != nil {
-			if rsvp.Email == "" {
-				rsvp.Email = user.Email
-			}
-			rsvp.Name = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
-		}
+	// Identity comes from the account, never from the request body.
+	if user, err := db.GetUserById(key); err == nil && user != nil {
+		rsvp.Email = user.Email
+		rsvp.Name = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
 	}
 
 	if event.Rsvps == nil {
@@ -850,15 +883,12 @@ func rsvpToEvent(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param eventId path string true "Event ID"
-// @Param payload body object{guest=bool,name=string} true "Responder identity"
 // @Success 200
 // @Router /events/{eventId}/rsvp [delete]
 func deleteRsvp(c *gin.Context) {
-	payload := struct {
-		Guest *bool  `json:"guest" binding:"required"`
-		Name  string `json:"name"`
-	}{}
-	if err := c.Bind(&payload); err != nil {
+	// E3: no payload — you may only clear your OWN RSVP, keyed by session.
+	payload := struct{}{}
+	if err := c.ShouldBindJSON(&payload); err != nil && err.Error() != "EOF" {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
 		return
 	}
@@ -873,7 +903,7 @@ func deleteRsvp(c *gin.Context) {
 		return
 	}
 
-	key, _, ok := responderKey(c, *payload.Guest, payload.Name)
+	key, _, ok := responderKey(c)
 	if !ok {
 		return
 	}
