@@ -1061,6 +1061,7 @@ import {
   upgradeDialogTypes,
 } from "@/constants"
 import { setScheduledEvent } from "@/utils/services/EventService"
+import { nextScheduleLocation } from "./scheduleLocation"
 import { mapMutations, mapActions, mapState, mapGetters } from "vuex"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
 import CalendarAccounts from "@/components/settings/CalendarAccounts.vue"
@@ -1219,7 +1220,8 @@ export default {
       reminderLeadTimeHours: 24,
       // Recurrence (C5): "none" | "weekly" | "biweekly" | "monthly"
       recurrenceFrequency: "none",
-      // Venue, editable while confirming the time (seeded from the event)
+      // Venue, editable while confirming the time (seeded from the event, and
+      // re-seeded by the event watcher when it changes elsewhere)
       scheduleLocation: this.event.location ?? "",
       timeType:
         localStorage["timeType"] ??
@@ -2753,8 +2755,17 @@ export default {
     },
     event: {
       immediate: true,
-      handler() {
+      handler(newEvent, oldEvent) {
         this.fetchResponses()
+
+        // The venue can also be set from the event page's inline editor, which
+        // patches the event in place. Follow it, or confirming a time would
+        // send the value seeded when this component was created and wipe it.
+        this.scheduleLocation = nextScheduleLocation(
+          newEvent?.location,
+          oldEvent?.location,
+          this.scheduleLocation
+        )
       },
     },
     state(nextState, prevState) {
