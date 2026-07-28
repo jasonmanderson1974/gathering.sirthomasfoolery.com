@@ -7,7 +7,9 @@
     "build": "vue-cli-service build",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
-    "lint": "eslint . --ext .js,.vue"
+    "lint": "eslint . --ext .js,.vue",
+    "check:signed-out": "node scripts/check-signed-out.js",
+    "check:signed-in": "node scripts/check-signed-in.js"
   },
   "dependencies": {
     "bson-objectid": "^2.0.4",
@@ -41,6 +43,7 @@
     "vitest": "^3.2.4",
     "vue-cli-plugin-vuetify": "~2.4.8",
     "vue-template-compiler": "^2.7.16",
-    "vuetify-loader": "^1.9.2"
+    "vuetify-loader": "^1.9.2",
+    "ws": "^8.21.1"
   }
 }

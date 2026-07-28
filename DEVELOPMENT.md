@@ -130,6 +130,82 @@ role getters + phone formatter. **Not yet covered:** most HTTP handlers'
 happy-path, email-change/OTP flows, middleware. `go test` passing means "compiles
 + these pass" — not full correctness.
 
+### Browser checks (manual, before deploying auth/UI changes)
+
+Two headless-Chrome checks live in `frontend/scripts/`. They are **not** in CI —
+they need a built frontend, a running server and Mongo — so run them by hand
+when a change warrants it. Both exit non-zero on failure.
+
+**Run the signed-out check after ANY change to** the router guard
+(`router/index.js`), `fetch_utils`' error path, or auth-dependent rendering:
+
+```bash
+npm run check:signed-out                       # defaults to http://localhost:3002
+npm run check:signed-out -- http://localhost:8080
+```
+
+It launches Chrome with a **throwaway profile** so every run is cookie-less, and
+asserts for each route both *where you land* and *that the destination actually
+rendered*.
+
+> **Why it exists.** E3 phase 3 shipped a redirect loop that made the site
+> unreachable for anyone without a session — `/` and `/sign-in` ping-ponged and
+> neither rendered, so nobody could log in at all. It only reproduces on a **cold
+> load with no session cookie**, which a browser you are already signed into
+> never reaches; the whole suite was green and the bug shipped anyway. The check
+> was validated by reverting the fix and confirming all five routes fail.
+>
+> Note the render assertion is the load-bearing one, not the navigation count:
+> the original loop produced *cancelled* navigations, which emit no
+> `frameNavigated`, and every route still had ~31 elements of `App.vue` chrome —
+> so "did anything render" reported the broken pages as fine.
+
+**The signed-in check** covers the event page as a real member. Local sign-in
+needs SMTP (OTP) or Google OAuth, neither wired in dev, so mint a session cookie
+directly with `server/tools/mintsession`. It grants nothing `SESSION_SECRET`
+does not already grant — guard the secret, not the tool — and lives inside the
+server module so its codec cannot drift from the server's.
+
+```bash
+# 1. seed a member + an event with a confirmed gathering
+mongosh "mongodb://localhost:27017/schej-it" --eval '
+  const uid = new ObjectId();
+  db.users.insertOne({_id:uid, email:"harness@example.test",
+    firstName:"Harness", lastName:"Check", role:"member"});
+  db.allowlist.insertOne({email:"harness@example.test", addedBy:"tester",
+    role:"member", addedAt:new Date()});
+  const eid = new ObjectId();
+  db.events.insertOne({_id:eid, name:"Harness Event", type:"specific_dates",
+    ownerId:uid, duration:2, dates:[new Date("2026-08-01T18:00:00Z")],
+    numResponses:0, scheduledEvent:{startDate:new Date("2026-08-01T18:00:00Z"),
+    endDate:new Date("2026-08-01T20:00:00Z")}});
+  print(uid.toString() + " " + eid.toString());'
+
+# 2. mint a cookie (SESSION_SECRET must match the running server)
+cd server && COOKIE=$(SESSION_SECRET=... go run ./tools/mintsession <userId>)
+
+# 3. run it
+cd ../frontend && npm run check:signed-in -- http://localhost:3002 "$COOKIE" <eventId>
+```
+
+The allowlist row matters: `AuthRequired` enforces the roll on **every** request,
+so a user who exists but is not on it gets 401 and the check reports the session
+as rejected.
+
+> **Why it exists.** E3 phase 4 deleted anonymous branches from components whose
+> surviving arms only ever ran for signed-in users — a change shape that builds
+> and lints clean while breaking at runtime (see TODO A11). It caught one:
+> removing the fields from `SignUpForSlotDialog` left a `v-form` whose
+> lazy-validation `formValid` never became true, permanently disabling the
+> "Join slot" button.
+
+Both use a small CDP driver (`scripts/browser-check-lib.js`) over `ws` rather
+than Puppeteer — these run occasionally before a deploy, and a ~100MB browser
+download in devDependencies is a poor trade when Chrome is already installed.
+Set `CHROME_PATH` if yours is not on `PATH`.
+
+Remember to delete the seeded documents afterwards.
+
 ## CI (GitHub Actions)
 
 - **`backend-ci.yml`** — on `server/**` changes: `go build .` + `go test` for
