@@ -5,6 +5,10 @@
 > That means: **reliability, maintainability, and small-club utility** matter far more
 > than horizontal scale, multi-tenant concerns, or growth/monetization features.
 > Companion docs: `REDESIGN_PLAN.md`, `ACCESS_CONTROL_PLAN.md`.
+>
+> **2026-07-27: second full review** added items **A16–A23**, **B4–B5**, **E3–E10** — headlined by
+> **E3** (require sign-in for ALL event access; remove the anonymous guest flow), which reverses the
+> "guest responses left open" decision and subsumes a batch of IDOR findings.
 
 Priority legend: **P0** = do first (correctness / risk / cheap-and-high-value) ·
 **P1** = high value · **P2** = moderate · **P3** = nice-to-have.
@@ -293,6 +297,80 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   don't compile / are excluded from CI. Used a single README listing the folders in date order rather
   than fabricating per-folder run-date/status (each `main.go` is its own record).
 
+### 2026-07-27 review additions
+
+- [ ] **A16 · Lost-update race: whole-document `$set` on event writes.** `M` · **P1**
+  `updateEventResponse` writes back the **entire in-memory event** it loaded at the top of the
+  handler (`event_responses.go:391-395` — `UpdateByID(..., bson.M{"$set": event})`). Two concurrent
+  responders (realistic: a reminder email goes out and everyone clicks at once) both load, both
+  `$set` the whole doc, and the second silently clobbers the first's response. It also makes the
+  `SendEmailAfterXResponses` de-dup guard racy (`:361` sets `-1` in memory, persisted only by that
+  same racy write) — the "everyone responded" email can fire twice. Fix: scope `$set` to the fields
+  actually changed (the pattern `polls.go:173` already uses). Related: `stripe.go:264` (moot if E4
+  deletes it). This is the concrete case behind A3's "unchecked-write sweep" follow-up.
+
+- [ ] **A17 · Rune-safe text truncation.** `S` · **P2**
+  `comments.go:45` and `polls.go:36,47` truncate with byte slicing (`trimmed[:maxLen]`); a cut
+  landing mid-rune (emoji, accents — likely in club comments) stores an invalid UTF-8 tail that
+  renders as a replacement char. Use `utf8.RuneCountInString` + rune-aware truncation.
+
+- [ ] **A18 · Dead-code deletion batch (frontend + backend).** `S` · **P2**
+  - `views/Friends.vue` (+ `FriendItem.vue`, its only consumer) — no route, no importer;
+    `UserItem.vue` — zero references.
+  - `SignInDialog.vue` — mounted globally (`App.vue:6-10`) but unreachable: `App.vue:299`
+    (`this.signInDialog = true`) is commented out, `signIn()` always routes to `/sign-in`. It also
+    **skips the `res.invited` check** (`SignInDialog.vue:206-208`, unlike `SignIn.vue:290-293`) — a
+    live footgun if ever revived. Delete it + the orphaned `App.vue:_signIn` (:304-325).
+  - `store/index.js:125-128` `refreshAuthUser` action — never dispatched.
+  - `App.vue:283-285` scroll tracking (`handleScroll`/`scrollY`) — written, never read.
+  - `Event.vue`: empty `beforeMount()` (:318), identical if/else branches in `resetWeekOffset`
+    (:904-909), large commented blocks (:752-754, :802-818).
+  - Server: the dead Mailchimp/Mailjet path in `utils/mail_utils.go` (8 consecutive `, _ :=` sites
+    at :61-165 — the fork moved to Gmail SMTP); `discord_bot/` (`Init()` is never called from
+    `main.go` — zero references outside the package; coordinate with E7 if deleting the slackbot too).
+
+- [ ] **A19 · Drop 8 unused npm dependencies.** `S` · **P2**
+  Zero references in `frontend/src`: `vue-github-button`, `vue-vimeo-player`, `html2canvas`,
+  `vue-html2canvas`, `copy-image-clipboard`, `canvas-confetti`, `@rive-app/canvas`, `ua-parser-js`.
+  Upstream-fork bloat inflating install + bundle-analysis time. Verify `vue-worker` and
+  `vuedraggable` (exactly 1 usage each) before touching those. Regenerate the lockfile with
+  `npx npm@10` (CI parity — local npm 11 diverges).
+
+- [ ] **A20 · Router guard does a network round-trip on every navigation; `/user/profile` fetched
+  from 5 places.** `S` · **P2**
+  `router/index.js:96` awaits `get("/auth/status")` on **every** route change, duplicating
+  `store.state.authUser`; and `/user/profile` is independently fetched by `App.vue:346-362`,
+  `Home.vue:96-103`, `Event.vue:994-1000`, `currentAvailabilityMixin.js:32-33` (plus the unused
+  store action). Consolidate on the store: guard checks `authUser`, falls back to one fetch.
+  **Coordinate with E3 phase 3** — same file/guard gets the public-routes inversion.
+
+- [ ] **A21 · Calendar-service error-handling leftovers.** `S` · **P3**
+  `services/calendar/google_calendar.go:22,79` — `req, _ := http.NewRequest` (the same latent
+  nil-deref A2 batch 4 fixed in `services.go CallApi`). `google_calendar.go:136-137`,
+  `apple_calendar.go:107-108`, `ics_calendar.go:69-70` — `time.Parse` errors discarded, so an
+  unparseable all-day date silently becomes year-0001 and renders as a bogus availability block
+  instead of being skipped.
+
+- [ ] **A22 · Small cleanup batch.** `S` · **P3**
+  - Byte-identical toggle→PATCH `/user/calendar-options`→emit logic in
+    `WorkingHoursToggle.vue:75-85`, `BufferTimeSwitch.vue:65-79`, `CalendarAccount.vue:200,224` —
+    extract one mixin.
+  - PostHog is a no-op `Proxy` stub (`plugins/posthog.js`) yet `$posthog.capture` call sites remain
+    scattered — remove both.
+  - `getEvent` dead debug scaffolding (`events.go:568-573`): marshals the whole privatized response
+    to indented JSON on every call, assigns it to `_`. Hot read path; delete.
+  - `errs/errors.go:10` TODO — error codes are bare strings; make them a type.
+  - `Event.vue:981` / `SignUp.vue:57` — EventNotFound bounces to `home`, which re-bounces
+    non-members; go direct to the right destination (mostly moot after E3, still a double redirect).
+  - `ScheduleOverlap.vue:2334` TODO — half-hour timezones (India/Nepal/Newfoundland) unhandled.
+
+- [ ] **A23 · Split the two remaining giants (continuation of A5/A11).** `L` · **P3**
+  `ScheduleOverlap.vue` 2,986 lines (the `computed` block alone is ~1,000 — :1275-2282);
+  `date_utils.js` 1,119 lines / 46 exports (split formatting / arithmetic / timezone);
+  `Event.vue` 1,036; `NewEvent.vue` 975 vs `NewSignUp.vue` 845 — likely heavy overlap, **diff them
+  first**. Continue the extract-pure-module pattern (and heed A11's caveat: verify splits with the
+  app running, not blind).
+
 ---
 
 ## PART B — Test Coverage (its own track — currently thin)
@@ -338,6 +416,21 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   adjustment. Frontend suite 23 → 32 tests. **Remaining frontend test gap:** the availability
   fetch/format/animate logic (now in `availabilityMixin`/`currentAvailabilityMixin`) is still
   `this`-dependent and would need the same extract-pure-core treatment to be unit-testable.
+
+- [ ] **B4 · Three existing Go test files never run in CI.** `S` · **P0** (zero-cost win)
+  `.github/workflows/backend-ci.yml` tests `./models/ ./routes/ ./utils/ ./db/
+  ./services/reminders/` — omitting `./services/calendar/`, `./services/contacts/`,
+  `./services/microsoftgraph/`, which all **contain tests** (`ics_generate_test.go`,
+  `contacts_test.go`, `microsoftgraph_test.go`). The workflow comment says those services "need
+  external credentials" — true of the packages, not these tests (`ics_generate_test.go` is pure
+  logic covering the C3 ICS generator). Add the three paths to the CI test command (and to the
+  DEVELOPMENT.md local-test command).
+
+- [ ] **B5 · Work down the golangci-lint errcheck backlog; flip lint to blocking.** `M` · **P2**
+  The backend lint step is still `continue-on-error: true` over the **112-issue backlog A8
+  surfaced (98 errcheck)** — exactly the defect class behind E5 (discarded `session.Save`) and A21.
+  Burn it down incrementally (per-package), then make the step blocking like `go vet` and the
+  frontend `Lint` already are. Highest-leverage process change available.
 
 ---
 
@@ -683,6 +776,9 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 4. **A5 (split ScheduleOverlap.vue) → B3** — the biggest frontend win; tackle in slices.
 5. **Feature track in parallel:** C2 → C3 → C1 (reminder infra → universal calendar → RSVP) are the
    highest-leverage, lowest-new-infrastructure wins for an active club.
+6. **2026-07-27 wave:** **B4** (free) → **E3** (the product change, phased — see its embedded plan)
+   → **E5/E6** (small P1 security) → **E4** (Stripe deletion) → **A16** → the P2/P3 batches
+   (A17–A23, E7–E10, B5).
 
 ---
 
@@ -757,8 +853,10 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 
 ## PART E — Security & Access-Control follow-ups
 
-> Companion doc: `ACCESS_CONTROL_PLAN.md`. These came out of the 2026-07-23 live RSVP
+> Companion doc: `ACCESS_CONTROL_PLAN.md`. E1–E2 came out of the 2026-07-23 live RSVP
 > verification (see [C1]); none is a regression in the RSVP feature itself.
+> **E3–E10 come from the 2026-07-27 full review.** E3 is the product change of record and
+> supersedes E1's "RSVPs stay guest-open" carve-out.
 
 - [x] **E1 · Gate `createEvent` / `scheduleEvent` behind auth on enforced invite-only instances.**
   `S–M` · **P2 · DONE 2026-07-23 (decision: gate via the existing `INVITE_ONLY_ENFORCED` flag).**
@@ -822,3 +920,184 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   API scripting. (Surfaced when API-cleaning up an RSVP test event by short id fell back to a direct
   Mongo delete.)
   </details>
+
+- [ ] **E3 · Require sign-in (minimum role `guest`) for ALL event access; remove the anonymous
+  guest flow.** `L` · **P0 — the 2026-07-27 product change of record.**
+  **Decisions (user, 2026-07-27):** anonymous visitors see **only the landing page** (+ sign-in /
+  auth / privacy). This **reverses** `ACCESS_CONTROL_PLAN.md` §1 ("Guest (no-login) event responses:
+  LEFT OPEN") and E1's "RSVPs stay guest-open" carve-out. Confirmed choices:
+  - **On-behalf guest entry KEPT, behind sign-in** — a signed-in user can still enter availability
+    under a plain name (e.g. a spouse without an account) via RespondentsList's "Add guest
+    availability". Only *anonymous* use is removed; name-spoofing holes get closed.
+  - **ICS feed stays open** (`GET /api/events/:id/ics`) — calendar apps fetch without cookies; it
+    only exposes the scheduled name/time/venue, and obtaining the URL now requires sign-in. Mark it
+    in code as the one deliberate exception. (Signed-token URLs = optional future hardening.)
+  - **Legacy name-keyed guest data KEPT, rendered read-only** — existing responses / `Rsvps` /
+    poll `Votes` whose key is a display name (not a 24-hex ObjectID) still display (precedent:
+    `Comment.IsGuest`); no migration. They age out as events archive.
+  - **Stripe is NOT part of this item** — logged separately as E4.
+
+  **Subsumes / closes these review findings** (fixed by the phases below): guest-name-as-ObjectID
+  overwrites a member's response (`event_responses.go:223,253`); anonymous delete-any-response
+  (guest branch `:441-455` has zero auth — `{"guest":true,"name":""}` deletes the first member row);
+  RSVP/vote spoofing via `responderKey` (`:724-741` → `events.go:811`, `polls.go:92`);
+  unauthenticated `rename-user` (`:515-547`) and `userResponded` (`:557-626` — anyone can silence
+  reminders for any email); ownerless-event takeover (ownership check `events.go:277-282` only runs
+  when `OwnerId != Nil`, and anonymous creation `events.go:139` mints such events); event-name leak
+  to crawlers via OG tags; unanchored `/e/` regex in NoRoute; `chronicle` missing from the router
+  `authRoutes`; `canEdit` granting anonymous edit of ownerless events (`Event.vue:347-351`); lost
+  `?redirect` params on sign-in (`router/index.js:98-99`); event enumeration via unauthenticated
+  `GET /:eventId/ids` + predictable short ids (E9 covers the generator itself).
+
+  **Phase 1 — backend gating** (`server/routes/events.go:26-57`): register `GET /:eventId/ics`
+  bare; every other event route goes in an `AuthRequired()` sub-group
+  (`authed := eventRouter.Group("", middleware.AuthRequired())`) — includes `POST ""` (create),
+  edit, get, ids, responses, response CRUD, rename-user, **responded** (reminder-email links pass
+  through the SPA sign-in redirect, so the flow survives), schedule, rsvp, polls; drop the
+  now-redundant per-route `AuthRequired()` on delete/duplicate/archive/import/comments.
+  **Retire `AuthRequiredIfInviteOnly`** (`middleware/auth.go:57-72`, sole prod use is create) + its
+  two tests, same commit. `createEvent` takes the owner from the session unconditionally
+  (`events.go:139` nil-owner path dies). Legacy ownerless events: manageable by **member+** only
+  (`user.EffectiveRole().CanInvite()`) — unify `editEvent` (`events.go:277-282`), `scheduleEvent`
+  (`events.go:878-891`), `requireEventManager` (`polls.go:105-121`) on one shared helper.
+
+  **Phase 2 — remove anonymous guest semantics + close the holes**
+  (`event_responses.go`, `polls.go`, `events.go`, `main.go`, `auth.go`):
+  - `updateEventResponse`: keep the `guest:true` branch as *authenticated on-behalf* entry, but
+    reject names matching `^[0-9a-fA-F]{24}$` (and empty/whitespace) — closes the member-overwrite
+    IDOR. Same validation in the sign-up-form branch.
+  - Guest-branch `deleteEventResponse` (`:441-455`) and `renameUser` (`:515-547`): event owner (or
+    admin+) only — mirrors the member-branch ownership rule at `:466-470`.
+  - `responderKey` (`:724-741`): drop the anonymous path — RSVP (`rsvpToEvent`/`deleteRsvp`) and
+    `votePoll` become session-keyed only; remove `guest`/`name` from those payloads. Legacy
+    name-keyed entries still render but can no longer be created or spoofed.
+  - Remove the `?guestName=` identity/filter params (`events.go:474,545-556`,
+    `event_responses.go:97,138-144`, `filterResponsesForGuest`) — the blind-availability incognito
+    bypass acknowledged in-code at `event_responses.go:192-209` dies with them.
+  - `main.go:225-263` NoRoute: delete the `/e/:eventId` regex + `db.GetEventByEitherId` OG-title
+    lookup; serve the static default title (event names must not leak to anonymous crawlers, and
+    per-event OG titles are pointless behind a login).
+  - `routes/auth.go`: remove `EventsToLink` claim logic (anonymous creation no longer exists).
+
+  **Phase 3 — frontend gating + deep-link return**
+  (`frontend/src/router/index.js:92-110`, `SignIn.vue`, `fetch_utils.js`):
+  - Invert the guard to `publicRoutes = ["landing","sign-in","sign-up","auth","privacy-policy",
+    "404"]`, everything else auth-required by default (fixes the `chronicle` gap by construction;
+    new routes become secure-by-default). Unauthed hit on a gated route →
+    `/sign-in?redirect=<fullPath>`.
+  - `SignIn.vue handlePostAuthRedirect` (:392-409): after the existing branches, honor a
+    same-origin `redirect` (starts with `/`, not `//`) so a shared `/e/:id` link round-trips
+    through OTP login back to the event. Already-signed-in users hitting sign-in keep `redirect`
+    too (fixes the dropped-params bug at `router/index.js:98-99`).
+  - `fetch_utils.js`: central 401 handling (`not-signed-in` / `user-does-not-exist` /
+    `not-invited` → clear `authUser`, redirect to sign-in with `redirect`; skip on public routes).
+    This is the scoped version of the interceptor A10 deferred. A mid-session strike-off
+    (`middleware/auth.go:41-48`) currently leaves the SPA in a stale signed-in state.
+
+  **Phase 4 — remove anonymous guest UI** (`frontend/src/`):
+  - `Event.vue`: anonymous GuestDialog trigger (:707), `saveChangesAsGuest` (:726-739, submit
+    :922-924); fix `canEdit` (:347-351) — drop `ownerId == 0` anonymous-edit, ownerless-edit for
+    member+ to match Phase 1 (note the TWO no-owner sentinels: `0` and `constants.js:200
+    guestUserId` — unify).
+  - `currentAvailabilityMixin.js` (:220-273, :317-348): remove anonymous branches; `{guest:true}`
+    submission survives only for the signed-in on-behalf path. `RespondentsList.vue` (:220-241,
+    :313-332) "Add guest availability" stays; owner-gate its delete/rename in UI to match backend.
+  - Remove anonymous name fields/prompts: `GatheringRsvp.vue:16-22,190-205`,
+    `EventPolls.vue:10-17,193-198,254-256`, `SignUpForSlotDialog.vue:10,28,113`,
+    `EventHeader.vue:79-91`, `EventBottomBar.vue:19`; all `localStorage["<eventId>.guestName"]`
+    reads/writes and `guestName` query params; `pluginMessagesMixin.js:85` `forceGuestMode`.
+  - `store/role_getters.js:30-35`: `canCreateEvents` no longer true for anonymous (that was
+    deliberate — flip it + the comment + `role_getters.test.js`).
+  - `Auth.vue:44-51`: remove `eventsToLink` / `localStorage.eventsCreated` (+ `getEventsCreated`
+    helper). `GuestDialog.vue` itself stays (on-behalf use); reword copy.
+
+  **Phase 5 — docs + sweep:** update `ACCESS_CONTROL_PLAN.md` §1 (record the reversal + date);
+  `PLUGIN_API_README.md` — the `guestName`-forces-guest-mode capability is gone; grep sweep for
+  `guestName` / `guest: true` / `guestUserId` / `eventsCreated` stragglers (keep `guestUserId`
+  only where legacy rendering needs it).
+
+  **Tests:** table-driven "anonymous → 401" over every gated event route (pattern:
+  `routes/access_control_test.go` test-login helper + allowlisted users per `comments_test.go`);
+  ICS stays 200/404 without a session; hex-guest-name rejection; owner-gated guest delete/rename;
+  RSVP/vote ignore spoofed names; frontend `role_getters.test.js` + `fetch_utils.test.js`.
+  **Verification:** backend `MONGODB_URI=… go test ./models/ ./routes/ ./utils/ ./db/
+  ./services/reminders/`; frontend `npm run test:unit` + build; curl matrix (anonymous 401
+  everywhere except ICS; `view-source:/e/:id` shows the generic title); manual: anonymous `/e/:id`
+  → sign-in → lands back on the event; signed-in `guest`-role user can view/respond/RSVP/vote but
+  not create; legacy name-keyed data still displays; on-behalf entry works, 24-hex names rejected.
+  **Deploy note:** land as ~5 green commits (one per phase); between Phase 1 and Phase 3 anonymous
+  visitors get raw 401s instead of a redirect — keep those commits/deploys close together.
+
+- [ ] **E4 · Delete the Stripe/paywall subsystem.** `M` · **P1**
+  Dormant dead weight on this fork (no `STRIPE_API_KEY` on the VM; the only real paywall gates are
+  commented out — `ToolRow.vue:225,295`) that carries live risk: **anonymously reachable panic** in
+  `_fulfillCheckout` (`stripe.go:214` — `cs, _ := session.Get(...)` then unconditional deref; the
+  route `POST /api/stripe/fulfill-checkout` is unauthenticated at `stripe.go:34`, and with no API
+  key the Get always errors). Plus: unauthenticated `create-checkout-session` accepting a
+  caller-supplied `UserID` (`stripe.go:41,84`); fulfillment explicitly non-idempotent (stale TODOs
+  `stripe.go:204-207`); `fulfillCheckout` never writes a response body; wrong-variable error log
+  (`stripe.go:236` logs `err` instead of `userErr`); four `UpdateOne` results discarded
+  (`stripe.go:264,317,330,350` — premium up/downgrade can silently no-op). Delete:
+  `server/routes/stripe.go` + `main.go` wiring + `stripe-go/v82` dep; frontend `StripeRedirect`
+  route/view, checkout plumbing in `SignIn.vue handlePostAuthRedirect`, `isPremiumUser` getter +
+  call sites (`ScheduleOverlap.vue:1277`, `Event.vue:331`, `ToolRow.vue`), `constants.js:202
+  numFreeEvents` + `:72-77 upgradeDialogTypes` (both unreferenced). Resolves A9's deferred
+  `isPremiumUser` question. The webhook's signature verification (`stripe.go:283-296`) is the only
+  properly-secured piece — it goes too.
+
+- [ ] **E5 · `session.Save()` errors discarded at 5 sites.** `S` · **P1**
+  `auth.go:319,336,577`, `user.go:992`, and the worst one — `middleware/auth.go:45`, the
+  **struck-off-member revocation path**: if `Save` fails there, the `session.Delete("userId")` is
+  never persisted and the revoked cookie stays live. On sign-in, a failed Save returns 200 with no
+  cookie ("sign-in did nothing"). Log + return 500 (or at minimum log) at each site. Part of the
+  errcheck class B5 tracks.
+
+- [ ] **E6 · PII leaks in `getEvent` to non-owners.** `S` · **P1**
+  `stripSensitiveUserFields` (`event_responses.go:642-650`) nils calendar/billing fields but **not
+  `Phone`** (`models/user.go:16`) or `Role` — respondents' phone numbers are returned to any event
+  viewer. `event.Rsvps` serializes `Rsvp.Email` (`models/event.go:193,307`) unfiltered by the
+  `showEmails`/`collectEmails` logic that guards `responsesMap`; `Remindees` emails
+  (`models/event.go:18,323`) serialize to any viewer. Independent of E3 (the leaks would persist
+  to signed-in guests) and safe to fix first: add `Phone`/`Role` to the strip, apply the same
+  owner/`collectEmails` email rule to `Rsvps` and `Remindees`.
+
+- [ ] **E7 · Slackbot endpoint: no Slack signature verification (or just delete it).** `S` · **P2**
+  `POST /api/slackbot` (`slackbot/slackbot.go:56`, `execCommand` :65-106) is unauthenticated, does
+  **no signing-secret verification**, and POSTs command output to the attacker-supplied
+  `payload.ResponseUrl` (SSRF-shaped). Exposure is limited (commands are only `/num_users` +
+  `/active_users` aggregate counts) but it's a pointless open surface on a club instance.
+  Recommend **deleting** the slackbot (its outbound `SendTextMessageWithType` is only used by
+  Stripe code E4 deletes, and the event-created message is already commented out) together with the
+  never-initialized `discord_bot/` (A18); otherwise add signing-secret verification + drop
+  `response_url` echoing.
+
+- [ ] **E8 · Input caps on event creation.** `S` · **P2**
+  `createEvent` payload (`events.go:81-84`): `Name` has no length cap, `Dates`/`Times` have no
+  element-count cap — a single anonymous (until E3) request can create a multi-megabyte document.
+  Guest/on-behalf names are only checked non-empty (`event_responses.go:726`). Comments and polls
+  already cap (2,000 chars / 20 options) — extend the same discipline: name length, date/time
+  cardinality, description length, remindee count.
+
+- [ ] **E9 · Short event IDs: predictable generator + collision fallback returns the duplicate.**
+  `S` · **P2**
+  `db/events.go:281-309`: `math/rand` seeded with `eventId.Timestamp().Unix()` — **one-second
+  granularity**, so two events created in the same second walk identical id sequences, and ids are
+  predictable for a known creation time (an enumeration aid while `GET /:eventId` is open;
+  mitigated but not mooted by E3). On 5 failed dedup attempts it logs "Couldn't generate unique id"
+  and **returns the colliding id anyway**; both `GetEventByShortId` probe errors are swallowed, so
+  a transient DB blip reads as "no collision". Use `crypto/rand`, fail hard (error return) on
+  exhaustion, check the probe errors.
+
+- [ ] **E10 · Misc hardening batch.** `S` · **P3**
+  - `main.go:98-110`: `CORS_ORIGINS` split on `,` without trimming — `"a.com, b.com"` silently
+    yields a never-matching `" b.com"` origin.
+  - `db/allowlist.go:117-121`: `GetAllowlist` ignores the `cursor.All` error → silently-empty roll;
+    combined with fail-open-when-empty (`:51-59`) the swallowed error is the sharp edge
+    (`INVITE_ONLY_ENFORCED` mitigates in prod).
+  - `utils/utils.go:212`: bare `panic(err)` on base64 decode in a shared helper.
+  - `deleteEvent` (`events.go:627-652`) / `archiveEvent` (`:784-798`): non-owner gets a 500
+    (`Decode` on the empty result) instead of 403/404; `archiveEvent` also still uses
+    `ObjectIDFromHex` directly (`:774`) so short ids 400 — same sharp edge E2 fixed for delete.
+  - `utils/ratelimit.go:47-49`: janitor goroutine has no stop channel / ticker never stopped —
+    fine as a process-lifetime singleton, unsafe if ever constructed per-test; document or add a
+    stop.
