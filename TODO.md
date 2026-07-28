@@ -504,13 +504,74 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   counter, whose failure silently un-caps the 5-try brute-force guard.
   **`continue-on-error` is gone** — anything the linter reports now fails the build.
 
-- [ ] **B6 · AES-CFB is deprecated and unauthenticated.** `M` · **P2**
-  `utils/utils.go:229,246` use `cipher.NewCFBEncrypter`/`Decrypter` for `ENCRYPTION_KEY` (calendar
-  refresh tokens). CFB is unauthenticated: a tamperer can flip plaintext bits undetected, and Go
-  deprecated it in 1.24. Surfaced by **B5** and suppressed there with `//nolint:staticcheck`
-  pointing here, because this is a **data migration, not an edit** — every token already stored is
-  CFB and a new cipher cannot read them. Needs: an AEAD (AES-GCM), a version marker on stored
-  ciphertext, and a read-old/write-new transition before the CFB path is dropped.
+- [ ] **B6 · AES-CFB is deprecated and unauthenticated.** `M` · **P2 — 3 of 4 DONE 2026-07-28;
+  step 4 is GATED ON A DEPLOY, see below.**
+  `utils/utils.go` used `cipher.NewCFBEncrypter/Decrypter` for `ENCRYPTION_KEY`. CFB is
+  unauthenticated: a tamperer with database write access can flip plaintext bits undetected, and a
+  wrong key yields plausible garbage rather than an error. Deprecated in Go 1.24.
+
+  **⚠️ The original finding's premise was wrong.** It said "every stored calendar token is CFB".
+  Not so: `utils.Encrypt` has exactly **one** caller (`routes/user.go` `addAppleCalendarAccount`)
+  and `utils.Decrypt` exactly one (`services/calendar/apple_calendar.go` `getClients`). The only
+  encrypted value in the system is the **Apple calendar app-specific password**. Google/Outlook
+  OAuth tokens are stored in plaintext — a bigger problem, filed as **[B7]**.
+
+  - **1/4 DONE** (`1cd4ac36`): `Encrypt` writes AES-256-GCM; `Decrypt` reads both formats.
+    Version marker is the textual prefix `v2:`, **not** a leading version byte — a v1 blob starts
+    with a 16-byte random IV whose first byte can be any value, so a numeric marker is ambiguous
+    with real data. `:` is outside the base64 alphabet, so the discriminator is exact.
+    Both versions keep using `ENCRYPTION_KEY`'s bytes as the raw AES key: an earlier draft derived
+    the v2 key with SHA-256 and that was **dropped as wrong** — the key is already a valid 32-byte
+    AES-256 key, so derivation bought nothing and left two key concepts coexisting mid-migration.
+    `Decrypt` also stopped panicking on malformed input, which orphaned the exported `Decode`
+    (an **E10** bare-panic item) — removed with the rewrite rather than left as dead panicking code.
+  - **2/4 DONE** (`4c6f0bfc`): `validateEncryptionKey()` at startup beside `validateSessionSecret`.
+    Nothing validated the key before, so a wrong length failed per-request deep inside a calendar
+    call. What made it worth a guard: **`DEPLOYMENT.md` told you to generate the key with
+    `openssl rand -base64 32`, which produces 44 characters — a length AES rejects outright.**
+    Prod's key is a valid 32 bytes so this deployment was never affected, but the next would have
+    been. Corrected in `DEPLOYMENT.md`, `server/.env.template` and `CLAUDE.md` (`openssl rand
+    -hex 16`). `SESSION_SECRET`'s base64 generation is fine and untouched — it only needs ≥32 chars.
+  - **3/4 DONE** (`37ea8330`): `db.ReEncryptLegacyCalendarSecrets()` runs at startup, before the
+    router serves, and rewrites any v1 value as v2. Idempotent; best-effort (a failure logs and the
+    boot continues, since values stay readable via v1); an **undecryptable value is left untouched**
+    rather than overwritten. It rewrites the whole `calendarAccounts` field rather than a dotted
+    path, because the map key is `email_TYPE` and emails contain dots — Mongo would read
+    `a.b@c.com_apple` as four levels of nesting. Verified end-to-end against genuine v1 ciphertext:
+    seed → boot → stored `v2:` → decrypts back to the original secret.
+    Also fixed `db`'s `TestMain`, which never called `logger.Init`, so any db function logging on an
+    error path **panicked inside tests** instead of returning its error (`routes` was already fixed).
+  - **4/4 NOT DONE — must not land until 1–3 are deployed and the sweep has run in prod.**
+    Dropping the v1 read path removes what the sweep itself depends on: `ReEncryptLegacyCalendarSecrets`
+    calls `utils.Decrypt` on v1 values. Shipping all four together would leave every legacy password
+    undecryptable, the sweep would skip them, and **Apple calendar accounts would break**.
+    Sequence: deploy 1–3 → confirm the boot log reports the re-encrypt (or reports nothing, meaning
+    there was nothing to migrate) → confirm no `appleCalendarAuth.password` lacks the `v2:` prefix →
+    then delete `decryptV1CFB`, its `//nolint:staticcheck`, `IsLegacyCiphertext`, the sweep, and its
+    `main.go` call.
+    Check for remaining v1 values with:
+    ```
+    db.users.aggregate([
+      {$project: {a: {$objectToArray: "$calendarAccounts"}}}, {$unwind: "$a"},
+      {$match: {"a.v.appleCalendarAuth.password": {$exists: true, $not: /^v2:/}}},
+      {$count: "legacy"}])
+    ```
+
+- [ ] **B7 · Google/Outlook OAuth tokens are stored unencrypted.** `M` · **P1**
+  Surfaced while scoping **B6**. `OAuth2CalendarAuth.AccessToken` / `.RefreshToken`
+  (`models/calendar.go:19,21`) are written straight to the user document at four live sites —
+  `routes/auth.go` (`signIn`, `signInMobile` paths) and `routes/user.go` (add Google / add Outlook
+  account) — with no encryption. A **refresh token is a long-lived credential** granting ongoing
+  read access to a member's calendar; anyone with a copy of the database has them all.
+  The inconsistency is the tell: the codebase already treats this class of secret as needing
+  encryption — that is exactly what the Apple password path does — so this is an omission rather
+  than a decision. **Rank above B6**, which protects one field that few members even use.
+  Fix: encrypt on write, decrypt on read, and migrate existing values — the same shape as B6's
+  sweep, which can be reused wholesale (`db.ReEncryptLegacyCalendarSecrets` already walks every
+  calendar account). Do it **before** B6 step 4 retires that machinery, or it will need rebuilding.
+  Related: `routes/user.go` `addCalendarAccount` persists with `$set: authUser` — the whole user
+  document, the same lost-update pattern **A16** fixed for events, still live on the users
+  collection and discarding its result. Worth folding in.
 
 ---
 
