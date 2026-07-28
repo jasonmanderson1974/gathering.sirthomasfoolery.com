@@ -1130,3 +1130,20 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   - `utils/ratelimit.go:47-49`: janitor goroutine has no stop channel / ticker never stopped —
     fine as a process-lifetime singleton, unsafe if ever constructed per-test; document or add a
     stop.
+
+- [ ] **E11 · `createEvent` / `editEvent` accept an unvalidated `EventType`.** `S` · **P2**
+  `events.go:83` binds `Type models.EventType` with `binding:"required"`, and `:294`
+  (`editEvent`) assigns `event.Type = payload.Type` — neither checks the value against the enum
+  (`models/event.go:12-13`: `specific_dates`, `dow`). Any string is stored.
+  **Consequence is client-side, not corruption:** `getCalendarEventsMap`
+  (`frontend/src/utils/date_utils.js:616-646`) computes `timeMin`/`timeMax` only for
+  `SPECIFIC_DATES` and `DOW`, so an unknown type leaves both `undefined` and the event page fires
+  `GET /api/user/calendars?timeMin=undefined&timeMax=undefined` → **400, twice per load**, with no
+  calendar overlay. The grid, responses and RSVP UI still render, so it fails quietly.
+  Not reachable through the UI (the frontend always sends a valid constant) — this is an
+  API-direct gap, found 2026-07-28 while verifying `38a464c` with a script that sent the
+  camelCase `"specificDates"` instead of `"specific_dates"`. All 16 events in prod are
+  `specific_dates`, so nothing is currently affected.
+  **Fix:** add `models.IsKnownEventType` mirroring `models.IsKnownRole` (`models/roles.go:16`),
+  reject unknown values with 400 `errs.InvalidEventType` in both handlers, and cover it in
+  `routes/` tests. Fits naturally alongside **E8** (same payload, same handler).
