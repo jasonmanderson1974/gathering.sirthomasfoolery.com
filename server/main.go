@@ -120,6 +120,18 @@ func main() {
 	closeConnection := db.Init()
 	defer closeConnection()
 
+	// B7: encrypt any Google/Outlook OAuth token still stored in the clear.
+	// Idempotent and cheap — once everything carries the current version marker
+	// it finds nothing. Runs before the router starts serving, so it never
+	// races a request. Best-effort: a failure here leaves the tokens readable
+	// (they are passed through as legacy plaintext), so it must not stop the
+	// boot — but it does mean step 4 cannot land until this reports clean.
+	if scanned, migrated, err := db.EncryptPlaintextOAuthTokens(); err != nil {
+		logger.StdErr.Println("oauth token encryption sweep failed (tokens remain in the clear):", err)
+	} else if migrated > 0 {
+		logger.StdOut.Printf("encrypted stored OAuth tokens for %d of %d users with calendar accounts", migrated, scanned)
+	}
+
 	// Start the in-process email scheduler: pre-gathering reminders and
 	// remindee nudges, both over Gmail SMTP
 	stopReminders := reminders.StartReminderScheduler()
