@@ -61,21 +61,21 @@ func Init() func() {
 		Keys:    bson.D{{Key: "eventId", Value: 1}, {Key: "startDate", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	}
-	ChronicleCollection.Indexes().CreateOne(context.Background(), chronicleIndexModel)
+	ensureIndex("chronicle (eventId, startDate) unique", ChronicleCollection, chronicleIndexModel)
 
 	// Create TTL index so expired OTP docs are auto-deleted
 	otpIndexModel := mongo.IndexModel{
 		Keys:    bson.M{"expiresAt": 1},
 		Options: options.Index().SetExpireAfterSeconds(0),
 	}
-	OtpCodesCollection.Indexes().CreateOne(context.Background(), otpIndexModel)
+	ensureIndex("otpCodes expiresAt TTL", OtpCodesCollection, otpIndexModel)
 
 	// Unique index on allowlist email so an address can only be listed once
 	allowlistIndexModel := mongo.IndexModel{
 		Keys:    bson.M{"email": 1},
 		Options: options.Index().SetUnique(true),
 	}
-	AllowlistCollection.Indexes().CreateOne(context.Background(), allowlistIndexModel)
+	ensureIndex("allowlist email unique", AllowlistCollection, allowlistIndexModel)
 
 	// Ensure each user has at most one default folder per kind ("created" /
 	// "received"), so EnsureDefaultFolders is race-safe on concurrent loads.
@@ -85,11 +85,30 @@ func Init() func() {
 			bson.M{"defaultKind": bson.M{"$exists": true}},
 		),
 	}
-	FoldersCollection.Indexes().CreateOne(context.Background(), defaultFolderIndexModel)
+	ensureIndex("folders (userId, defaultKind) unique", FoldersCollection, defaultFolderIndexModel)
 
 	// Return a function to close the connection
 	return func() {
-		Client.Disconnect(ctx)
+		if err := Client.Disconnect(ctx); err != nil {
+			logger.StdErr.Println("mongo disconnect:", err)
+		}
+	}
+}
+
+// ensureIndex creates an index and, crucially, says so when it can't.
+//
+// Each of these indexes enforces an invariant the code above relies on — the
+// Chronicle's at-most-once capture, OTP expiry, one allowlist row per address,
+// one default folder per kind. Swallowing the error meant the invariant could
+// quietly not be in force (existing duplicate data is enough to make creation
+// fail permanently) while the code carried on assuming it was.
+//
+// Deliberately not fatal: refusing to boot over an index would turn a
+// recoverable data problem into an outage. Loud is enough — the call sites
+// have their own guards.
+func ensureIndex(name string, collection *mongo.Collection, model mongo.IndexModel) {
+	if _, err := collection.Indexes().CreateOne(context.Background(), model); err != nil {
+		logger.StdErr.Printf("index %q could not be created — the guarantee it enforces is NOT in force: %v", name, err)
 	}
 }
 

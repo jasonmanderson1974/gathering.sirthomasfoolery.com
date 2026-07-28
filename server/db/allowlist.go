@@ -9,6 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"sirtom/server/logger"
 	"sirtom/server/models"
 )
 
@@ -112,12 +113,20 @@ func RemoveFromAllowlist(email string) error {
 }
 
 // GetAllowlist returns all allowlist entries.
-func GetAllowlist() []models.AllowlistEntry {
+//
+// It reports its errors rather than returning an empty slice for them: an empty
+// roll and a failed read are very different things, and conflating them showed
+// a broken query as "the Fellowship has no members".
+func GetAllowlist() ([]models.AllowlistEntry, error) {
 	entries := make([]models.AllowlistEntry, 0)
 	cursor, err := AllowlistCollection.Find(context.Background(), bson.M{})
 	if err != nil {
-		return entries
+		logger.StdErr.Println(err)
+		return entries, err
 	}
-	cursor.All(context.Background(), &entries)
-	return entries
+	if err := cursor.All(context.Background(), &entries); err != nil {
+		logger.StdErr.Println(err)
+		return entries, err
+	}
+	return entries, nil
 }

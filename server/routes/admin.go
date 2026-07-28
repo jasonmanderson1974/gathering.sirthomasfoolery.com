@@ -75,7 +75,11 @@ func getAllowlist(c *gin.Context) {
 	// excludes guests). This is an intentional product choice — the club is
 	// transparent about who's on the roll. Management actions (invite at an
 	// elevated role, change roles, strike) stay admin-only in their handlers.
-	entries := db.GetAllowlist()
+	entries, err := db.GetAllowlist()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
 
 	// Batch-fetch the accounts for all listed emails in one query (avoids N+1).
 	emails := make([]string, 0, len(entries))

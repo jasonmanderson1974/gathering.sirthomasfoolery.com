@@ -54,17 +54,20 @@ jobs:
       - name: go vet
         run: go vet $(go list ./... | grep -v '/scripts')
 
-      # golangci-lint stays WARNINGS-first: the v2 upgrade (the pinned v1.61.0
-      # binary was built with go1.23 and silently refused to load this Go 1.25
-      # module, so this step reported nothing for a while) surfaced a real
-      # backlog (~112 issues, mostly errcheck). Tighten to blocking once that's
-      # worked down. Plain install+run instead of the action so the scripts/
-      # package-list exclusion matches go vet exactly.
+      # golangci-lint stays WARNINGS-first while the backlog is worked down
+      # (TODO B5); tighten to blocking once it reaches zero.
+      #
+      # NOTE the `-f '{{.Dir}}'`: golangci-lint takes DIRECTORIES, and plain
+      # `go list` emits import paths. Passing those made it resolve every
+      # package against the wrong root, report "typechecking error: directory
+      # not found", and then cheerfully print "0 issues" — so this step linted
+      # nothing at all until 2026-07-28. Whatever else changes here, keep the
+      # arguments as paths.
       - name: golangci-lint
         continue-on-error: true
         run: |
           curl -sL https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz | tar xz -C /tmp
-          /tmp/golangci-lint-2.12.2-linux-amd64/golangci-lint run $(go list ./... | grep -v '/scripts')
+          /tmp/golangci-lint-2.12.2-linux-amd64/golangci-lint run $(go list -f '{{.Dir}}' ./... | grep -v '/scripts')
 
       # models/routes/utils need no external services; db and services/reminders
       # run integration tests against the Mongo service above (they skip when

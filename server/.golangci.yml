@@ -17,6 +17,20 @@ linters:
       # One-off migration scripts reference outdated models and don't compile
       # (see backend-ci.yml). Keep the linter off them.
       - scripts
+    rules:
+      # errcheck is relaxed in tests only. Test bodies are full of teardown —
+      # DeleteOne, RemoveFromAllowlist, os.Setenv — where the error genuinely
+      # has nowhere to go: the test has already passed or failed on its own
+      # assertions, and a failed cleanup would surface as the next run's
+      # fixture noise, not as something the test could act on. Requiring `_ =`
+      # on ~50 such lines buys nothing and obscures the assertions.
+      #
+      # Everything else still applies to tests, and errcheck still applies in
+      # full to production code — which is the class E5 (a discarded
+      # session.Save) came from.
+      - path: _test\.go
+        linters:
+          - errcheck
 
 issues:
   # Show everything — don't cap per-linter/per-issue.

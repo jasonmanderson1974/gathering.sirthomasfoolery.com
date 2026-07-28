@@ -36,25 +36,32 @@ import (
 // @host localhost:3002/api
 
 func init() {
-	mime.AddExtensionType(".css", "text/css")
-	mime.AddExtensionType(".js", "application/javascript")
-	mime.AddExtensionType(".svg", "image/svg+xml")
-	mime.AddExtensionType(".woff", "font/woff")
-	mime.AddExtensionType(".woff2", "font/woff2")
-	mime.AddExtensionType(".ttf", "font/ttf")
-	mime.AddExtensionType(".json", "application/json")
-	mime.AddExtensionType(".map", "application/json")
+	// AddExtensionType only errors on an extension not starting with ".", which
+	// none of these can be — discard deliberately rather than leave it unchecked.
+	for ext, typ := range map[string]string{
+		".css":   "text/css",
+		".js":    "application/javascript",
+		".svg":   "image/svg+xml",
+		".woff":  "font/woff",
+		".woff2": "font/woff2",
+		".ttf":   "font/ttf",
+		".json":  "application/json",
+		".map":   "application/json",
+	} {
+		_ = mime.AddExtensionType(ext, typ)
+	}
 }
 
 func main() {
 	// Set release flag
 	release := flag.Bool("release", false, "Whether this is the release version of the server")
 	flag.Parse()
+	// Setenv only errors on an invalid (empty or "="-bearing) name.
 	if *release {
-		os.Setenv("GIN_MODE", "release")
+		_ = os.Setenv("GIN_MODE", "release")
 		gin.SetMode(gin.ReleaseMode)
 	} else {
-		os.Setenv("GIN_MODE", "debug")
+		_ = os.Setenv("GIN_MODE", "debug")
 	}
 
 	// Init logfile
@@ -179,11 +186,15 @@ func main() {
 	// Init swagger documentation
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
 
-	// Run server
+	// Run server. Run only returns on failure — most often the port already
+	// being held — and discarding that error made the process exit silently
+	// with status 0, so a failed start looked like a clean shutdown.
+	addr := ":3002"
 	if os.Getenv("NODE_ENV") == "staging" {
-		router.Run(":3003")
-	} else {
-		router.Run(":3002")
+		addr = ":3003"
+	}
+	if err := router.Run(addr); err != nil {
+		logger.StdErr.Fatalln("server failed to start:", err)
 	}
 }
 
