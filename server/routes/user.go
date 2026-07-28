@@ -986,10 +986,14 @@ func deleteUser(c *gin.Context) {
 		return
 	}
 
-	// Delete session
+	// Delete session. The account row is already gone, so a failed Save is not
+	// fatal — AuthRequired will 401 the stale cookie on its next use — but it
+	// must not pass silently.
 	session := sessions.Default(c)
 	session.Delete("userId")
-	session.Save()
+	if err := session.Save(); err != nil {
+		logger.StdErr.Println(err)
+	}
 
 	c.JSON(http.StatusOK, gin.H{})
 }

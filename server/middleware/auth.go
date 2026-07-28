@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"sirtom/server/db"
 	"sirtom/server/errs"
+	"sirtom/server/logger"
 	"sirtom/server/models"
 	"sirtom/server/responses"
 )
@@ -42,7 +43,12 @@ func AuthRequired() gin.HandlerFunc {
 		// server-side otherwise). Fail-open while the allowlist is empty.
 		if !db.IsAccessAllowed(user.Email) {
 			session.Delete("userId")
-			session.Save()
+			// If this Save fails the revocation is not persisted and the
+			// struck-off member's cookie stays live for the next request. We
+			// still deny THIS request, but the failure must be visible.
+			if err := session.Save(); err != nil {
+				logger.StdErr.Printf("failed to persist session revocation for %s: %v", user.Email, err)
+			}
 			c.JSON(http.StatusUnauthorized, responses.Error{Error: errs.NotInvited})
 			c.Abort()
 			return

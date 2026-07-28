@@ -316,7 +316,12 @@ func signInHelper(c *gin.Context, token auth.TokenResponse, tokenOrigin models.T
 	// Set session variables
 	session := sessions.Default(c)
 	session.Set("userId", userId.Hex())
-	session.Save()
+	// A failed Save means no cookie is issued — the caller would otherwise
+	// return 200 and the user would appear signed out. Propagate.
+	if err := session.Save(); err != nil {
+		logger.StdErr.Println(err)
+		return models.User{}, err
+	}
 
 	userData.Id = userId
 	return userData, nil
@@ -333,7 +338,12 @@ func signOut(c *gin.Context) {
 	// Delete session
 	session := sessions.Default(c)
 	session.Delete("userId")
-	session.Save()
+	// A failed Save leaves the caller signed in despite a 200 "signed out".
+	if err := session.Save(); err != nil {
+		logger.StdErr.Println(err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{})
 }
@@ -574,7 +584,13 @@ func verifyOtp(c *gin.Context) {
 	// Set session — same mechanism as OAuth sign-in
 	session := sessions.Default(c)
 	session.Set("userId", userId.Hex())
-	session.Save()
+	// Without a persisted session the 200 below is a lie: the client would be
+	// handed a user object but no cookie, i.e. "sign-in did nothing".
+	if err := session.Save(); err != nil {
+		logger.StdErr.Println(err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
 
 	user, userErr := db.GetUserById(userId.Hex())
 	if userErr != nil {
