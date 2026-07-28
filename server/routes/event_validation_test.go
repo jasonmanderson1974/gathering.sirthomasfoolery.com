@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"sirtom/server/errs"
+	"sirtom/server/middleware"
 	"sirtom/server/models"
 )
 
@@ -182,13 +183,18 @@ func TestValidateEventPayload_NilSignUpBlocksSafe(t *testing.T) {
 // surfaced E11: the camelCase "specificDates" instead of "specific_dates".
 func TestCreateEvent_RejectsUnknownTypeEndToEnd(t *testing.T) {
 	requireDB(t)
+	// createEvent runs behind AuthRequired since E3 and takes its owner from the
+	// context, so drive the real chain.
+	userId := insertTestUser(t, models.RoleMember, "e11-reject@example.test")
 	r := newTestRouter()
-	r.POST("/events", createEvent)
+	registerTestLogin(r)
+	r.POST("/events", middleware.AuthRequired(), createEvent)
 
 	body := `{"name":"Poker Night","duration":2,"dates":["2026-08-01T00:00:00Z"],"type":"specificDates"}`
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/events", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(loginAs(t, r, userId.Hex()))
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
@@ -207,13 +213,16 @@ func TestCreateEvent_RejectsUnknownTypeEndToEnd(t *testing.T) {
 // rejecting everything.
 func TestCreateEvent_AcceptsKnownTypeEndToEnd(t *testing.T) {
 	requireDB(t)
+	userId := insertTestUser(t, models.RoleMember, "e11-accept@example.test")
 	r := newTestRouter()
-	r.POST("/events", createEvent)
+	registerTestLogin(r)
+	r.POST("/events", middleware.AuthRequired(), createEvent)
 
 	body := `{"name":"Poker Night","duration":2,"dates":["2026-08-01T00:00:00Z"],"type":"specific_dates"}`
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/events", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(loginAs(t, r, userId.Hex()))
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusCreated {

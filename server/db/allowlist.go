@@ -18,9 +18,9 @@ import (
 // INVITE_ONLY_ENFORCED=true in production so that an accidentally-emptied
 // allowlist fails CLOSED (deny) rather than opening the site to everyone.
 //
-// It also gates the unauthenticated-write posture: on an enforced instance,
-// anonymous callers cannot create or (for owner-less events) schedule events —
-// only members can (see middleware.AuthRequiredIfInviteOnly, routes.scheduleEvent).
+// Since E3 every event route requires a session regardless of this flag, so it
+// no longer governs the anonymous-write posture — there are no anonymous writes.
+// It remains the fail-closed switch for an empty allowlist.
 func AccessControlEnforced() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("INVITE_ONLY_ENFORCED"))) {
 	case "true", "1", "yes":

@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,11 +10,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"sirtom/server/db"
+	"sirtom/server/logger"
 	"sirtom/server/models"
 )
 
 func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
+	// logger.StdOut/StdErr are nil until logger.Init runs (main.go does it in
+	// production). Any handler error path that logs would otherwise nil-deref
+	// inside a test rather than returning its intended status. Discard the
+	// output — we assert on responses, not logs.
+	logger.Init(io.Discard)
 	// DB-backed handler tests need a Mongo connection. mongo.Connect is lazy (no
 	// ping), so calling Init is safe even without a running server; the tests that
 	// actually touch Mongo gate on MONGODB_URI via requireDB (CI sets it, local

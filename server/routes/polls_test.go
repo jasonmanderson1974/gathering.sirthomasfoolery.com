@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"sirtom/server/db"
+	"sirtom/server/middleware"
 	"sirtom/server/models"
 )
 
@@ -142,7 +143,10 @@ func TestCreatePoll_OwnerCreatesAndGuestVotes(t *testing.T) {
 	requireDB(t)
 	ctx := context.Background()
 
-	ownerId := primitive.NewObjectID()
+	// The poll routes run behind AuthRequired (E3), and requireEventManager
+	// reads the caller from the context, so the owner must be a real
+	// allowlisted user rather than a bare ObjectID.
+	ownerId := insertTestUser(t, models.RoleMember, "poll-owner@example.test")
 	eventId := primitive.NewObjectID()
 	if _, err := db.EventsCollection.InsertOne(ctx, models.Event{
 		Id:      eventId,
@@ -156,8 +160,8 @@ func TestCreatePoll_OwnerCreatesAndGuestVotes(t *testing.T) {
 
 	r := newTestRouter()
 	registerTestLogin(r)
-	r.POST("/events/:eventId/polls", createPoll)
-	r.POST("/events/:eventId/polls/:pollId/vote", votePoll)
+	r.POST("/events/:eventId/polls", middleware.AuthRequired(), createPoll)
+	r.POST("/events/:eventId/polls/:pollId/vote", middleware.AuthRequired(), votePoll)
 
 	// Owner creates a poll.
 	cookie := loginAs(t, r, ownerId.Hex())
@@ -178,12 +182,16 @@ func TestCreatePoll_OwnerCreatesAndGuestVotes(t *testing.T) {
 		t.Fatalf("expected 2 options, got %d", len(poll.Options))
 	}
 
-	// Guest votes for the first option.
+	// A signed-in member votes on behalf of a guest by name. The route is gated
+	// now, so the request carries a session; E3 phase 2 removes the by-name
+	// path entirely and keys votes to the session.
+	voterId := insertTestUser(t, models.RoleMember, "poll-voter@example.test")
 	optId := poll.Options[0].Id.Hex()
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/events/"+eventId.Hex()+"/polls/"+poll.Id.Hex()+"/vote",
 		strings.NewReader(`{"guest":true,"name":"Greg","optionIds":["`+optId+`"]}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(loginAs(t, r, voterId.Hex()))
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("votePoll: got %d, want 200 (%s)", w.Code, w.Body.String())
@@ -206,7 +214,7 @@ func TestCreatePoll_NonOwnerForbidden(t *testing.T) {
 	requireDB(t)
 	ctx := context.Background()
 
-	ownerId := primitive.NewObjectID()
+	ownerId := insertTestUser(t, models.RoleMember, "poll-realowner@example.test")
 	eventId := primitive.NewObjectID()
 	if _, err := db.EventsCollection.InsertOne(ctx, models.Event{
 		Id:      eventId,
@@ -219,10 +227,11 @@ func TestCreatePoll_NonOwnerForbidden(t *testing.T) {
 
 	r := newTestRouter()
 	registerTestLogin(r)
-	r.POST("/events/:eventId/polls", createPoll)
+	r.POST("/events/:eventId/polls", middleware.AuthRequired(), createPoll)
 
 	// A different signed-in user must not create a poll on someone else's event.
-	cookie := loginAs(t, r, primitive.NewObjectID().Hex())
+	otherId := insertTestUser(t, models.RoleMember, "poll-nonowner@example.test")
+	cookie := loginAs(t, r, otherId.Hex())
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/events/"+eventId.Hex()+"/polls",
 		strings.NewReader(`{"title":"Where?","options":["A","B"]}`))
@@ -238,7 +247,7 @@ func TestDeletePoll_OwnerRemoves(t *testing.T) {
 	requireDB(t)
 	ctx := context.Background()
 
-	ownerId := primitive.NewObjectID()
+	ownerId := insertTestUser(t, models.RoleMember, "poll-deleter@example.test")
 	eventId := primitive.NewObjectID()
 	pollId := primitive.NewObjectID()
 	if _, err := db.EventsCollection.InsertOne(ctx, models.Event{
@@ -258,7 +267,7 @@ func TestDeletePoll_OwnerRemoves(t *testing.T) {
 
 	r := newTestRouter()
 	registerTestLogin(r)
-	r.DELETE("/events/:eventId/polls/:pollId", deletePoll)
+	r.DELETE("/events/:eventId/polls/:pollId", middleware.AuthRequired(), deletePoll)
 
 	cookie := loginAs(t, r, ownerId.Hex())
 	w := httptest.NewRecorder()

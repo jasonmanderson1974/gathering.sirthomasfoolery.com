@@ -26,34 +26,44 @@ import (
 func InitEvents(router *gin.RouterGroup) {
 	eventRouter := router.Group("/events")
 
-	eventRouter.POST("", middleware.AuthRequiredIfInviteOnly(), createEvent)
-	eventRouter.POST("/import", middleware.AuthRequired(), importEvent)
-	eventRouter.PUT("/:eventId", editEvent)
-	eventRouter.GET("/:eventId/ids", getEventIds)
-	eventRouter.GET("/:eventId", getEvent)
-	eventRouter.GET("/:eventId/responses", getResponses)
-	eventRouter.POST("/:eventId/response", updateEventResponse)
-	eventRouter.DELETE("/:eventId/response", deleteEventResponse)
-	eventRouter.POST("/:eventId/rename-user", renameUser)
-	eventRouter.POST("/:eventId/responded", userResponded)
-	eventRouter.DELETE("/:eventId", middleware.AuthRequired(), deleteEvent)
-	eventRouter.POST("/:eventId/duplicate", middleware.AuthRequired(), duplicateEvent)
-	eventRouter.POST("/:eventId/archive", middleware.AuthRequired(), archiveEvent)
-	eventRouter.POST("/:eventId/schedule", scheduleEvent)
+	// E3: every event route requires a signed-in user (minimum role `guest`).
+	// Anonymous visitors get the landing page and the sign-in flow, nothing else.
+	//
+	// The ONE deliberate exception is the ICS feed below: calendar applications
+	// fetch it on a schedule without cookies, so it cannot carry a session. It
+	// exposes only the confirmed gathering's name, time and venue, and obtaining
+	// the URL now requires signing in. Do not add further bare routes here.
 	eventRouter.GET("/:eventId/ics", getEventIcs)
-	eventRouter.POST("/:eventId/rsvp", rsvpToEvent)
-	eventRouter.DELETE("/:eventId/rsvp", deleteRsvp)
-	// The discussion is sign-in-only: anonymous callers can neither read nor
-	// write comments (getEvent withholds the list from them entirely).
-	eventRouter.POST("/:eventId/comments", middleware.AuthRequired(), addComment)
-	eventRouter.PUT("/:eventId/comments/:commentId", middleware.AuthRequired(), editComment)
-	eventRouter.DELETE("/:eventId/comments/:commentId", middleware.AuthRequired(), deleteComment)
-	eventRouter.POST("/:eventId/comments/:commentId/thread", middleware.AuthRequired(), tagCommentAsThread)
-	eventRouter.PATCH("/:eventId/comments/:commentId/thread", middleware.AuthRequired(), setThreadMembersOnly)
-	eventRouter.DELETE("/:eventId/comments/:commentId/thread", middleware.AuthRequired(), untagThread)
-	eventRouter.POST("/:eventId/polls", createPoll)
-	eventRouter.DELETE("/:eventId/polls/:pollId", deletePoll)
-	eventRouter.POST("/:eventId/polls/:pollId/vote", votePoll)
+
+	authed := eventRouter.Group("", middleware.AuthRequired())
+
+	authed.POST("", createEvent)
+	authed.POST("/import", importEvent)
+	authed.PUT("/:eventId", editEvent)
+	authed.GET("/:eventId/ids", getEventIds)
+	authed.GET("/:eventId", getEvent)
+	authed.GET("/:eventId/responses", getResponses)
+	authed.POST("/:eventId/response", updateEventResponse)
+	authed.DELETE("/:eventId/response", deleteEventResponse)
+	authed.POST("/:eventId/rename-user", renameUser)
+	// Reminder emails link here. The link passes through the SPA's sign-in
+	// redirect, so the flow survives requiring a session.
+	authed.POST("/:eventId/responded", userResponded)
+	authed.DELETE("/:eventId", deleteEvent)
+	authed.POST("/:eventId/duplicate", duplicateEvent)
+	authed.POST("/:eventId/archive", archiveEvent)
+	authed.POST("/:eventId/schedule", scheduleEvent)
+	authed.POST("/:eventId/rsvp", rsvpToEvent)
+	authed.DELETE("/:eventId/rsvp", deleteRsvp)
+	authed.POST("/:eventId/comments", addComment)
+	authed.PUT("/:eventId/comments/:commentId", editComment)
+	authed.DELETE("/:eventId/comments/:commentId", deleteComment)
+	authed.POST("/:eventId/comments/:commentId/thread", tagCommentAsThread)
+	authed.PATCH("/:eventId/comments/:commentId/thread", setThreadMembersOnly)
+	authed.DELETE("/:eventId/comments/:commentId/thread", untagThread)
+	authed.POST("/:eventId/polls", createPoll)
+	authed.DELETE("/:eventId/polls/:pollId", deletePoll)
+	authed.POST("/:eventId/polls/:pollId/vote", votePoll)
 }
 
 // trimmedLocation normalizes a venue submitted by a client. A nil pointer means
@@ -146,6 +156,55 @@ func sanitizeEventText(name string, description *string) (string, *string) {
 	return name, description
 }
 
+// authUser returns the caller set by middleware.AuthRequired. Every event route
+// except the ICS feed runs behind that middleware (E3), so a miss here means a
+// route was registered outside the authed group — a programming error, reported
+// as a 500 rather than silently treated as anonymous.
+func authUser(c *gin.Context) (*models.User, bool) {
+	userInterface, exists := c.Get("authUser")
+	if !exists {
+		logger.StdErr.Println("authUser missing from context — route registered outside the authed group?")
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return nil, false
+	}
+	user, ok := userInterface.(*models.User)
+	if !ok || user == nil {
+		logger.StdErr.Println("authUser in context has unexpected type")
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return nil, false
+	}
+	return user, true
+}
+
+// requireEventManager reports whether the caller may manage this event — edit
+// it, schedule the gathering, or create/delete polls. Writes the response and
+// returns false if not.
+//
+// Owned events: the owner alone. Legacy ownerless events (created before E3
+// removed anonymous creation, so nobody holds title to them): member or above.
+// Previously these were manageable by ANYONE, which is how an ownerless event
+// could be taken over.
+func requireEventManager(c *gin.Context, event *models.Event) bool {
+	user, ok := authUser(c)
+	if !ok {
+		return false
+	}
+
+	if event.OwnerId != primitive.NilObjectID {
+		if user.Id != event.OwnerId {
+			c.JSON(http.StatusForbidden, responses.Error{Error: errs.UserNotEventOwner})
+			return false
+		}
+		return true
+	}
+
+	if !user.EffectiveRole().CanInvite() {
+		c.JSON(http.StatusForbidden, responses.Error{Error: errs.NotAuthorized})
+		return false
+	}
+	return true
+}
+
 // @Summary Creates a new event
 // @Tags events
 // @Accept json
@@ -200,34 +259,20 @@ func createEvent(c *gin.Context) {
 	// createEvent takes no description; editEvent adds one later.
 	payload.Name, _ = sanitizeEventText(payload.Name, nil)
 
-	session := sessions.Default(c)
-
-	// If user logged in, set owner id to their user id, otherwise set owner id to nil
-	userIdInterface := session.Get("userId")
-	userId, signedIn := userIdInterface.(string)
-	var user *models.User
-	var ownerId primitive.ObjectID
-	if signedIn {
-		var userErr error
-		user, userErr = db.GetUserById(userId)
-		if userErr != nil {
-			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-			return
-		}
-		if user == nil {
-			signedIn = false
-			ownerId = primitive.NilObjectID
-		} else {
-			// Guests may respond to events but not create them.
-			if !user.EffectiveRole().CanCreateEvents() {
-				c.JSON(http.StatusForbidden, responses.Error{Error: errs.NotAuthorized})
-				return
-			}
-			ownerId = utils.StringToObjectID(userId)
-		}
-	} else {
-		ownerId = primitive.NilObjectID
+	// E3: the route is behind AuthRequired, so there is always an authenticated
+	// user and every new event has a real owner. The old nil-owner path (which
+	// minted ownerless, takeover-able events) is gone.
+	user, ok := authUser(c)
+	if !ok {
+		return
 	}
+	// Guests may respond to events but not create them.
+	if !user.EffectiveRole().CanCreateEvents() {
+		c.JSON(http.StatusForbidden, responses.Error{Error: errs.NotAuthorized})
+		return
+	}
+	ownerId := user.Id
+	signedIn := true
 
 	// Construct event object
 	numResponses := 0
@@ -356,23 +401,8 @@ func editEvent(c *gin.Context) {
 		return
 	}
 
-	// If user logged in, set owner id to their user id, otherwise set owner id to nil
-	session := sessions.Default(c)
-	userIdInterface := session.Get("userId")
-	userId, signedIn := userIdInterface.(string)
-	var ownerId primitive.ObjectID
-	if signedIn {
-		ownerId = utils.StringToObjectID(userId)
-	} else {
-		ownerId = primitive.NilObjectID
-	}
-
-	// If event has an owner id, check if user has permissions to edit event
-	if event.OwnerId != primitive.NilObjectID {
-		if event.OwnerId != ownerId {
-			c.JSON(http.StatusForbidden, responses.Error{Error: errs.UserNotEventOwner})
-			return
-		}
+	if !requireEventManager(c, event) {
+		return
 	}
 
 	// Update event
@@ -984,24 +1014,10 @@ func scheduleEvent(c *gin.Context) {
 		return
 	}
 
-	// Scheduling is an owner action. If the event has an owner, only that owner
-	// may schedule it (mirrors editEvent). Owner-less (guest-created) events have
-	// no owner to check against — on an enforced invite-only instance, require a
-	// signed-in member so scheduling isn't an anonymous write (E1); on open/dev
-	// instances the guest-event flow stays open.
-	if event.OwnerId != primitive.NilObjectID {
-		session := sessions.Default(c)
-		userId, signedIn := session.Get("userId").(string)
-		if !signedIn || utils.StringToObjectID(userId) != event.OwnerId {
-			c.JSON(http.StatusForbidden, responses.Error{Error: errs.UserNotEventOwner})
-			return
-		}
-	} else if db.AccessControlEnforced() {
-		session := sessions.Default(c)
-		if _, signedIn := session.Get("userId").(string); !signedIn {
-			c.JSON(http.StatusUnauthorized, responses.Error{Error: errs.NotSignedIn})
-			return
-		}
+	// Scheduling is a manage action, on the same footing as editing the event
+	// and running its polls.
+	if !requireEventManager(c, event) {
+		return
 	}
 
 	var update bson.M

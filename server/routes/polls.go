@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -18,7 +17,6 @@ import (
 	"sirtom/server/logger"
 	"sirtom/server/models"
 	"sirtom/server/responses"
-	"sirtom/server/utils"
 )
 
 const (
@@ -97,28 +95,6 @@ func applyPollVote(poll *models.Poll, key, displayName string, optionIds []strin
 	return nil
 }
 
-// requireEventManager gates a poll-management action (create/delete) to the
-// event owner, mirroring scheduleEvent: when the event has an owner only that
-// owner may manage it; owner-less (guest-created) events require a signed-in
-// member on enforced invite-only instances. Writes the response + returns false
-// when not authorized.
-func requireEventManager(c *gin.Context, event *models.Event) bool {
-	session := sessions.Default(c)
-	userId, signedIn := session.Get("userId").(string)
-
-	if event.OwnerId != primitive.NilObjectID {
-		if !signedIn || utils.StringToObjectID(userId) != event.OwnerId {
-			c.JSON(http.StatusForbidden, responses.Error{Error: errs.UserNotEventOwner})
-			return false
-		}
-		return true
-	}
-	if db.AccessControlEnforced() && !signedIn {
-		c.JSON(http.StatusUnauthorized, responses.Error{Error: errs.NotSignedIn})
-		return false
-	}
-	return true
-}
 
 // @Summary Creates a venue/activity poll on an event (owner only)
 // @Tags events

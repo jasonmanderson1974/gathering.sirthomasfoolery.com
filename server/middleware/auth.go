@@ -60,23 +60,6 @@ func AuthRequired() gin.HandlerFunc {
 	}
 }
 
-// AuthRequiredIfInviteOnly enforces AuthRequired only when the instance is a
-// strictly-enforced invite-only instance (INVITE_ONLY_ENFORCED). It gates
-// unauthenticated writes that should be member-only on a locked-down instance
-// (e.g. createEvent) while leaving guest flows open on dev/open instances.
-func AuthRequiredIfInviteOnly() gin.HandlerFunc {
-	authRequired := AuthRequired()
-	return func(c *gin.Context) {
-		if db.AccessControlEnforced() {
-			// Delegates to AuthRequired, which either aborts (401/403) or sets
-			// authUser and advances the chain via c.Next().
-			authRequired(c)
-			return
-		}
-		c.Next()
-	}
-}
-
 // CanInviteRequired must be chained AFTER AuthRequired. It rejects signed-in
 // users who cannot invite (guests), gating the /admin group. Individual
 // handlers further restrict management actions to admins (CanManageUsers).
