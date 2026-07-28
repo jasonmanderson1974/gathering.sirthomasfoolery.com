@@ -1033,12 +1033,13 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
     ignored). Grep sweep clean — the only surviving hits are the sentinel definition, an unrelated
     monthly event counter, and the `db.GuestNameExists`/`UpdateGuestResponseName` helpers behind the
     now-owner-gated rename.
-  - **Test harnesses** (in the session scratchpad, not committed — offered for in-repo landing;
-    needs `ws` as a devDependency since Node 20 has no global `WebSocket`):
-    `signedout_check.js` drives a cookie-less Chrome over the public/gated routes asserting both
-    where you land and that the destination actually rendered; `signedin_check.js` + a session-cookie
-    minter (gorilla/securecookie, same codec as the server) exercise the signed-in UI without SMTP or
-    Google OAuth wired locally.
+  - **Test harnesses — landed in-repo** (`7f345e22`), documented in `DEVELOPMENT.md`:
+    `frontend/scripts/check-signed-out.js` (cookie-less Chrome over the public/gated routes,
+    asserting both where you land *and* that the destination rendered — run it after **any** change
+    to the router guard, `fetch_utils`' error path, or auth-dependent rendering) and
+    `check-signed-in.js`, backed by `server/tools/mintsession` (mints a session cookie so the
+    signed-in UI can be driven without SMTP or Google OAuth). Not in CI — they need a built
+    frontend + running server + Mongo — but both exit non-zero, so wiring them up stays open.
 
   **Phase 1 — backend gating** (`server/routes/events.go:26-57`): register `GET /:eventId/ics`
   bare; every other event route goes in an `AuthRequired()` sub-group
