@@ -63,10 +63,29 @@ full login.
 
 ### Event location address lookup (optional)
 
-The event location field is plain free text by default. Setting
-`VUE_APP_GOOGLE_MAPS_API_KEY` in `frontend/.env` adds Google address
-suggestions on top; with no key the inputs behave exactly as they did before,
-so this is never required to build or run anything.
+The event location field is plain free text by default. A Maps key adds Google
+address suggestions on top; with no key the inputs behave exactly as they did
+before, so this is never required to build or run anything.
+
+Where the key goes depends on how you're running the frontend:
+
+| Running via                        | Put the key in                                    |
+| ---------------------------------- | ------------------------------------------------- |
+| `npm run serve` / `npm run build`  | `frontend/.env` as `VUE_APP_GOOGLE_MAPS_API_KEY`  |
+| `compose.dev.yaml` (local Docker)  | root `.env` as `GOOGLE_MAPS_API_KEY`              |
+| production (`compose.yaml`)        | root `.env` as `GOOGLE_MAPS_API_KEY`              |
+
+**`frontend/.env` does not work inside Docker.** The Dockerfile always sets
+`ENV VUE_APP_GOOGLE_MAPS_API_KEY` (empty when no build arg is passed), and
+dotenv never overwrites an already-set variable — so a key in `frontend/.env`
+is silently ignored in any image build. Both compose files pass it as a build
+arg from the root `.env` instead. It is baked in at build time either way, so
+changing it needs a frontend rebuild.
+
+Local dev also needs `http://localhost:8080/*` and `http://localhost:3002/*`
+on the key's HTTP-referrer allowlist, or Google rejects the request with
+`RefererNotAllowedMapError`. Use a separate unrestricted dev key if you'd
+rather not widen the production one.
 
 The key must be a Maps Platform **browser** key with **Places API (New)** and
 **Maps JavaScript API** enabled, restricted by HTTP referrer and to those two

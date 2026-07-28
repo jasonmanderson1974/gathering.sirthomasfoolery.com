@@ -31,6 +31,11 @@ services:
       target: builder
       args:
         VUE_APP_GOOGLE_CLIENT_ID: "" # Google calendar disabled locally (login is OTP-only)
+        # Address lookup. Must come through as a build arg: the Dockerfile always
+        # sets this ENV, and dotenv won't overwrite an already-set variable, so a
+        # key in frontend/.env is ignored inside the image. Set GOOGLE_MAPS_API_KEY
+        # in the (gitignored) root .env; unset just means plain text fields.
+        VUE_APP_GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
     volumes:
       - frontend_dev_dist:/app/dist
     command:

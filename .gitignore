@@ -1,4 +1,8 @@
 *.exe
+# Root .env holds deploy-time secrets (OAuth client, SMTP, Maps key) and is
+# read by compose for build-arg interpolation. Never commit it.
+/.env
+/.env.local
 server/logs.log
 .DS_Store
 server/server
