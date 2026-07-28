@@ -15,6 +15,14 @@ import (
 // concurrent callers don't undo each other, and that the two "send this email
 // once" guards really are once. Each one fails against the old
 // whole-document `$set: event`.
+//
+// Remindee fixtures below carry nudgeStage = alreadyNudged so the reminder
+// scheduler's sweep skips them: `go test` runs packages in parallel against one
+// Mongo, and services/reminders sweeps every eligible event in the database.
+
+// alreadyNudged marks a fixture remindee as fully nudged (reminders.maxNudgeStage,
+// not importable from here — that package imports db).
+const alreadyNudged = 3
 
 func insertScopedTestEvent(t *testing.T, event models.Event) primitive.ObjectID {
 	t.Helper()
@@ -195,8 +203,8 @@ func TestDisarmSendEmailAfterXResponsesIgnoresStaleExpectation(t *testing.T) {
 func TestMarkRemindeeRespondedFlipsOnce(t *testing.T) {
 	no := false
 	remindees := []models.Remindee{
-		{Email: "a@example.test", Responded: &no},
-		{Email: "b@example.test", Responded: &no},
+		{Email: "a@example.test", Responded: &no, NudgeStage: alreadyNudged},
+		{Email: "b@example.test", Responded: &no, NudgeStage: alreadyNudged},
 	}
 	id := insertScopedTestEvent(t, models.Event{Name: "A16 remindees", Remindees: &remindees})
 
@@ -229,7 +237,7 @@ func TestMarkRemindeeRespondedFlipsOnce(t *testing.T) {
 
 func TestMarkRemindeeRespondedUnknownEmail(t *testing.T) {
 	no := false
-	remindees := []models.Remindee{{Email: "a@example.test", Responded: &no}}
+	remindees := []models.Remindee{{Email: "a@example.test", Responded: &no, NudgeStage: alreadyNudged}}
 	id := insertScopedTestEvent(t, models.Event{Name: "A16 unknown remindee", Remindees: &remindees})
 
 	ok, err := db.MarkRemindeeResponded(id, "nobody@example.test")

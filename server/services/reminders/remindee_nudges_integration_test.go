@@ -61,11 +61,15 @@ func TestProcessRemindeeNudges_SendsStageOneAndMarksIt(t *testing.T) {
 
 	var sentTo []string
 	processRemindeeNudges(now, func(to, subject, body, contentType string) error {
-		sentTo = append(sentTo, to)
+		// Only this test's own recipient: the sweep covers every eligible event
+		// in the database, and packages share one Mongo under `go test`.
+		if to == "nudge-a@example.test" {
+			sentTo = append(sentTo, to)
+		}
 		return nil
 	})
 
-	if len(sentTo) != 1 || sentTo[0] != "nudge-a@example.test" {
+	if len(sentTo) != 1 {
 		t.Fatalf("expected one nudge to nudge-a@example.test, got %v", sentTo)
 	}
 
@@ -88,7 +92,12 @@ func TestProcessRemindeeNudges_DoesNotResendWithinTheSameStage(t *testing.T) {
 	})
 
 	count := 0
-	send := func(to, subject, body, contentType string) error { count++; return nil }
+	send := func(to, subject, body, contentType string) error {
+		if to == "nudge-b@example.test" {
+			count++
+		}
+		return nil
+	}
 
 	processRemindeeNudges(now, send)
 	processRemindeeNudges(now.Add(time.Minute), send)
@@ -107,7 +116,12 @@ func TestProcessRemindeeNudges_SkipsRespondedRemindees(t *testing.T) {
 	})
 
 	count := 0
-	processRemindeeNudges(now, func(to, subject, body, contentType string) error { count++; return nil })
+	processRemindeeNudges(now, func(to, subject, body, contentType string) error {
+		if to == "nudge-done@example.test" {
+			count++
+		}
+		return nil
+	})
 
 	if count != 0 {
 		t.Fatalf("a remindee who has responded should not be nudged (got %d sends)", count)
@@ -126,7 +140,12 @@ func TestProcessRemindeeNudges_RetiresStaleRemindeesWithoutSending(t *testing.T)
 	})
 
 	count := 0
-	processRemindeeNudges(now, func(to, subject, body, contentType string) error { count++; return nil })
+	processRemindeeNudges(now, func(to, subject, body, contentType string) error {
+		if to == "nudge-stale@example.test" {
+			count++
+		}
+		return nil
+	})
 
 	if count != 0 {
 		t.Fatalf("stale remindee should not be nudged (got %d sends)", count)
