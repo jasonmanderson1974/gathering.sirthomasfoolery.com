@@ -554,11 +554,13 @@ func getCalendars(c *gin.Context) {
 	calendarEvents, editedCalendarAccounts := calendar.GetUsersCalendarEvents(user, accountsSet, payload.TimeMin, payload.TimeMax)
 
 	if editedCalendarAccounts {
-		db.UsersCollection.FindOneAndUpdate(
-			context.Background(),
-			bson.M{"_id": user.Id},
-			bson.M{"$set": user},
-		)
+		// Only the sub-calendar lists changed. Writing the whole user document
+		// back would also revert anything edited while the fetch was in flight.
+		if err := db.SetUserCalendarAccounts(user.Id, user.CalendarAccounts); err != nil {
+			// The events themselves are fine; only the refreshed sub-calendar
+			// list failed to persist, and the next fetch rebuilds it.
+			logger.StdErr.Println("failed to persist refreshed calendar accounts:", err)
+		}
 	}
 
 	c.JSON(http.StatusOK, calendarEvents)
@@ -601,12 +603,16 @@ func addGoogleCalendarAccount(c *gin.Context) {
 		RefreshToken:          models.EncryptedString(tokens.RefreshToken),
 	}
 
-	addCalendarAccount(c, addCalendarAccountArgs{
+	if err := addCalendarAccount(c, addCalendarAccountArgs{
 		calendarType:       models.GoogleCalendarType,
 		oAuth2CalendarAuth: calendarAuth,
 		email:              email,
 		picture:            picture,
-	})
+	}); err != nil {
+		logger.StdErr.Println(err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{})
 }
@@ -649,12 +655,16 @@ func addAppleCalendarAccount(c *gin.Context) {
 		return
 	}
 
-	addCalendarAccount(c, addCalendarAccountArgs{
+	if err := addCalendarAccount(c, addCalendarAccountArgs{
 		calendarType:      models.AppleCalendarType,
 		appleCalendarAuth: auth,
 		email:             payload.Email,
 		picture:           "",
-	})
+	}); err != nil {
+		logger.StdErr.Println(err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{})
 }
@@ -703,12 +713,16 @@ func addOutlookCalendarAccount(c *gin.Context) {
 		return
 	}
 
-	addCalendarAccount(c, addCalendarAccountArgs{
+	if err := addCalendarAccount(c, addCalendarAccountArgs{
 		calendarType:       models.OutlookCalendarType,
 		oAuth2CalendarAuth: calendarAuth,
 		email:              userInfo.Email,
 		picture:            "",
-	})
+	}); err != nil {
+		logger.StdErr.Println(err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{})
 }
@@ -744,13 +758,17 @@ func addICSCalendarAccount(c *gin.Context) {
 		return
 	}
 
-	addCalendarAccount(c, addCalendarAccountArgs{
+	if err := addCalendarAccount(c, addCalendarAccountArgs{
 		calendarType:    models.ICSCalendarType,
 		icsCalendarAuth: auth,
 		// ICS feeds don't have an email, so we use the label instead
 		email:   payload.Label,
 		picture: "",
-	})
+	}); err != nil {
+		logger.StdErr.Println(err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{})
 }
@@ -765,7 +783,10 @@ type addCalendarAccountArgs struct {
 	picture            string
 }
 
-func addCalendarAccount(c *gin.Context, args addCalendarAccountArgs) {
+// addCalendarAccount returns the error from the write rather than swallowing
+// it: answering 200 would tell the member their calendar was connected when
+// nothing was stored.
+func addCalendarAccount(c *gin.Context, args addCalendarAccountArgs) error {
 	// Get auth user
 	authUser := utils.GetAuthUser(c)
 
@@ -824,11 +845,7 @@ func addCalendarAccount(c *gin.Context, args addCalendarAccountArgs) {
 	authUser.CalendarAccounts[canonicalKey] = calendarAccount
 
 	// Perform mongo update
-	db.UsersCollection.FindOneAndUpdate(
-		context.Background(),
-		bson.M{"_id": authUser.Id},
-		bson.M{"$set": authUser},
-	)
+	return db.SetUserCalendarAccounts(authUser.Id, authUser.CalendarAccounts)
 }
 
 // @Summary Removes an existing calendar account

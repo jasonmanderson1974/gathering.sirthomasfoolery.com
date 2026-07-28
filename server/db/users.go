@@ -37,6 +37,27 @@ func GetUserById(userId string) (*models.User, error) {
 	return &user, nil
 }
 
+// SetUserCalendarAccounts replaces just the calendarAccounts field.
+//
+// Its three callers — addCalendarAccount, getCalendars and
+// RefreshUserTokenIfNecessary — each change one thing about the calendar
+// accounts and used to persist it with `$set: user`, the whole document. That
+// is the lost-update pattern A16 fixed for events, still live on users: a
+// calendar fetch that started before the member renamed themselves would write
+// the stale name back over the new one on completion. Scoping the write also
+// keeps the blast radius of the B7 token encryption to the field that holds the
+// tokens.
+//
+// Whole-field rather than a dotted path to one account, deliberately: the map
+// key is `email_TYPE` and emails contain dots, so Mongo would read
+// `calendarAccounts.a.b@c.com_google` as four levels of nesting.
+func SetUserCalendarAccounts(userId primitive.ObjectID, accounts map[string]models.CalendarAccount) error {
+	_, err := UsersCollection.UpdateByID(context.Background(), userId, bson.M{
+		"$set": bson.M{"calendarAccounts": accounts},
+	})
+	return err
+}
+
 func SetUserRole(email string, role models.Role) (int64, error) {
 	e := strings.ToLower(strings.TrimSpace(email))
 	if e == "" {

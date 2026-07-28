@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"sirtom/server/db"
 	"sirtom/server/logger"
@@ -249,11 +247,14 @@ func RefreshUserTokenIfNecessary(u *models.User, accounts models.Set[string]) {
 
 	// Update user object if accounts were updated
 	if numAccountsToUpdate > 0 {
-		db.UsersCollection.FindOneAndUpdate(
-			context.Background(),
-			bson.M{"_id": u.Id},
-			bson.M{"$set": u},
-		)
+		// Only the refreshed access tokens changed. Writing the whole user
+		// document back would revert anything edited while the refresh was in
+		// flight — the lost-update pattern A16 fixed for events.
+		if err := db.SetUserCalendarAccounts(u.Id, u.CalendarAccounts); err != nil {
+			// The in-memory tokens are still good, so the caller's calendar
+			// fetch succeeds; the next request just refreshes again.
+			logger.StdErr.Println("failed to persist refreshed access tokens:", err)
+		}
 	}
 }
 
