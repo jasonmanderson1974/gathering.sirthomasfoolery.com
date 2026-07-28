@@ -38,6 +38,22 @@ func SendEmail(toEmail string, subject string, body string, contentType string) 
 	return nil
 }
 
+// SendEmailAsync sends in the background, recovering from panics. For
+// fire-and-forget notifications, where a mail failure must never fail (or
+// slow down) the request that triggered it.
+func SendEmailAsync(toEmail string, subject string, body string, contentType string) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.StdErr.Println("panic sending email:", r)
+			}
+		}()
+		if err := SendEmail(toEmail, subject, body, contentType); err != nil {
+			logger.StdErr.Println("failed to send email:", err)
+		}
+	}()
+}
+
 func AddUserToMailchimp(email string, firstName string, lastName string) {
 	// Adds the given user to the default mailchimp audience
 	apiKey := os.Getenv("MAILCHIMP_API_KEY")

@@ -143,13 +143,32 @@ frontend rebuild (`./deploy.sh` does this when the frontend changes; otherwise
 | Variable                                     | Description                                  |
 | -------------------------------------------- | -------------------------------------------- |
 | `ANALYTICS_USERNAME` / `ANALYTICS_PASSWORD`  | Basic auth for /api/analytics routes         |
-| `SERVICE_ACCOUNT_KEY_PATH`                   | Google Cloud service account for Cloud Tasks |
 | `SLACK_*_WEBHOOK_URL`                        | Slack webhooks for notifications             |
-| `GMAIL_APP_PASSWORD` / `SCHEJ_EMAIL_ADDRESS` | Gmail SMTP for sending emails                |
-| `LISTMONK_*`                                 | Listmonk email service configuration         |
+| `GMAIL_APP_PASSWORD` / `SCHEJ_EMAIL_ADDRESS` | Gmail SMTP — the only mail transport. Without it no email is sent at all: OTP sign-in codes, invitations, pre-gathering reminders, remindee nudges and response notifications. |
 | `DISCORD_BOT_TOKEN` / `GUILD_ID`             | Discord bot integration                      |
 
 See `server/.env.template` for the complete list.
+
+### One-time migrations
+
+#### Remindee nudges (2026-07-28)
+
+The three "please fill this in" nudges moved from Cloud Tasks + Listmonk onto
+the in-process scheduler, which measures each remindee's schedule from a new
+`nudgeStage` field. Existing remindees have no such field, so they would all
+look overdue on the first tick after this deploy.
+
+Run this **before** starting the new binary, to retire every pre-existing
+remindee:
+
+```bash
+docker compose exec -T mongo mongosh --quiet schej-it --eval \
+  'db.events.updateMany({remindees: {$exists: true}}, {$set: {"remindees.$[].nudgeStage": 3}})'
+```
+
+The scheduler also refuses to nudge anything added more than 7 days ago, so
+this is belt-and-braces — but it is deterministic, and the age cutoff is not a
+substitute for it if you are restoring an old dump.
 
 ### Google OAuth Setup
 

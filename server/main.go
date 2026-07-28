@@ -23,7 +23,6 @@ import (
 	"sirtom/server/db"
 	"sirtom/server/logger"
 	"sirtom/server/routes"
-	"sirtom/server/services/gcloud"
 	"sirtom/server/services/reminders"
 	"sirtom/server/slackbot"
 	"sirtom/server/utils"
@@ -118,11 +117,8 @@ func main() {
 	closeConnection := db.Init()
 	defer closeConnection()
 
-	// Init google cloud stuff
-	closeTasks := gcloud.InitTasks()
-	defer closeTasks()
-
-	// Start the in-process pre-gathering reminder scheduler (Gmail SMTP)
+	// Start the in-process email scheduler: pre-gathering reminders and
+	// remindee nudges, both over Gmail SMTP
 	stopReminders := reminders.StartReminderScheduler()
 	defer stopReminders()
 

@@ -16,8 +16,6 @@ import (
 	"sirtom/server/logger"
 	"sirtom/server/models"
 	"sirtom/server/responses"
-	"sirtom/server/services/gcloud"
-	"sirtom/server/services/listmonk"
 	"sirtom/server/utils"
 )
 
@@ -341,17 +339,17 @@ func updateEventResponse(c *gin.Context) {
 					logger.StdErr.Println(respondentErr)
 					return
 				}
+				if respondent == nil {
+					return
+				}
 				respondentName = fmt.Sprintf("%s %s", respondent.FirstName, respondent.LastName)
 			}
 
-			{
-				someoneRespondedEmailId := 10
-				listmonk.SendEmail(creator.Email, someoneRespondedEmailId, bson.M{
-					"eventName":      event.Name,
-					"ownerName":      creator.FirstName,
-					"respondentName": respondentName,
-					"eventUrl":       fmt.Sprintf("%s/e/%s", utils.GetBaseUrl(), event.GetId()),
-				})
+			subject, body := buildSomeoneRespondedEmail(
+				creator.FirstName, respondentName, event.Name, eventURLFor(event),
+			)
+			if err := utils.SendEmail(creator.Email, subject, body, "text/html"); err != nil {
+				logger.StdErr.Println("someone-responded email failed:", err)
 			}
 		}()
 	}
@@ -380,13 +378,13 @@ func updateEventResponse(c *gin.Context) {
 				return
 			}
 
-			sendEmailAfterXResponsesEmailId := 14
-			listmonk.SendEmail(creator.Email, sendEmailAfterXResponsesEmailId, bson.M{
-				"eventName":    event.Name,
-				"ownerName":    creator.FirstName,
-				"eventUrl":     fmt.Sprintf("%s/e/%s", utils.GetBaseUrl(), event.GetId()),
-				"numResponses": len(eventResponses) + 1, // We add 1 because eventResponses is the old event responses before the current user is added
-			})
+			// +1 because eventResponses is the set from before this response
+			subject, body := buildXResponsesEmail(
+				creator.FirstName, event.Name, eventURLFor(event), len(eventResponses)+1,
+			)
+			if err := utils.SendEmail(creator.Email, subject, body, "text/html"); err != nil {
+				logger.StdErr.Println("x-responses email failed:", err)
+			}
 		}()
 	}
 
@@ -589,17 +587,14 @@ func userResponded(c *gin.Context) {
 		c.JSON(http.StatusNotFound, responses.Error{Error: errs.RemindeeEmailNotFound})
 		return
 	}
-	if *(*event.Remindees)[index].Responded {
+	if remindeeResponded((*event.Remindees)[index]) {
 		// If remindee has already responded, just return and don't update db
 		c.JSON(http.StatusOK, gin.H{})
 		return
 	}
+	// Marking them responded is also what stops any further nudges: the
+	// scheduler's query skips remindees who have answered.
 	(*event.Remindees)[index].Responded = utils.TruePtr()
-
-	// Delete the reminder email tasks
-	for _, taskId := range (*event.Remindees)[index].TaskIds {
-		gcloud.DeleteEmailTask(taskId)
-	}
 
 	// Update event in database
 	db.EventsCollection.UpdateByID(context.Background(), event.Id, bson.M{
@@ -609,29 +604,22 @@ func userResponded(c *gin.Context) {
 	// Email owner of event if all remindees have responded
 	everyoneResponded := true
 	for _, remindee := range *event.Remindees {
-		if !*remindee.Responded {
+		if !remindeeResponded(remindee) {
 			everyoneResponded = false
 			break
 		}
 	}
 	if everyoneResponded {
-		// Get owner
+		// The remindee's own update is already committed above, so a missing
+		// owner or a failed send must not turn this into an error for them —
+		// an event created by a guest has no owner account at all.
 		owner, ownerErr := db.GetUserById(event.OwnerId.Hex())
-		if ownerErr != nil {
-			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-			return
+		if ownerErr != nil || owner == nil || owner.Email == "" {
+			logger.StdErr.Println("everyone-responded email skipped:", ownerErr)
+		} else {
+			subject, body := buildEveryoneRespondedEmail(owner.FirstName, event.Name, eventURLFor(event))
+			utils.SendEmailAsync(owner.Email, subject, body, "text/html")
 		}
-
-		// Get event url
-		baseUrl := utils.GetBaseUrl()
-		eventUrl := fmt.Sprintf("%s/e/%s", baseUrl, eventId)
-
-		// Send email
-		everyoneRespondedEmailTemplateId := 8
-		listmonk.SendEmail(owner.Email, everyoneRespondedEmailTemplateId, bson.M{
-			"eventName": event.Name,
-			"eventUrl":  eventUrl,
-		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{})

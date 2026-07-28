@@ -1,10 +1,16 @@
-// Package reminders runs an in-process scheduler that emails a one-time
-// reminder to every availability respondent (with an email) a configurable
-// number of hours before a confirmed gathering's start time.
+// Package reminders runs an in-process scheduler for every email the app sends
+// on a schedule rather than in response to a request:
 //
-// It deliberately avoids the legacy Cloud Tasks + listmonk path (unconfigured
-// on this fork) and sends via Gmail SMTP (utils.SendEmail), the same transport
-// used for OTP + invite emails. Single-VM assumption: no distributed locking.
+//   - the one-time reminder to each availability respondent, a configurable
+//     number of hours before a confirmed gathering starts
+//   - the three "please fill this in" nudges to an event's remindees, at 0h,
+//     24h and 72h after they were added (see remindee_nudges.go)
+//
+// Everything goes via Gmail SMTP (utils.SendEmail), the same transport used for
+// OTP and invite emails. This replaced a Cloud Tasks + Listmonk arrangement that
+// was never configured here, so none of it ever actually sent.
+//
+// Single-VM assumption: no distributed locking.
 package reminders
 
 import (
@@ -28,10 +34,10 @@ const defaultInterval = 5 * time.Minute
 
 // StartReminderScheduler launches the background ticker and returns a stop
 // function. Each tick rolls recurring gatherings forward (C5) and, when Gmail
-// SMTP creds are present, sends any due pre-gathering reminders. Reminder emails
-// no-op without creds (mirrors gcloud.InitTasks), but recurrence advancement
-// runs regardless — it only touches the DB, so the event page always shows the
-// next occurrence even on an email-less instance.
+// SMTP creds are present, sends any due pre-gathering reminders and remindee
+// nudges. Sending no-ops without creds, but recurrence advancement runs
+// regardless — it only touches the DB, so the event page always shows the next
+// occurrence even on an email-less instance.
 func StartReminderScheduler() func() {
 	emailConfigured := os.Getenv("GMAIL_APP_PASSWORD") != "" && os.Getenv("SCHEJ_EMAIL_ADDRESS") != ""
 	if !emailConfigured {
@@ -56,6 +62,7 @@ func StartReminderScheduler() func() {
 		archivePastGatherings(now)
 		if emailConfigured {
 			processDueReminders(now, utils.SendEmail)
+			processRemindeeNudges(now, utils.SendEmail)
 		}
 	}
 
@@ -350,56 +357,29 @@ func buildReminderEmail(event *models.Event, start time.Time) (subject, body str
 	// account. Same-origin /api path (prod), served by getEventIcs.
 	icsUrl := fmt.Sprintf("%s/api/events/%s/ics", utils.GetBaseUrl(), event.GetId())
 
+	// event.Name, Location and Description are all user-supplied, so they go
+	// through the escaping helpers rather than straight into the markup.
 	locationRow := ""
 	if event.Location != nil && *event.Location != "" {
 		mapsUrl := "https://www.google.com/maps/search/?api=1&query=" + url.QueryEscape(*event.Location)
-		locationRow = fmt.Sprintf(
-			`<div style="font-size:14px;color:#ede4d3;margin-bottom:24px;">📍 <a href="%s" style="color:#e3c578;text-decoration:none;">%s</a></div>`,
-			mapsUrl, *event.Location,
-		)
+		locationRow = utils.EmailRow("📍 " + utils.EmailLink(mapsUrl, *event.Location))
 	}
 
 	descriptionRow := ""
 	if event.Description != nil && *event.Description != "" {
-		descriptionRow = fmt.Sprintf(
-			`<div style="font-size:14px;color:#b8ad97;line-height:1.6;margin-bottom:24px;">%s</div>`,
-			*event.Description,
-		)
+		descriptionRow = utils.EmailParagraph(*event.Description)
 	}
 
-	body = fmt.Sprintf(`<!DOCTYPE html>
-<html>
-<body style="margin:0;padding:0;background-color:#1c1410;">
-  <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="background-color:#1c1410;">
-    <tr>
-      <td align="center" style="padding:40px 16px;">
-        <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="max-width:440px;background-color:#241a13;border:1px solid #8a7333;border-radius:14px;">
-          <tr>
-            <td style="padding:32px 36px;font-family:Georgia,'Times New Roman',serif;color:#ede4d3;">
-              <div style="font-size:13px;font-weight:bold;letter-spacing:0.16em;color:#c9a44c;text-transform:uppercase;">The Fellowship</div>
-              <div style="height:1px;background-color:#8a7333;margin:18px 0 24px;"></div>
-              <div style="font-size:22px;color:#ede4d3;margin-bottom:10px;">A gathering approaches</div>
-              <div style="font-size:16px;color:#ede4d3;margin-bottom:6px;"><strong>%s</strong></div>
-              <div style="font-size:14px;color:#e3c578;margin-bottom:24px;">%s</div>
-              %s
-              %s
-              <div style="text-align:center;margin-bottom:16px;">
-                <a href="%s" style="display:inline-block;background-color:#c9a44c;color:#1c1410;font-weight:bold;text-decoration:none;padding:12px 28px;border-radius:8px;letter-spacing:0.04em;">View the Gathering</a>
-              </div>
-              <div style="text-align:center;margin-bottom:24px;">
-                <a href="%s" style="display:inline-block;color:#e3c578;text-decoration:none;font-size:13px;border:1px solid #8a7333;padding:9px 22px;border-radius:8px;">Add to calendar</a>
-              </div>
-              <div style="font-size:12px;color:#b8ad97;line-height:1.5;">
-                Or visit: <span style="color:#e3c578;">%s</span>
-              </div>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`, event.Name, when, locationRow, descriptionRow, eventUrl, icsUrl, eventUrl)
+	body = utils.RenderEmail(
+		"A gathering approaches",
+		utils.EmailStrongLine(event.Name)+
+			utils.EmailAccentLine(when)+
+			locationRow+
+			descriptionRow+
+			utils.EmailFooterURL(eventUrl),
+		utils.EmailAction{Label: "View the Gathering", URL: eventUrl},
+		utils.EmailAction{Label: "Add to calendar", URL: icsUrl, Secondary: true},
+	)
 
 	return subject, body
 }

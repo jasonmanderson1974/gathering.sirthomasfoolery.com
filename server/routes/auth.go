@@ -24,7 +24,6 @@ import (
 	"sirtom/server/responses"
 	"sirtom/server/services/auth"
 	"sirtom/server/services/calendar"
-	"sirtom/server/services/listmonk"
 	"sirtom/server/services/microsoftgraph"
 	"sirtom/server/utils"
 )
@@ -314,12 +313,6 @@ func signInHelper(c *gin.Context, token auth.TokenResponse, tokenOrigin models.T
 		}
 	}
 
-	if exists, userId := listmonk.DoesUserExist(email); exists {
-		listmonk.AddUserToListmonk(email, firstName, lastName, picture, userId, true)
-	} else {
-		listmonk.AddUserToListmonk(email, firstName, lastName, picture, nil, true)
-	}
-
 	// Set session variables
 	session := sessions.Default(c)
 	session.Set("userId", userId.Hex())
@@ -597,12 +590,6 @@ func verifyOtp(c *gin.Context) {
 			return
 		}
 		userId = res.InsertedID.(primitive.ObjectID)
-
-		if exists, listmonkUserId := listmonk.DoesUserExist(email); exists {
-			listmonk.AddUserToListmonk(email, firstName, lastName, "", listmonkUserId, true)
-		} else {
-			listmonk.AddUserToListmonk(email, firstName, lastName, "", nil, true)
-		}
 	} else {
 		userId = existing.Id
 	}

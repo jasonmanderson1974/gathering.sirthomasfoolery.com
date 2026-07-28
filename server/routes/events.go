@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -19,7 +20,6 @@ import (
 	"sirtom/server/models"
 	"sirtom/server/responses"
 	"sirtom/server/services/calendar"
-	"sirtom/server/services/gcloud"
 	"sirtom/server/utils"
 )
 
@@ -170,24 +170,16 @@ func createEvent(c *gin.Context) {
 	shortId := db.GenerateShortEventId(event.Id)
 	event.ShortId = &shortId
 
-	// Schedule reminder emails if remindees array is not empty
+	// Record the remindees. The scheduler (services/reminders) picks them up on
+	// its next tick and sends the nudges, measured from AddedAt.
 	if len(payload.Remindees) > 0 {
-		// Determine owner name
-		var ownerName string
-		if signedIn {
-			ownerName = user.FirstName
-		} else {
-			ownerName = "Somebody"
-		}
-
-		// Schedule email reminders for each of the remindees' emails
+		addedAt := primitive.NewDateTimeFromTime(time.Now())
 		remindees := make([]models.Remindee, 0)
 		for _, email := range payload.Remindees {
-			taskIds := gcloud.CreateEmailTask(email, ownerName, payload.Name, event.GetId())
 			remindees = append(remindees, models.Remindee{
 				Email:     email,
-				TaskIds:   taskIds,
 				Responded: utils.FalsePtr(),
+				AddedAt:   &addedAt,
 			})
 		}
 
@@ -311,40 +303,23 @@ func editEvent(c *gin.Context) {
 	if event.Type == models.DOW || event.Type == models.SPECIFIC_DATES {
 		origRemindees := utils.Coalesce(event.Remindees)
 		updatedRemindees := make([]models.Remindee, 0)
-		added, removed, kept := utils.FindAddedRemovedKept(payload.Remindees, utils.Map(origRemindees, func(r models.Remindee) string { return r.Email }))
-
-		// Determine owner name
-		var ownerName string
-		if event.OwnerId == primitive.NilObjectID {
-			ownerName = "Somebody"
-		} else {
-			owner, ownerErr := db.GetUserById(event.OwnerId.Hex())
-			if ownerErr != nil {
-				c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-				return
-			}
-			ownerName = owner.FirstName
-		}
+		// Removed remindees need no handling beyond being left out of
+		// updatedRemindees — dropping them stops their nudges.
+		added, _, kept := utils.FindAddedRemovedKept(payload.Remindees, utils.Map(origRemindees, func(r models.Remindee) string { return r.Email }))
 
 		for _, keptEmail := range kept {
 			updatedRemindees = append(updatedRemindees, origRemindees[keptEmail.Index])
 		}
 
+		// Newly added remindees start their own nudge clock from now — an event
+		// edited weeks after creation shouldn't fire all three at once.
+		addedAt := primitive.NewDateTimeFromTime(time.Now())
 		for _, addedEmail := range added {
-			// Schedule email tasks
-			taskIds := gcloud.CreateEmailTask(addedEmail.Value, ownerName, event.Name, event.GetId())
 			updatedRemindees = append(updatedRemindees, models.Remindee{
 				Email:     addedEmail.Value,
-				TaskIds:   taskIds,
 				Responded: utils.FalsePtr(),
+				AddedAt:   &addedAt,
 			})
-		}
-
-		for _, removedEmail := range removed {
-			// Delete email tasks
-			for _, taskId := range origRemindees[removedEmail.Index].TaskIds {
-				gcloud.DeleteEmailTask(taskId)
-			}
 		}
 
 		event.Remindees = &updatedRemindees
@@ -687,15 +662,8 @@ func deleteEvent(c *gin.Context) {
 		}
 	}
 
-	// Delete gcloud tasks
-	if event.Remindees != nil {
-		for _, remindee := range *event.Remindees {
-			// Delete email tasks
-			for _, taskId := range remindee.TaskIds {
-				gcloud.DeleteEmailTask(taskId)
-			}
-		}
-	}
+	// Nothing to unschedule: a deleted event drops out of the scheduler's query,
+	// so its remindees stop being nudged on the next tick.
 
 	c.Status(http.StatusOK)
 }

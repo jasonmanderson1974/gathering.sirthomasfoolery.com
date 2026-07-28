@@ -15,9 +15,26 @@ const (
 
 // Object containing information associated with the remindee
 type Remindee struct {
-	Email     string   `json:"email" bson:"email,omitempty"`
-	TaskIds   []string `json:"-" bson:"taskIds,omitempty"` // Task IDs of the scheduled emails
-	Responded *bool    `json:"responded" bson:"responded,omitempty"`
+	Email     string `json:"email" bson:"email,omitempty"`
+	Responded *bool  `json:"responded" bson:"responded,omitempty"`
+
+	// Nudge bookkeeping. The three "fill this in" emails used to be Cloud Tasks
+	// scheduled against Listmonk, so all the state lived outside the database
+	// (in a `taskIds` array that documents written before this change still
+	// carry — harmless, and dropped on their next write). They're driven by the
+	// in-process scheduler now, which needs to know when the clock started and
+	// how far along it is.
+
+	// AddedAt is when this remindee was attached to the event; the nudge
+	// schedule is measured from it, not from the event's creation, because
+	// editEvent can add remindees much later. Absent on older documents, where
+	// callers fall back to the event ObjectID's timestamp.
+	AddedAt *primitive.DateTime `json:"-" bson:"addedAt,omitempty"`
+	// NudgeStage is how many nudges have been sent (0..3). Omitted from BSON
+	// when 0, so queries must treat a missing field as 0.
+	NudgeStage int `json:"-" bson:"nudgeStage,omitempty"`
+	// LastNudgedAt is when the most recent nudge went out (diagnostics only).
+	LastNudgedAt *primitive.DateTime `json:"-" bson:"lastNudgedAt,omitempty"`
 }
 
 // Configuration + bookkeeping for the pre-gathering reminder email that fires

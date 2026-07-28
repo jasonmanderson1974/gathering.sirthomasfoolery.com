@@ -147,6 +147,69 @@ func MarkGatheringReminderSent(eventId primitive.ObjectID, sentAt primitive.Date
 	return err
 }
 
+// GetEventsWithPendingRemindeeNudges returns live, not-yet-scheduled events
+// that still have at least one remindee who hasn't responded and hasn't had all
+// their nudges. The scheduler (services/reminders) works out which stage is due
+// in Go on the returned set.
+//
+// Once a gathering has a confirmed time there is nothing left to nudge for, so
+// those are excluded here rather than filtered later.
+func GetEventsWithPendingRemindeeNudges() ([]models.Event, error) {
+	result, err := EventsCollection.Find(context.Background(), bson.M{
+		"isDeleted":      bson.M{"$ne": true},
+		"scheduledEvent": bson.M{"$exists": false},
+		"remindees": bson.M{"$elemMatch": bson.M{
+			"responded": bson.M{"$ne": true},
+			// nil matches documents where the field was never written (it is
+			// omitempty, so stage 0 is absent rather than 0).
+			"nudgeStage": bson.M{"$in": bson.A{0, 1, 2, nil}},
+		}},
+	})
+	if err != nil {
+		logger.StdErr.Println(err)
+		return []models.Event{}, err
+	}
+
+	var events []models.Event
+	if err := result.All(context.Background(), &events); err != nil {
+		logger.StdErr.Println(err)
+		return []models.Event{}, err
+	}
+
+	return events, nil
+}
+
+// MarkRemindeeNudged advances one remindee's nudge stage, but only if it is
+// still at expectedStage. That compare-and-set is what stops two overlapping
+// ticks from both deciding the same nudge is due and sending it twice. Reports
+// whether it actually advanced.
+func MarkRemindeeNudged(eventId primitive.ObjectID, email string, expectedStage, newStage int, sentAt primitive.DateTime) (bool, error) {
+	// Stage 0 is omitempty, so "still at 0" means 0 or absent.
+	var stageMatch interface{} = expectedStage
+	if expectedStage == 0 {
+		stageMatch = bson.M{"$in": bson.A{0, nil}}
+	}
+
+	res, err := EventsCollection.UpdateOne(context.Background(),
+		bson.M{
+			"_id": eventId,
+			"remindees": bson.M{"$elemMatch": bson.M{
+				"email":      email,
+				"nudgeStage": stageMatch,
+			}},
+		},
+		bson.M{"$set": bson.M{
+			"remindees.$.nudgeStage":   newStage,
+			"remindees.$.lastNudgedAt": sentAt,
+		}},
+	)
+	if err != nil {
+		logger.StdErr.Println(err)
+		return false, err
+	}
+	return res.ModifiedCount == 1, nil
+}
+
 // GetRecurringGatheringsToAdvance returns recurring gatherings whose current
 // occurrence has already ENDED (so it's safe to roll forward without disturbing
 // an in-progress gathering). The reminder scheduler computes the next occurrence
