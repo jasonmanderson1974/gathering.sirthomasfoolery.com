@@ -1,9 +1,5 @@
 package auth
 
-import (
-	"go.mongodb.org/mongo-driver/bson"
-)
-
 type TokenResponse struct {
 	AccessToken      string `json:"access_token"`
 	IdToken          string `json:"id_token"`
@@ -20,5 +16,12 @@ type AccessTokenResponse struct {
 	ExpiresIn   int    `json:"expires_in"`
 	Scope       string `json:"scope"`
 	TokenType   string `json:"token_type"`
-	Error       bson.M `json:"error"`
+	// Error and ErrorDescription mirror TokenResponse above: both Google and
+	// Microsoft report a failed refresh as a *string* code ("invalid_grant",
+	// "invalid_client") plus a human-readable description. Typing Error as an
+	// object made the whole decode fail, so the caller was handed a JSON type
+	// error and the real reason — revoked consent, expired refresh token, bad
+	// client credentials — was thrown away.
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
 }

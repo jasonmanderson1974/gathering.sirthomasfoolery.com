@@ -617,14 +617,47 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   scoped writer. (Locally only the read path is provable: `CLIENT_ID`/`CLIENT_SECRET` aren't set on
   the dev box, so the refresh returns `invalid_client` — which is how **B8** surfaced.)
 
-- [ ] **B8 · A failed OAuth token refresh reports the wrong reason.** `S` · **P3**
-  Found while verifying B7. `services/auth/types.go` types `AccessTokenResponse.Error` as `bson.M`,
-  but Google and Microsoft both return `"error": "invalid_grant"` — a *string*. So the decode in
-  `RefreshAccessToken` fails and the caller is told `json: cannot unmarshal string into Go struct
-  field AccessTokenResponse.error of type primitive.M`, while the actual reason (revoked consent,
-  expired refresh token, bad client credentials) is thrown away. `TokenResponse.Error` next door is
-  already correctly a `string` + `error_description`; make the two match. Pre-existing, unrelated to
-  B7 — the encryption work just made it visible.
+- [x] **B8 · A failed OAuth token refresh reports the wrong reason.** `S` · **P3 — DONE
+  2026-07-28** (build/vet/lint clean, full suite green). Found while verifying B7.
+  `services/auth/types.go` typed `AccessTokenResponse.Error` as `bson.M`, but Google and Microsoft
+  both return `"error": "invalid_grant"` — a *string*. So the decode in `RefreshAccessToken` failed
+  and the caller was told `json: cannot unmarshal string into Go struct field
+  AccessTokenResponse.error of type primitive.M`, while the actual reason (revoked consent, expired
+  refresh token, bad client credentials) was thrown away. `TokenResponse.Error` next door was
+  already correctly a `string` + `error_description`. Pre-existing, unrelated to B7 — the encryption
+  work just made it visible.
+
+  **Fixed as reported, plus the three things that made the fix worth nothing on its own** — the type
+  was only the first of four links in the chain, and repairing any one alone still loses the reason:
+  1. `Error string` + `ErrorDescription string`, matching `TokenResponse` (the `bson` import in
+     `types.go` goes away with it).
+  2. **`RefreshAccessToken` never checked the field.** Even decoding correctly, a refused refresh
+     returns HTTP 400 with a *well-formed* JSON body, so it decoded cleanly and the function
+     returned an empty access token and `nil` error. Now returns
+     `access token endpoint error: invalid_grant: Token has been expired or revoked.`, mirroring
+     `GetTokensFromAuthCode`.
+  3. **`RefreshUserTokenIfNecessary` silently `continue`d** on every refresh failure. A correct
+     error that reaches no log is still invisible — a user with revoked consent just sees an account
+     with no events. It logs the account and reason now.
+  4. **`RefreshAccessTokenAsync` left `Email`/`CalendarType` zero on both failure paths** (the error
+     return *and* the panic-recover), so that new log line would have read `for  ()`. Both now
+     carry the account.
+
+  Dropped the two bare `logger.StdErr.Println(err)` calls in `RefreshAccessToken` — they logged an
+  error the function also returns, and the caller-side log has the account context they lacked. One
+  line per failure, not two.
+
+  **Tests:** `services/auth` had none, so this adds `auth_test.go` (5) on a stubbed
+  `http.RoundTripper` — no network. The error-code case asserts the reason *and* explicitly guards
+  that the message no longer contains `cannot unmarshal`; the success case asserts a good refresh
+  still returns its token, so the new check can't pass by rejecting everything; plus a no-description
+  variant, a non-JSON body (must stay distinguishable from a refusal), and one that the async
+  wrapper carries the account on failure. Verified the guard is real by decoding Google's actual
+  error body into the old struct shape — it reproduces the `primitive.M` message verbatim.
+
+  **`services/auth` was not in the CI test list**, so these would never have run — the same gap
+  **B4** found. Added to `backend-ci.yml` and to all three package lists in `DEVELOPMENT.md`, two of
+  which had also drifted (missing `./encryption/` since B6).
 
 ---
 
@@ -973,10 +1006,10 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 6. **2026-07-27 wave — COMPLETE through A16/B5/E9 (2026-07-28).** Landed in this order: **B4** →
    **E3** (all five phases) → **E5/E6** → **E4** → **E7** → **A18/A19/A20** → **E8/E11** →
    **A16** → **B5** → **E9**.
-   Then **A17**, **B6** and **B7** — all closed 2026-07-28, four steps each.
-   **What's left:** **B8** (OAuth refresh error type, `S`/P3, filed by B7), **E10** (misc hardening,
-   `S`/P3, one sub-item already closed by B5), and the A21–A23 / P3 tail. Nothing in the remaining
-   set blocks anything else.
+   Then **A17**, **B6** and **B7** — all closed 2026-07-28, four steps each, and **B8** (the OAuth
+   refresh error type B7 filed) the same day.
+   **What's left:** **E10** (misc hardening, `S`/P3, one sub-item already closed by B5) and the
+   A21–A23 / P3 tail. Nothing in the remaining set blocks anything else.
 
 ---
 

@@ -162,15 +162,23 @@ func RefreshAccessToken(accountAuth *models.OAuth2CalendarAuth, calendarType mod
 		values,
 	)
 	if err != nil {
-		logger.StdErr.Println(err)
 		return AccessTokenResponse{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	var res AccessTokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		logger.StdErr.Println(err)
 		return AccessTokenResponse{}, fmt.Errorf("access token endpoint returned an unparseable body: %w", err)
+	}
+
+	// A refused refresh is a 400 with a normal JSON body, so it decodes cleanly.
+	// Without this check the caller gets an empty access token and no reason for
+	// it, and only notices when the calendar fetch fails further down.
+	if len(res.Error) > 0 {
+		if len(res.ErrorDescription) > 0 {
+			return res, fmt.Errorf("access token endpoint error: %s: %s", res.Error, res.ErrorDescription)
+		}
+		return res, fmt.Errorf("access token endpoint error: %s", res.Error)
 	}
 
 	return res, nil
@@ -184,17 +192,18 @@ type RefreshAccessTokenData struct {
 }
 
 func RefreshAccessTokenAsync(email string, accountAuth *models.OAuth2CalendarAuth, calendarType models.CalendarType, c chan RefreshAccessTokenData) {
-	// Recover from panics
+	// Recover from panics. The account is carried on the failure paths too, so
+	// the receiver can say *which* account failed and not just that one did.
 	defer func() {
 		if err := recover(); err != nil {
-			c <- RefreshAccessTokenData{Error: &err}
+			c <- RefreshAccessTokenData{Email: email, CalendarType: calendarType, Error: &err}
 		}
 	}()
 
 	tokenResponse, err := RefreshAccessToken(accountAuth, calendarType)
 	if err != nil {
 		var errIface interface{} = err
-		c <- RefreshAccessTokenData{Error: &errIface}
+		c <- RefreshAccessTokenData{Email: email, CalendarType: calendarType, Error: &errIface}
 		return
 	}
 
@@ -228,7 +237,11 @@ func RefreshUserTokenIfNecessary(u *models.User, accounts models.Set[string]) {
 	for i := 0; i < numAccountsToUpdate; i++ {
 		res := <-refreshTokenChan
 
+		// Log rather than swallow: a refresh that keeps failing (revoked consent,
+		// expired refresh token) is invisible from the outside — the user just
+		// sees an account with no events — so the reason needs to land somewhere.
 		if res.Error != nil {
+			logger.StdErr.Printf("failed to refresh access token for %s (%s): %v", res.Email, res.CalendarType, *res.Error)
 			continue
 		}
 
