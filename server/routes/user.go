@@ -304,35 +304,12 @@ func verifyEmailChange(c *gin.Context) {
 // buildEmailChangeOtpBody returns the Fellowship-themed HTML email for
 // confirming a new email address (mirrors the sign-in code email).
 func buildEmailChangeOtpBody(code string) string {
-	return fmt.Sprintf(`<!DOCTYPE html>
-<html>
-<body style="margin:0;padding:0;background-color:#1c1410;">
-  <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="background-color:#1c1410;">
-    <tr>
-      <td align="center" style="padding:40px 16px;">
-        <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="max-width:440px;background-color:#241a13;border:1px solid #8a7333;border-radius:14px;">
-          <tr>
-            <td style="padding:32px 36px;font-family:Georgia,'Times New Roman',serif;color:#ede4d3;">
-              <div style="font-size:13px;font-weight:bold;letter-spacing:0.16em;color:#c9a44c;text-transform:uppercase;">The Fellowship</div>
-              <div style="height:1px;background-color:#8a7333;margin:18px 0 24px;"></div>
-              <div style="font-size:22px;color:#ede4d3;margin-bottom:10px;">Confirm your new address</div>
-              <div style="font-size:14px;color:#b8ad97;line-height:1.5;margin-bottom:24px;">
-                Enter this code to confirm this address for your Fellowship membership. It expires in ten minutes.
-              </div>
-              <div style="text-align:center;background-color:#2e2117;border:1px solid #8a7333;border-radius:10px;padding:20px;margin-bottom:24px;">
-                <span style="font-size:34px;font-weight:bold;letter-spacing:0.32em;color:#e3c578;font-family:'Courier New',monospace;">%s</span>
-              </div>
-              <div style="font-size:12px;color:#b8ad97;line-height:1.5;">
-                If you did not request this change, you may disregard this message.
-              </div>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`, code)
+	return utils.RenderEmail(
+		"Confirm your new address",
+		utils.EmailParagraph("Enter this code to confirm this address for your Fellowship membership. It expires in ten minutes.")+
+			utils.EmailCodeBlock(code)+
+			utils.EmailFootnote("If you did not request this change, you may disregard this message."),
+	)
 }
 
 // @Summary Updates the user's calendar options

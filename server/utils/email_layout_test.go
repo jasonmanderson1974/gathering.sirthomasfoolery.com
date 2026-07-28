@@ -101,6 +101,35 @@ func TestRenderEmailActions(t *testing.T) {
 	}
 }
 
+func TestEmailCodeBlockEscapes(t *testing.T) {
+	got := EmailCodeBlock("482913")
+	if !strings.Contains(got, "482913") {
+		t.Errorf("code missing from block: %q", got)
+	}
+	if !strings.Contains(got, "Courier New") {
+		t.Error("code block should be monospace")
+	}
+	if strings.Contains(EmailCodeBlock(xss), "<script>") {
+		t.Error("code block did not escape its input")
+	}
+}
+
+func TestEmailParagraphHTMLKeepsTrustedMarkup(t *testing.T) {
+	got := EmailParagraphHTML("sign in with " + EmailEmphasis("this email address"))
+	if !strings.Contains(got, "<strong") {
+		t.Errorf("trusted inline markup should survive: %q", got)
+	}
+	if !strings.Contains(got, "this email address") {
+		t.Errorf("text missing: %q", got)
+	}
+}
+
+func TestEmailEmphasisEscapes(t *testing.T) {
+	if strings.Contains(EmailEmphasis(xss), "<script>") {
+		t.Error("EmailEmphasis did not escape its input")
+	}
+}
+
 func TestRenderEmailDropsUnusableActions(t *testing.T) {
 	out := RenderEmail("Heading", "",
 		EmailAction{Label: "Bad scheme", URL: "javascript:alert(1)"},

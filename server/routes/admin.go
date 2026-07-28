@@ -176,37 +176,15 @@ func addAllowlistEmail(c *gin.Context) {
 // It does NOT contain a code — the invitee requests their own sign-in code when
 // they visit the link and enter this address.
 func buildInvitationEmailBody(signInURL string) string {
-	return fmt.Sprintf(`<!DOCTYPE html>
-<html>
-<body style="margin:0;padding:0;background-color:#1c1410;">
-  <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="background-color:#1c1410;">
-    <tr>
-      <td align="center" style="padding:40px 16px;">
-        <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="max-width:440px;background-color:#241a13;border:1px solid #8a7333;border-radius:14px;">
-          <tr>
-            <td style="padding:32px 36px;font-family:Georgia,'Times New Roman',serif;color:#ede4d3;">
-              <div style="font-size:13px;font-weight:bold;letter-spacing:0.16em;color:#c9a44c;text-transform:uppercase;">The Fellowship</div>
-              <div style="height:1px;background-color:#8a7333;margin:18px 0 24px;"></div>
-              <div style="font-size:22px;color:#ede4d3;margin-bottom:10px;">You are invited</div>
-              <div style="font-size:14px;color:#b8ad97;line-height:1.6;margin-bottom:24px;">
-                You have been invited to take your place among The Fellowship. To accept, present
-                yourself at the gate and sign in with <strong style="color:#ede4d3;">this email address</strong>.
-                A one-time code will be sent to confirm your entry.
-              </div>
-              <div style="text-align:center;margin-bottom:24px;">
-                <a href="%s" style="display:inline-block;background-color:#c9a44c;color:#1c1410;font-weight:bold;text-decoration:none;padding:12px 28px;border-radius:8px;letter-spacing:0.04em;">Enter the Gathering</a>
-              </div>
-              <div style="font-size:12px;color:#b8ad97;line-height:1.5;">
-                Or visit: <span style="color:#e3c578;">%s</span>
-              </div>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`, signInURL, signInURL)
+	return utils.RenderEmail(
+		"You are invited",
+		utils.EmailParagraphHTML(
+			"You have been invited to take your place among The Fellowship. To accept, present "+
+				"yourself at the gate and sign in with "+utils.EmailEmphasis("this email address")+". "+
+				"A one-time code will be sent to confirm your entry.")+
+			utils.EmailFooterURL(signInURL),
+		utils.EmailAction{Label: "Enter the Gathering", URL: signInURL},
+	)
 }
 
 // @Summary Removes an email from the allowlist

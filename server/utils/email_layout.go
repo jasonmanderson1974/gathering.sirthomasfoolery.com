@@ -100,6 +100,31 @@ func EmailRow(innerHTML string) string {
 	)
 }
 
+// EmailParagraphHTML is EmailParagraph for copy that carries its own inline
+// markup (a <strong>, say). innerHTML is trusted: pass literal copy, or escape
+// any interpolated value with EscapeText first.
+func EmailParagraphHTML(innerHTML string) string {
+	return fmt.Sprintf(
+		`<div style="font-size:14px;color:%s;line-height:1.6;margin-bottom:24px;">%s</div>`,
+		emailInkMuted, innerHTML,
+	)
+}
+
+// EmailEmphasis marks text inside a paragraph, in the primary ink.
+func EmailEmphasis(text string) string {
+	return fmt.Sprintf(`<strong style="color:%s;">%s</strong>`, emailInk, html.EscapeString(text))
+}
+
+// EmailCodeBlock renders a one-time code in the bordered monospace box the
+// sign-in and email-change emails use.
+func EmailCodeBlock(code string) string {
+	return fmt.Sprintf(
+		`<div style="text-align:center;background-color:#2e2117;border:1px solid %s;border-radius:10px;padding:20px;margin-bottom:24px;">`+
+			`<span style="font-size:34px;font-weight:bold;letter-spacing:0.32em;color:%s;font-family:'Courier New',monospace;">%s</span></div>`,
+		emailBorder, emailAccent, html.EscapeString(code),
+	)
+}
+
 // EmailFooterURL renders the "Or visit: <url>" fallback for clients that mangle
 // buttons.
 func EmailFooterURL(url string) string {
