@@ -1006,10 +1006,11 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 6. **2026-07-27 wave — COMPLETE through A16/B5/E9 (2026-07-28).** Landed in this order: **B4** →
    **E3** (all five phases) → **E5/E6** → **E4** → **E7** → **A18/A19/A20** → **E8/E11** →
    **A16** → **B5** → **E9**.
-   Then **A17**, **B6** and **B7** — all closed 2026-07-28, four steps each, and **B8** (the OAuth
-   refresh error type B7 filed) the same day.
-   **What's left:** **E10** (misc hardening, `S`/P3, one sub-item already closed by B5) and the
-   A21–A23 / P3 tail. Nothing in the remaining set blocks anything else.
+   Then **A17**, **B6** and **B7** — all closed 2026-07-28, four steps each — then **B8** (the OAuth
+   refresh error type B7 filed) and **E10** (misc hardening) the same day.
+   **What's left:** **E12** (`S`/P2, filed by E10 — the duplicated test-package list that has now
+   drifted three times) and the A21–A23 / P3 tail. Nothing in the remaining set blocks anything
+   else, but E12 is the one that keeps *causing* new items, so it's the natural next pick.
 
 ---
 
@@ -1436,22 +1437,56 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   drawn characters (the bias check), and that a planted id is skipped — with an assertion that the
   planted id is findable, so the collision probe can't pass vacuously.
 
-- [ ] **E10 · Misc hardening batch.** `S` · **P3**
-  *(line numbers re-checked 2026-07-28 against `06b2efb` — the A16/B5/E9 work shifted them.)*
-  - `main.go:106`: `CORS_ORIGINS` split on `,` without trimming — `"a.com, b.com"` silently
-    yields a never-matching `" b.com"` origin.
+- [x] **E10 · Misc hardening batch.** `S` · **P3 — DONE 2026-07-28** (build/vet/lint clean, full
+  suite green, race-clean, routes+reminders run 12× for the known flake).
+  All five sub-items resolved; two had already been closed by later work.
+  - **`CORS_ORIGINS` split on `,` without trimming** — `"a.com, b.com"` silently yielded a
+    never-matching `" b.com"` origin. Extracted `parseCorsOrigins` in `main.go`: trims each entry
+    and drops empties. The empty-entry handling also fixes the *fallback* — a whitespace-only or
+    trailing-comma value used to produce a garbage origin list where it should fall through to the
+    defaults, so that check is now `len(origins) == 0` rather than `raw == ""`. Worth knowing why
+    this one was invisible: a CORS rejection surfaces only in the browser console, and nothing
+    server-side logs it.
   - ~~`db/allowlist.go` `GetAllowlist` ignores the `cursor.All` error~~ — **DONE 2026-07-28** in
     **B5**: it returns `([]AllowlistEntry, error)` now, logs both the `Find` and `cursor.All`
     failures, and its one caller (`routes/admin.go` `getAllowlist`) 500s instead of rendering a
     broken query as "the Fellowship has no members".
-  - `utils/utils.go:212`: bare `panic(err)` on base64 decode in a shared helper.
-  - `deleteEvent` (`routes/events.go:719`) / `archiveEvent` (`:902`): non-owner gets a 500
-    (`Decode` on the empty result) instead of 403/404; `archiveEvent` also still uses
-    `ObjectIDFromHex` directly (13 lines into the handler) so short ids 400 — same sharp edge E2
-    fixed for delete.
-  - `utils/ratelimit.go:49`: janitor goroutine has no stop channel / ticker never stopped —
-    fine as a process-lifetime singleton, unsafe if ever constructed per-test; document or add a
-    stop.
+  - ~~`utils/utils.go:212`: bare `panic(err)` on base64 decode~~ — **already gone**, closed by
+    **B6/B7** when encryption moved out of `utils` into the `encryption` package. The helper is
+    `encryption.go:58` now and returns `([]byte, error)`; its caller wraps it as `ciphertext is not
+    valid base64: %w` (`:109`). Verified there is no remaining `panic(` anywhere outside
+    `server/scripts/`.
+  - **`deleteEvent` / `archiveEvent` returned 500 to a non-owner.** Both used `ownerId: user.Id` as
+    a Mongo *filter* rather than an authorization check, so a non-owner matched no document and
+    `Decode` returned `ErrNoDocuments` — reported as `internal-error`. Both now resolve the event
+    first and call the existing `requireEventManager` (403 `user-not-event-owner`), and a genuinely
+    missing document 404s via `errors.Is(err, mongo.ErrNoDocuments)`. `archiveEvent` also resolved
+    its id with `ObjectIDFromHex` directly, so short ids 400'd — it uses `GetEventByEitherId` now,
+    the same sharp edge **E2** fixed for delete.
+
+    **Third thing the filter was hiding:** a legacy ownerless event (created before **E3** removed
+    anonymous creation) had `ownerId = NilObjectID`, which no user's id can equal — so those events
+    were undeletable and unarchivable by *anyone*, always 500. `requireEventManager` gives them the
+    member-or-above rule the edit and schedule routes already use. Tested from both sides: a member
+    can now delete one, a guest still gets 403, so the ownerless path didn't become a hole.
+  - **`utils/ratelimit.go` janitor had no stop.** Added `Stop()` (a stop channel closed under
+    `sync.Once`, so it's idempotent) and `defer ticker.Stop()`; the janitor now selects on both.
+    Not hypothetical — `ratelimit_test.go` already built five limiters, each leaking a goroutine
+    and a ticker for the rest of the run; all five now `defer rl.Stop()`. Also split the sweep body
+    out as `evictStale(age)` so eviction is testable without waiting on a 10-minute ticker.
+
+  **Tests (13 new).** Six DB-gated handler tests in `routes/events_archive_db_test.go` — short-id
+  archive, non-owner 403 on both handlers, 404, and the ownerless member/guest pair — each
+  asserting the *side effect* too (a refused delete must leave the event present; a refused archive
+  must leave it unarchived), since a handler returning 403 while still writing would otherwise
+  pass. Confirmed all six fail against the pre-fix handlers with exactly the reported symptoms
+  (`got 500, want 403`; `got 400, want 200`). Seven table cases for `parseCorsOrigins`, plus
+  `Stop`-halts-the-janitor (goroutine count) and `evictStale`.
+
+  **`.` (the main package) was not in the CI test list**, so `parseCorsOrigins` coverage wouldn't
+  have run — the third instance of the **B4** gap in three items (B8 hit it with `services/auth`).
+  Added to `backend-ci.yml` and the three `DEVELOPMENT.md` lists. **This keeps recurring: a single
+  source for the package list is worth doing** — filed as **E12**.
 
 - [x] **E11 · `createEvent` / `editEvent` accept an unvalidated `EventType`.** `S` · **P2 — DONE
   2026-07-28** (build/vet clean, full suite green). Confirmed exactly as reported. Added
@@ -1461,3 +1496,29 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   **plus two DB-gated end-to-end tests** driving the real `createEvent` — the pure tests can't catch
   a handler that forgets to call the validator, and one of the pair asserts the valid spelling still
   returns 201 so the guard isn't rejecting everything.
+
+- [ ] **E12 · The backend test-package list is duplicated in four places and keeps drifting.** `S` ·
+  **P2**
+  Filed by **E10** (2026-07-28). `go test ./...` can't be used because the stale one-off
+  `server/scripts/` no longer compiles, so every caller spells out the package list instead — and
+  there are four copies: `backend-ci.yml`, and three in `DEVELOPMENT.md` (local command, Docker
+  fallback, CI summary). They have drifted three times in two days: **B4** found CI skipping three
+  test files; **B8** found `services/auth` missing, so a new test package would have run nowhere;
+  **E10** found `.` (main) missing and two `DEVELOPMENT.md` lists still lacking `./encryption/` from
+  **B6**. Each was caught only because someone happened to look.
+
+  The list is also *wrong by construction* — it enumerates packages that have tests today, so a new
+  package's tests are invisible until someone remembers to add it. That's backwards: the exclusion
+  is `scripts/`, and everything else should be in.
+
+  **Fix:** derive it, don't spell it — `go test $(go list ./... | grep -v '/scripts')`, matching
+  what `go vet` and `golangci-lint` in the same workflow already do (they exclude `/scripts` and
+  take everything else). Then `DEVELOPMENT.md` quotes that one command in all three spots and
+  nothing can drift. Check first that no test-less package misbehaves under `go test` and that the
+  DB-gated packages still skip cleanly without `MONGODB_URI`.
+
+  **Better still, and cheap:** fix `server/scripts/` so the exclusion isn't needed at all. It's
+  three files referencing model fields deleted years ago (`Event.Responses`,
+  `CalendarAccount.AccessToken`) — see **A22**/**D2** territory. They are one-off dated migrations
+  that have already run in prod; deleting them is probably more honest than repairing them, but
+  either way `go test ./...` would then just work and this whole class of bug goes away.

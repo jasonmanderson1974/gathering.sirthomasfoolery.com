@@ -4,6 +4,7 @@ package routes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"sirtom/server/db"
 	"sirtom/server/errs"
 	"sirtom/server/logger"
@@ -721,8 +723,18 @@ func deleteEvent(c *gin.Context) {
 	objectId := resolvedEvent.Id
 	eventId := objectId.Hex()
 
-	userInterface, _ := c.Get("authUser")
-	user := userInterface.(*models.User)
+	// Authorize before touching anything. The Mongo filters below used to carry
+	// `ownerId: user.Id` as the only check, so a non-owner matched no document
+	// and Decode returned ErrNoDocuments — reported as a 500. That both hid the
+	// real answer (403) and made a legacy ownerless event undeletable by anyone.
+	if !requireEventManager(c, resolvedEvent) {
+		return
+	}
+
+	user, ok := authUser(c)
+	if !ok {
+		return
+	}
 
 	// Check if the current user responded
 	eventResponses, eventResponsesErr := db.GetEventResponses(eventId)
@@ -748,8 +760,7 @@ func deleteEvent(c *gin.Context) {
 	if hasResponses {
 		// If event has responses, just set isDeleted flag
 		result := db.EventsCollection.FindOneAndUpdate(context.Background(), bson.M{
-			"_id":     objectId,
-			"ownerId": user.Id,
+			"_id": objectId,
 		}, bson.M{
 			"$set": bson.M{
 				"isDeleted": true,
@@ -757,6 +768,12 @@ func deleteEvent(c *gin.Context) {
 		})
 		err = result.Decode(&event)
 		if err != nil {
+			// Authorization already passed, so no document here means the event
+			// was removed between the lookup and the write — 404, not 500.
+			if errors.Is(err, mongo.ErrNoDocuments) {
+				c.JSON(http.StatusNotFound, responses.Error{Error: errs.EventNotFound})
+				return
+			}
 			logger.StdErr.Println(err)
 			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 			return
@@ -764,11 +781,14 @@ func deleteEvent(c *gin.Context) {
 	} else {
 		// If event has no responses, actually delete the event object
 		result := db.EventsCollection.FindOneAndDelete(context.Background(), bson.M{
-			"_id":     objectId,
-			"ownerId": user.Id,
+			"_id": objectId,
 		})
 		err = result.Decode(&event)
 		if err != nil {
+			if errors.Is(err, mongo.ErrNoDocuments) {
+				c.JSON(http.StatusNotFound, responses.Error{Error: errs.EventNotFound})
+				return
+			}
 			logger.StdErr.Println(err)
 			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 			return
@@ -896,29 +916,38 @@ func archiveEvent(c *gin.Context) {
 		return
 	}
 
-	eventId := c.Param("eventId")
-
-	objectId, err := primitive.ObjectIDFromHex(eventId)
+	// Resolve by either id, like every other event route. ObjectIDFromHex alone
+	// 400'd on a short id — the same sharp edge E2 fixed for delete.
+	resolvedEvent, err := db.GetEventByEitherId(c.Param("eventId"))
 	if err != nil {
-		// eventId is malformatted
-		c.Status(http.StatusBadRequest)
+		logger.StdErr.Println(err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
+	if resolvedEvent == nil {
+		c.JSON(http.StatusNotFound, responses.Error{Error: errs.EventNotFound})
 		return
 	}
 
-	userInterface, _ := c.Get("authUser")
-	user := userInterface.(*models.User)
+	// As in deleteEvent: authorize explicitly, so a non-owner gets 403 rather
+	// than the 500 an unmatched `ownerId` filter used to produce.
+	if !requireEventManager(c, resolvedEvent) {
+		return
+	}
 
 	result := db.EventsCollection.FindOneAndUpdate(context.Background(), bson.M{
-		"_id":     objectId,
-		"ownerId": user.Id,
+		"_id": resolvedEvent.Id,
 	}, bson.M{
 		"$set": bson.M{
 			"isArchived": payload.Archive,
 		},
 	})
 	var event models.Event
-	err = result.Decode(&event)
-	if err != nil {
+	if err := result.Decode(&event); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			c.JSON(http.StatusNotFound, responses.Error{Error: errs.EventNotFound})
+			return
+		}
 		logger.StdErr.Println(err)
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 		return

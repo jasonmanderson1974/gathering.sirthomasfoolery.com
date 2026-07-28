@@ -103,12 +103,12 @@ func main() {
 	router.Use(gin.Recovery())
 
 	// Cors
-	corsOrigins := os.Getenv("CORS_ORIGINS")
-	if corsOrigins == "" {
-		corsOrigins = "https://gathering.sirthomasfoolery.com,http://localhost:8080"
+	corsOrigins := parseCorsOrigins(os.Getenv("CORS_ORIGINS"))
+	if len(corsOrigins) == 0 {
+		corsOrigins = []string{"https://gathering.sirthomasfoolery.com", "http://localhost:8080"}
 	}
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     strings.Split(corsOrigins, ","),
+		AllowOrigins:     corsOrigins,
 		AllowMethods:     []string{"GET", "POST", "PATCH", "PUT", "DELETE"},
 		AllowHeaders:     []string{"Content-Type"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -221,6 +221,25 @@ func loadDotEnv() {
 	// Validate secrets
 	validateSessionSecret()
 	validateEncryptionKey()
+}
+
+// parseCorsOrigins splits CORS_ORIGINS on commas, trimming surrounding
+// whitespace and dropping empty entries.
+//
+// The trim is the point: a browser's Origin header carries no spaces, so the
+// natural-looking `CORS_ORIGINS="a.example.com, b.example.com"` produced a
+// literal " b.example.com" entry that could never match. The second origin was
+// silently blocked, and CORS rejections surface only in the browser console —
+// nothing server-side says why.
+func parseCorsOrigins(raw string) []string {
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			origins = append(origins, trimmed)
+		}
+	}
+	return origins
 }
 
 // validateSessionSecret ensures SESSION_SECRET is set and meets security requirements

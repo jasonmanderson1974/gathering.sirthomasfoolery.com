@@ -70,14 +70,16 @@ jobs:
           curl -sL https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz | tar xz -C /tmp
           /tmp/golangci-lint-2.12.2-linux-amd64/golangci-lint run $(go list -f '{{.Dir}}' ./... | grep -v '/scripts')
 
-      # models/routes/utils need no external services; db and services/reminders
-      # run integration tests against the Mongo service above (they skip when
-      # MONGODB_URI is unset). services/auth, services/calendar, services/contacts
-      # and services/microsoftgraph hold pure-logic tests (OAuth token-response
-      # decoding, ICS generation, contact formatting, Graph parsing) — the
-      # *packages* talk to external APIs, but their tests stub the transport, so
-      # they belong here. Any services/* package without tests is simply omitted.
+      # `.` is the main package — config parsing (CORS origins, secret/key
+      # validation), no server boot. models/routes/utils need no external
+      # services; db and services/reminders run integration tests against the
+      # Mongo service above (they skip when MONGODB_URI is unset). services/auth,
+      # services/calendar, services/contacts and services/microsoftgraph hold
+      # pure-logic tests (OAuth token-response decoding, ICS generation, contact
+      # formatting, Graph parsing) — the *packages* talk to external APIs, but
+      # their tests stub the transport, so they belong here. Any package without
+      # tests is simply omitted.
       - name: Run tests
         env:
           MONGODB_URI: mongodb://localhost:27017
-        run: go test ./models/ ./routes/ ./utils/ ./db/ ./encryption/ ./services/auth/ ./services/reminders/ ./services/calendar/ ./services/contacts/ ./services/microsoftgraph/
+        run: go test . ./models/ ./routes/ ./utils/ ./db/ ./encryption/ ./services/auth/ ./services/reminders/ ./services/calendar/ ./services/contacts/ ./services/microsoftgraph/

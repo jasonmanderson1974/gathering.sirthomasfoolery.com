@@ -108,7 +108,7 @@ npm run test:unit
 **Backend** (`cd server`) — needs a Go toolchain and a reachable Mongo for the
 `db` integration tests (`compose.dev.yaml` provides one on `localhost:27017`):
 ```bash
-MONGODB_URI=mongodb://localhost:27017 go test ./models/ ./routes/ ./utils/ ./db/ ./encryption/ \
+MONGODB_URI=mongodb://localhost:27017 go test . ./models/ ./routes/ ./utils/ ./db/ ./encryption/ \
   ./services/auth/ ./services/reminders/ ./services/calendar/ ./services/contacts/ \
   ./services/microsoftgraph/
 ```
@@ -142,9 +142,11 @@ curl -sL https://github.com/golangci/golangci-lint/releases/download/v2.12.2/gol
 > run. CI silently linted nothing this way until 2026-07-28.
 
 If something is genuinely not worth fixing, suppress it narrowly **with a
-reason** — see the `//nolint:staticcheck` on AES-CFB in `utils/utils.go`
-(tracked as B6) — rather than restoring `continue-on-error`. errcheck is
-already relaxed for `_test.go` teardown; see `server/.golangci.yml`.
+reason** — `//nolint:<linter> // why`, on the one line — rather than restoring
+`continue-on-error`. There are currently **no** `nolint` directives in the tree
+(the last one, on AES-CFB in `utils/utils.go`, went away with B6), so keep that
+the exception it should be. errcheck is already relaxed for `_test.go`
+teardown; see `server/.golangci.yml`.
 
 **Cross-package test isolation.** `go test` runs packages in parallel against
 one Mongo, and `services/reminders` sweeps *every* eligible event in the
@@ -158,7 +160,7 @@ If you have no local Go toolchain, run the tests in a container (matches CI):
 ```bash
 docker run --rm -e MONGODB_URI=mongodb://host.docker.internal:27017 \
   -v "$PWD/server:/src" -w /src golang:1.25-alpine \
-  sh -c "go build . && go test ./models/ ./routes/ ./utils/ ./db/ ./encryption/ \
+  sh -c "go build . && go test . ./models/ ./routes/ ./utils/ ./db/ ./encryption/ \
     ./services/auth/ ./services/reminders/ ./services/calendar/ ./services/contacts/ \
     ./services/microsoftgraph/"
 ```
@@ -250,7 +252,7 @@ Remember to delete the seeded documents afterwards.
 
 - **`backend-ci.yml`** — on `server/**` changes: `go build` + **`go vet`** +
   **`golangci-lint` (blocking since 2026-07-28)** + `go test` for
-  `models/ routes/ utils/ db/ encryption/ services/auth/ services/reminders/
+  `. (main) models/ routes/ utils/ db/ encryption/ services/auth/ services/reminders/
   services/calendar/ services/contacts/ services/microsoftgraph/`, with an ephemeral Mongo service
   for the DB-backed tests. Keep that package list in sync with the Testing
   section above.
