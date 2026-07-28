@@ -311,7 +311,6 @@ export default {
     currSignUpBlock: null,
   }),
 
-  beforeMount() {},
 
   mounted() {
     // If coming from enabling contacts, show the dialog. Checks if contactsPayload is not an Observer.
@@ -732,9 +731,6 @@ export default {
     },
 
     highlightAvailabilityBtn() {
-      // if (!this.isPhone) {
-      //   window.scrollTo({ top: 0, behavior: "instant" })
-      // }
       this.availabilityBtnOpacity = 0.1
       setTimeout(() => {
         this.availabilityBtnOpacity = 1
@@ -782,24 +778,9 @@ export default {
         return
       }
 
-      // this.calendarEventsMap = {}
       const curWeekOffset = this.weekOffset
       return getCalendarEventsMap(this.event, { weekOffset: curWeekOffset })
         .then((eventsMap) => {
-          // If all calendars have error, then set calendarPermissionGranted to false
-          // TODO: What happens if user signed in without enabling calendar??
-          // let noError = false
-          // for (const key in eventsMap) {
-          //   if (!eventsMap[key].error) {
-          //     noError = true
-          //     break
-          //   }
-          // }
-          // if (!noError) {
-          //   this.calendarPermissionGranted = false
-          //   return
-          // }
-
           // Don't set calendar events / set availability if user has already
           // selected a different weekoffset by the time these calendar events load
           if (curWeekOffset !== this.weekOffset) return
@@ -885,11 +866,7 @@ export default {
 
     /** Resets week offset to 0 */
     resetWeekOffset() {
-      if (this.event && this.event.startOnMonday) {
-        this.weekOffset = 0
-      } else {
-        this.weekOffset = 0
-      }
+      this.weekOffset = 0
     },
 
     onBeforeUnload(e) {

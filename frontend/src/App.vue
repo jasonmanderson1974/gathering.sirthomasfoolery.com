@@ -3,11 +3,6 @@
     <AutoSnackbar color="error" :text="error" />
     <AutoSnackbar color="tw-bg-blue" :text="info" />
     <SignInNotSupportedDialog v-model="webviewDialog" />
-    <SignInDialog
-      v-model="signInDialog"
-      @signIn="_signIn"
-      @emailSignIn="_emailSignIn"
-    />
     <NewDialog
       v-model="newDialogOptions.show"
       type="event"
@@ -209,14 +204,12 @@ html {
 
 <script>
 import { mapMutations, mapState, mapActions, mapGetters } from "vuex"
-import { get, isPhone, signInGoogle, signInOutlook } from "@/utils"
-import { authTypes, calendarTypes, eventTypes } from "@/constants"
+import { get, isPhone } from "@/utils"
 import AutoSnackbar from "@/components/AutoSnackbar"
 import AuthUserMenu from "@/components/AuthUserMenu.vue"
 import SignInNotSupportedDialog from "@/components/SignInNotSupportedDialog.vue"
 import isWebview from "is-ua-webview"
 import NewDialog from "./components/NewDialog.vue"
-import SignInDialog from "@/components/SignInDialog.vue"
 import SirThomasFoolery from "@/components/general/SirThomasFoolery.vue"
 
 export default {
@@ -234,15 +227,12 @@ export default {
     AuthUserMenu,
     SignInNotSupportedDialog,
     NewDialog,
-    SignInDialog,
   },
 
   data: () => ({
     mounted: false,
     loaded: false,
-    scrollY: 0,
     webviewDialog: false,
-    signInDialog: false,
   }),
 
   computed: {
@@ -280,9 +270,6 @@ export default {
       "setFeatureFlagsLoaded",
     ]),
     ...mapActions(["getEvents", "createNew"]),
-    handleScroll(e) {
-      this.scrollY = window.scrollY
-    },
     _createNew(eventOnly = false) {
       this.$posthog.capture("create_new_button_clicked", {
         eventOnly: eventOnly,
@@ -290,49 +277,16 @@ export default {
       this.createNew({ eventOnly })
     },
     signIn() {
-      if (this.$route.name === "event" || this.$route.name === "signUp") {
-        if (isWebview(navigator.userAgent)) {
-          this.webviewDialog = true
-          return
-        }
-        this.$router.push({ name: "sign-in" })
-        // this.signInDialog = true
-      } else {
-        this.$router.push({ name: "sign-in" })
+      // In-app webview browsers can't complete OAuth, so warn instead of
+      // routing. Only reachable from the two routes a shared link lands on.
+      if (
+        (this.$route.name === "event" || this.$route.name === "signUp") &&
+        isWebview(navigator.userAgent)
+      ) {
+        this.webviewDialog = true
+        return
       }
-    },
-    _signIn(calendarType) {
-      if (this.$route.name === "event" || this.$route.name === "signUp") {
-        let state
-        if (this.$route.name === "event") {
-          state = {
-            eventId: this.$route.params.eventId,
-            type: authTypes.EVENT_SIGN_IN,
-          }
-        }
-        if (calendarType === calendarTypes.GOOGLE) {
-          signInGoogle({
-            state,
-            selectAccount: true,
-          })
-        } else if (calendarType === calendarTypes.OUTLOOK) {
-          signInOutlook({
-            state,
-            selectAccount: true,
-          })
-        }
-      }
-    },
-    _emailSignIn(user) {
-      this.setAuthUser(user)
-      this.$posthog?.identify(user._id, {
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-      })
-      if (this.$route.name === "landing") {
-        this.$router.push({ name: "home" })
-      }
+      this.$router.push({ name: "sign-in" })
     },
     setFeatureFlags() {
       if (!this.$posthog) return
@@ -362,18 +316,15 @@ export default {
       })
 
     // Event listeners
-    window.addEventListener("scroll", this.handleScroll)
 
     this.getEvents()
   },
 
   mounted() {
     this.mounted = true
-    this.scrollY = window.scrollY
   },
 
   beforeDestroy() {
-    window.removeEventListener("scroll", this.handleScroll)
   },
 
   watch: {
