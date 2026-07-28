@@ -105,16 +105,24 @@ Run before pushing.
 npm run test:unit
 ```
 
-**Backend** (`cd server`) — needs a Go toolchain and a reachable Mongo for the
-`db` integration tests (`compose.dev.yaml` provides one on `localhost:27017`):
+**Backend** (`cd server`) — needs a Go toolchain, plus a reachable Mongo if you
+want the integration tests to actually run (`compose.dev.yaml` provides one on
+`localhost:27017`):
 ```bash
-MONGODB_URI=mongodb://localhost:27017 go test . ./models/ ./routes/ ./utils/ ./db/ ./encryption/ \
-  ./services/auth/ ./services/reminders/ ./services/calendar/ ./services/contacts/ \
-  ./services/microsoftgraph/
+MONGODB_URI=mongodb://localhost:27017 go test $(go list ./... | grep -v '/scripts')
 ```
-> `go test ./...` fails on the stale one-off `server/scripts/` (outdated model
-> fields) — build/test the specific packages listed above instead. This list is
-> exactly what `backend-ci.yml` runs; keep the two in sync.
+> **`/scripts` is the only exclusion, and it is derived — never spell the
+> package list out.** Plain `go test ./...` fails on the one-off migrations
+> under `server/scripts/`, which reference model shapes from years ago and are
+> *deliberately* not kept compiling (see `server/scripts/README.md`). Everything
+> else is in, automatically. `go vet` and `golangci-lint` use the same
+> `go list | grep -v '/scripts'` shape, and so does `backend-ci.yml` — there is
+> nothing left to keep in sync. A hand-written list drifted three times in two
+> days (TODO B4, B8, E10) before this replaced it.
+>
+> Dropping `MONGODB_URI` is fine — the DB-backed tests call `requireDB` and skip
+> — but then you are running roughly half the backend suite, so don't read a
+> green run as a green build.
 
 > **Careful running `./db/` against a restored prod dump.** The B7 sweep test
 > calls `db.EncryptPlaintextOAuthTokens()`, which walks *every* user in whatever
@@ -160,9 +168,19 @@ If you have no local Go toolchain, run the tests in a container (matches CI):
 ```bash
 docker run --rm -e MONGODB_URI=mongodb://host.docker.internal:27017 \
   -v "$PWD/server:/src" -w /src golang:1.25-alpine \
-  sh -c "go build . && go test . ./models/ ./routes/ ./utils/ ./db/ ./encryption/ \
-    ./services/auth/ ./services/reminders/ ./services/calendar/ ./services/contacts/ \
-    ./services/microsoftgraph/"
+  sh -c "go build . && go test \$(go list ./... | grep -v '/scripts')"
+```
+> On Linux/WSL, `host.docker.internal` may not resolve — use
+> `--network host` with `MONGODB_URI=mongodb://localhost:27017` instead.
+
+**Race detector.** Worth running when you touch anything concurrent (the rate
+limiter's janitor, the token-refresh goroutines, the reminder scheduler). It
+needs cgo and a C compiler, which the dev boxes don't have, so use the Debian
+image rather than Alpine:
+```bash
+docker run --rm --network host -e MONGODB_URI=mongodb://localhost:27017 \
+  -e CGO_ENABLED=1 -v "$PWD/server:/src" -w /src golang:1.25 \
+  sh -c "go test -race \$(go list ./... | grep -v '/scripts')"
 ```
 
 **What's covered today:** role/permission logic (`models`), the admin
@@ -251,11 +269,11 @@ Remember to delete the seeded documents afterwards.
 ## CI (GitHub Actions)
 
 - **`backend-ci.yml`** — on `server/**` changes: `go build` + **`go vet`** +
-  **`golangci-lint` (blocking since 2026-07-28)** + `go test` for
-  `. (main) models/ routes/ utils/ db/ encryption/ services/auth/ services/reminders/
-  services/calendar/ services/contacts/ services/microsoftgraph/`, with an ephemeral Mongo service
-  for the DB-backed tests. Keep that package list in sync with the Testing
-  section above.
+  **`golangci-lint` (blocking since 2026-07-28)** + `go test`, with an ephemeral
+  Mongo service for the DB-backed tests. All three analysis steps run over
+  `go list ./... | grep -v '/scripts'` — every package except the stale one-off
+  migrations. Nothing here enumerates packages, so nothing can drift out of sync
+  with the Testing section above (TODO E12).
 - **`frontend-ci.yml`** — on `frontend/**` changes: `npm run test:unit` + build.
 - Both run on push to `main` and PRs. `gh run list` targets this repo directly
   (it was detached from the schej-it fork network), so no `--repo` flag is needed.

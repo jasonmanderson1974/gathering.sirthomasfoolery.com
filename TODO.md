@@ -1007,10 +1007,16 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
    **E3** (all five phases) → **E5/E6** → **E4** → **E7** → **A18/A19/A20** → **E8/E11** →
    **A16** → **B5** → **E9**.
    Then **A17**, **B6** and **B7** — all closed 2026-07-28, four steps each — then **B8** (the OAuth
-   refresh error type B7 filed) and **E10** (misc hardening) the same day.
-   **What's left:** **E12** (`S`/P2, filed by E10 — the duplicated test-package list that has now
-   drifted three times) and the A21–A23 / P3 tail. Nothing in the remaining set blocks anything
-   else, but E12 is the one that keeps *causing* new items, so it's the natural next pick.
+   refresh error type B7 filed), **E10** (misc hardening) and **E12** (derive the test-package list,
+   filed by E10) the same day.
+   **What's left is five items, and Parts A, B and E are done to P3.** Every P0/P1/P2 in the
+   refactoring, testing and security tracks is closed. Remaining: **A21**, **A22**, **A23** (`P3`),
+   **D2** (`L`/P3, infra-coupled rebranding — not a code-only change), and **C8**, which is `P2` but
+   **deferred on a false premise** and needs its value reassessed before anyone picks it up, since
+   it would reintroduce a service worker that was deliberately removed.
+   Nothing remaining blocks anything else. Natural next pick is **A21** — it's the last item with a
+   user-visible wrong answer (an unparseable all-day date silently becomes a year-0001 availability
+   block) rather than a cleanup.
 
 ---
 
@@ -1497,28 +1503,50 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   a handler that forgets to call the validator, and one of the pair asserts the valid spelling still
   returns 201 so the guard isn't rejecting everything.
 
-- [ ] **E12 · The backend test-package list is duplicated in four places and keeps drifting.** `S` ·
-  **P2**
-  Filed by **E10** (2026-07-28). `go test ./...` can't be used because the stale one-off
-  `server/scripts/` no longer compiles, so every caller spells out the package list instead — and
-  there are four copies: `backend-ci.yml`, and three in `DEVELOPMENT.md` (local command, Docker
-  fallback, CI summary). They have drifted three times in two days: **B4** found CI skipping three
-  test files; **B8** found `services/auth` missing, so a new test package would have run nowhere;
-  **E10** found `.` (main) missing and two `DEVELOPMENT.md` lists still lacking `./encryption/` from
-  **B6**. Each was caught only because someone happened to look.
+- [x] **E12 · The backend test-package list is duplicated and keeps drifting.** `S` · **P2 — DONE
+  2026-07-28** (build/vet/lint clean, full suite green with and without Mongo, race-clean,
+  routes+reminders 12×). Filed by **E10**.
+  `go test ./...` can't be used because the one-off migrations under `server/scripts/` no longer
+  compile, so every caller spelled the package list out instead. It had drifted three times in two
+  days: **B4** found CI skipping three test files; **B8** found `services/auth` missing, so a new
+  test package ran nowhere; **E10** found `.` (main) missing and two `DEVELOPMENT.md` lists still
+  lacking `./encryption/` from **B6**. Each was caught only because someone happened to look.
 
-  The list is also *wrong by construction* — it enumerates packages that have tests today, so a new
-  package's tests are invisible until someone remembers to add it. That's backwards: the exclusion
-  is `scripts/`, and everything else should be in.
+  **It was five copies, not four** — `CLAUDE.md` held a sixth-form variant too, and the stalest of
+  the lot: `go test ./models/ ./routes/ ./utils/ ./db/`, missing five packages. Its command
+  reference also advertised bare `go test ./...`, which has never worked.
 
-  **Fix:** derive it, don't spell it — `go test $(go list ./... | grep -v '/scripts')`, matching
-  what `go vet` and `golangci-lint` in the same workflow already do (they exclude `/scripts` and
-  take everything else). Then `DEVELOPMENT.md` quotes that one command in all three spots and
-  nothing can drift. Check first that no test-less package misbehaves under `go test` and that the
-  DB-gated packages still skip cleanly without `MONGODB_URI`.
+  **Fixed by deriving it:** every backend command is now
+  `go test $(go list ./... | grep -v '/scripts')` — the same shape `go vet` and `golangci-lint` in
+  the same workflow already used. `backend-ci.yml`, all three `DEVELOPMENT.md` spots and both
+  `CLAUDE.md` spots quote that one form, so there is no list left to keep in sync. Verified the
+  derived set is a **strict superset** of the old one — nothing that was being tested stopped being
+  tested — and it picks up seven packages that were previously invisible (`docs`, `errs`, `logger`,
+  `middleware`, `responses`, `services`, `tools/mintsession`); they have no tests today, but now a
+  test added to any of them runs without anyone editing a list.
 
-  **Better still, and cheap:** fix `server/scripts/` so the exclusion isn't needed at all. It's
-  three files referencing model fields deleted years ago (`Event.Responses`,
-  `CalendarAccount.AccessToken`) — see **A22**/**D2** territory. They are one-off dated migrations
-  that have already run in prod; deleting them is probably more honest than repairing them, but
-  either way `go test ./...` would then just work and this whole class of bug goes away.
+  **Did NOT delete or repair `server/scripts/`**, which this item had floated as the tidier fix.
+  `server/scripts/README.md` already documents the opposite as a deliberate decision — *"They
+  intentionally do not compile as part of the build … Don't try to make them build again"* — and it
+  is the right call: they are historical records of migrations already run against prod, pinned to
+  the model shapes of their time. Repairing them would falsify the record; deleting them would
+  discard it. The exclusion is the correct permanent shape, so the README now also explains that it
+  is *why* every command is written this way, and that adding a folder there needs no change
+  elsewhere.
+
+  **Found while verifying the no-Mongo path: `routes` did not actually skip cleanly.**
+  `TestEventRoutes_IcsStaysPublic` had no `requireDB`, and unlike its neighbour it is not DB-free —
+  passing the auth gate is the point, so the request reaches a handler that queries Mongo. Without
+  `MONGODB_URI` it panicked on a nil `EventsCollection` rather than skipping. Invisible in CI, which
+  always sets the var, but it broke `go test ./routes/` on any machine without Mongo — exactly what
+  `DEVELOPMENT.md` promised would work. Confirmed pre-existing (reproduced at `1cead24d`, before
+  E10) and fixed. The whole suite now exits 0 both with and without Mongo.
+
+  **Docs corrected while in here:** `DEVELOPMENT.md`'s container command used `host.docker.internal`,
+  which does not resolve on Linux/WSL — noted the `--network host` form, and **both container
+  commands are now verified to run as written**, not just written down. Added the race-detector
+  recipe (needs `CGO_ENABLED=1` and the Debian image, since the dev boxes have no gcc and Alpine
+  ships none) that E10 had to work out from scratch. `scripts/README.md` listed
+  `20240909_multiple_calendar_support_groups`, deleted in `c7d19b15` with the Availability Group
+  feature. Dropped the stale `//nolint` example from `backend-ci.yml` too — same one E10 removed
+  from `DEVELOPMENT.md`; the tree has no `nolint` directives at all since **B6**.

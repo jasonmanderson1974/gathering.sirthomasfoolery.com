@@ -55,9 +55,10 @@ jobs:
         run: go vet $(go list ./... | grep -v '/scripts')
 
       # BLOCKING since 2026-07-28 (TODO B5): the backlog is at zero, so anything
-      # this reports is new. Fix it or suppress it with a reason, as
-      # utils/utils.go does for the CFB deprecation — don't reintroduce
-      # continue-on-error.
+      # this reports is new. Fix it, or suppress it narrowly with a reason
+      # (`//nolint:<linter> // why`) — don't reintroduce continue-on-error. The
+      # tree currently carries no nolint directives at all; the last one, on the
+      # AES-CFB deprecation in utils/utils.go, went away with B6.
       #
       # NOTE the `-f '{{.Dir}}'`: golangci-lint takes DIRECTORIES, and plain
       # `go list` emits import paths. Passing those made it resolve every
@@ -70,16 +71,19 @@ jobs:
           curl -sL https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz | tar xz -C /tmp
           /tmp/golangci-lint-2.12.2-linux-amd64/golangci-lint run $(go list -f '{{.Dir}}' ./... | grep -v '/scripts')
 
-      # `.` is the main package — config parsing (CORS origins, secret/key
-      # validation), no server boot. models/routes/utils need no external
-      # services; db and services/reminders run integration tests against the
-      # Mongo service above (they skip when MONGODB_URI is unset). services/auth,
-      # services/calendar, services/contacts and services/microsoftgraph hold
-      # pure-logic tests (OAuth token-response decoding, ICS generation, contact
-      # formatting, Graph parsing) — the *packages* talk to external APIs, but
-      # their tests stub the transport, so they belong here. Any package without
-      # tests is simply omitted.
+      # Derived, not enumerated — same `go list | grep -v '/scripts'` shape as
+      # the two steps above (TODO E12). This used to be a hand-written package
+      # list, and it drifted three times in two days: B4 found it skipping three
+      # test files, B8 found services/auth missing, E10 found `.` missing. A
+      # spelled-out list is also wrong by construction — it names the packages
+      # that have tests *today*, so a new package's tests run nowhere until
+      # someone remembers to add it. Deriving it makes that impossible.
+      #
+      # Packages with no test files report "[no test files]" and pass. The
+      # DB-backed tests (db, routes, services/reminders) use requireDB and skip
+      # when MONGODB_URI is unset, so the same command works on a machine
+      # without Mongo.
       - name: Run tests
         env:
           MONGODB_URI: mongodb://localhost:27017
-        run: go test . ./models/ ./routes/ ./utils/ ./db/ ./encryption/ ./services/auth/ ./services/reminders/ ./services/calendar/ ./services/contacts/ ./services/microsoftgraph/
+        run: go test $(go list ./... | grep -v '/scripts')

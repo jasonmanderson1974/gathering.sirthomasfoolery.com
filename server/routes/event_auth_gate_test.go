@@ -88,7 +88,14 @@ func TestEventRoutes_AnonymousGets401(t *testing.T) {
 // The ICS feed must stay reachable without a session — calendar clients poll it
 // with no cookies. It 404s here only because the event doesn't exist; the point
 // is that it is NOT a 401.
+//
+// Unlike the 401 test above, this one is NOT DB-free: passing the auth gate is
+// the whole point, so the request reaches the handler and the handler queries
+// Mongo. Without requireDB it panicked on a nil EventsCollection rather than
+// skipping — invisible in CI, which always sets MONGODB_URI, but it broke
+// `go test ./routes/` on a machine without Mongo (E12).
 func TestEventRoutes_IcsStaysPublic(t *testing.T) {
+	requireDB(t)
 	r := newEventRouter()
 
 	w := httptest.NewRecorder()
