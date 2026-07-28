@@ -55,7 +55,7 @@
         <div class="tw-mb-12 tw-flex tw-flex-col tw-items-center tw-gap-2">
           <button
             class="flw-btn tw-text-sm sm:tw-text-base"
-            @click="authUser ? openDashboard() : (newDialog = true)"
+            @click="authUser ? openDashboard() : signIn()"
           >
             {{ authUser ? "To the Club Room" : "Call a Gathering" }}
           </button>
@@ -130,8 +130,6 @@
       @emailSignIn="_emailSignIn"
     />
 
-    <!-- New event dialog -->
-    <NewDialog v-model="newDialog" no-tabs @signIn="signIn" />
   </div>
 </template>
 
@@ -153,7 +151,6 @@
 import { isPhone, signInGoogle, signInOutlook } from "@/utils"
 import FAQ from "@/components/FAQ.vue"
 import NumberBullet from "@/components/NumberBullet.vue"
-import NewDialog from "@/components/NewDialog.vue"
 import LandingPageHeader from "@/components/landing/LandingPageHeader.vue"
 import SignInDialog from "@/components/SignInDialog.vue"
 import { calendarTypes } from "@/constants"
@@ -173,7 +170,6 @@ export default {
     SirThomasFoolery,
     FAQ,
     NumberBullet,
-    NewDialog,
     LandingPageHeader,
     SignInDialog,
     AppFooter,
@@ -182,7 +178,6 @@ export default {
 
   data: () => ({
     signInDialog: false,
-    newDialog: false,
     howItWorksSteps: [
       "Call a Gathering and propose the candidate evenings",
       "Circulate the summons, that each man may mark his availability",
