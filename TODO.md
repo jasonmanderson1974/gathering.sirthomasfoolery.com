@@ -1100,12 +1100,22 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   `SLACK_*`/`DISCORD_*` entries in `.env.template` + `DEPLOYMENT.md`, and the CLAUDE.md references.
   **Swagger regenerated.**
 
-- [ ] **E8 · Input caps on event creation.** `S` · **P2**
-  `createEvent` payload (`events.go:81-84`): `Name` has no length cap, `Dates`/`Times` have no
-  element-count cap — a single anonymous (until E3) request can create a multi-megabyte document.
-  Guest/on-behalf names are only checked non-empty (`event_responses.go:726`). Comments and polls
-  already cap (2,000 chars / 20 options) — extend the same discipline: name length, date/time
-  cardinality, description length, remindee count.
+- [x] **E8 · Input caps on event creation.** `S` · **P2 — DONE 2026-07-28** (build/vet clean, full
+  suite green). Done together with **E11** — same payload, same two handlers. New shared helpers in
+  `routes/events.go` (`validateEventPayload` / `sanitizeEventText`), called from both `createEvent`
+  and `editEvent` so one rule set covers both.
+  - **Rejected with 400** (`errs.PayloadTooLarge`): `Dates` > 366, `Times` > 366, `Remindees` > 200,
+    `SignUpBlocks` > 200. Cardinality is rejected rather than truncated on purpose — silently
+    dropping dates would store a subtly-wrong event that looks fine to the organizer.
+  - **Truncated**: `Name` → 200 runes, `Description` → 2,000 runes (matching the poll-title and
+    comment caps), and guest/on-behalf display names → 100 runes via `sanitizeResponderName`, applied
+    in both `updateEventResponse` and `responderKey` (so RSVP/vote/comment paths are covered too).
+    Free text is truncated because an over-long name is harmless once bounded.
+  - Caps are deliberately generous — the frontend builds one date per selected day (DOW tops out at
+    7) and never sends `times` at all, so these only bite on direct API use. A test asserts that a
+    payload sitting **exactly** at each cap still passes.
+  - Truncation is **rune-aware** (`truncateRunes`), so a cut can't land mid-character. That's the
+    same defect **A17** tracks for comments/polls — this establishes the helper A17 can reuse.
 
 - [ ] **E9 · Short event IDs: predictable generator + collision fallback returns the duplicate.**
   `S` · **P2**
@@ -1131,19 +1141,11 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
     fine as a process-lifetime singleton, unsafe if ever constructed per-test; document or add a
     stop.
 
-- [ ] **E11 · `createEvent` / `editEvent` accept an unvalidated `EventType`.** `S` · **P2**
-  `events.go:83` binds `Type models.EventType` with `binding:"required"`, and `:294`
-  (`editEvent`) assigns `event.Type = payload.Type` — neither checks the value against the enum
-  (`models/event.go:12-13`: `specific_dates`, `dow`). Any string is stored.
-  **Consequence is client-side, not corruption:** `getCalendarEventsMap`
-  (`frontend/src/utils/date_utils.js:616-646`) computes `timeMin`/`timeMax` only for
-  `SPECIFIC_DATES` and `DOW`, so an unknown type leaves both `undefined` and the event page fires
-  `GET /api/user/calendars?timeMin=undefined&timeMax=undefined` → **400, twice per load**, with no
-  calendar overlay. The grid, responses and RSVP UI still render, so it fails quietly.
-  Not reachable through the UI (the frontend always sends a valid constant) — this is an
-  API-direct gap, found 2026-07-28 while verifying `38a464c` with a script that sent the
-  camelCase `"specificDates"` instead of `"specific_dates"`. All 16 events in prod are
-  `specific_dates`, so nothing is currently affected.
-  **Fix:** add `models.IsKnownEventType` mirroring `models.IsKnownRole` (`models/roles.go:16`),
-  reject unknown values with 400 `errs.InvalidEventType` in both handlers, and cover it in
-  `routes/` tests. Fits naturally alongside **E8** (same payload, same handler).
+- [x] **E11 · `createEvent` / `editEvent` accept an unvalidated `EventType`.** `S` · **P2 — DONE
+  2026-07-28** (build/vet clean, full suite green). Confirmed exactly as reported. Added
+  `models.IsKnownEventType` mirroring `models.IsKnownRole`, and both handlers now reject an unknown
+  type with 400 `errs.InvalidEventType` via the shared `validateEventPayload` (see **E8**).
+  Covered by unit tests over the enum (including the camelCase `"specificDates"` that surfaced it)
+  **plus two DB-gated end-to-end tests** driving the real `createEvent` — the pure tests can't catch
+  a handler that forgets to call the validator, and one of the pair asserts the valid spelling still
+  returns 201 so the guard isn't rejecting everything.

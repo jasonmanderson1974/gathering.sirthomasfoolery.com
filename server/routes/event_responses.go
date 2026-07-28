@@ -177,6 +177,8 @@ func updateEventResponse(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
 		return
 	}
+	payload.Name = sanitizeResponderName(payload.Name)
+
 	session := sessions.Default(c)
 	eventId := c.Param("eventId")
 	event, eventErr := db.GetEventByEitherId(eventId)
@@ -724,13 +726,30 @@ func clampGuestCount(status models.RsvpStatus, count int) int {
 	return count
 }
 
+// maxResponderNameLength bounds a guest / on-behalf display name. These names
+// become map keys on the event document (responses, RSVPs, poll votes), so an
+// uncapped one inflates the document on every write path a guest can reach.
+const maxResponderNameLength = 100
+
+// sanitizeResponderName trims a display name and bounds it. Rune-aware so a cut
+// can't land mid-character.
+func sanitizeResponderName(name string) string {
+	name = strings.TrimSpace(name)
+	r := []rune(name)
+	if len(r) > maxResponderNameLength {
+		return string(r[:maxResponderNameLength])
+	}
+	return name
+}
+
 // responderKey resolves the identity key + (for signed-in users) the user id
 // for a guest-or-member action (RSVP, comment), mirroring how updateEventResponse
 // keys guests vs signed-in users. Returns ok=false and writes the response when a
 // guest omits a name or a signed-in caller has no session.
 func responderKey(c *gin.Context, isGuest bool, name string) (key string, userId primitive.ObjectID, ok bool) {
 	if isGuest {
-		if strings.TrimSpace(name) == "" {
+		name = sanitizeResponderName(name)
+		if name == "" {
 			c.JSON(http.StatusBadRequest, responses.Error{Error: "name-required"})
 			return "", primitive.NilObjectID, false
 		}

@@ -68,6 +68,84 @@ func trimmedLocation(location *string) *string {
 	return &trimmed
 }
 
+// Input caps for the event create/edit payloads. Comments and polls already cap
+// their inputs (2,000 chars / 20 options); these extend the same discipline to
+// events, where an uncapped Name and unbounded Dates/Times/Remindees/SignUpBlocks
+// let one request store a multi-megabyte document.
+//
+// Deliberately generous — no legitimate client comes close. The frontend builds
+// one date per selected day (DOW tops out at 7) and never sends `times` at all,
+// so these only bite on direct API use.
+const (
+	maxEventNameLength        = 200
+	maxEventDescriptionLength = 2000
+	maxEventDates             = 366 // a year of daily options
+	maxEventTimes             = 366
+	maxEventRemindees         = 200
+	maxEventSignUpBlocks      = 200
+)
+
+// truncateRunes cuts s to at most max runes. Rune-aware so a cut landing inside
+// a multi-byte character (an emoji or accent in a gathering name) can't leave an
+// invalid UTF-8 tail. See TODO A17, which owes the same treatment to comments
+// and polls.
+func truncateRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max])
+}
+
+// eventPayloadLimits is the shared shape of the create/edit payload fields that
+// need bounding, so both handlers enforce one rule set.
+type eventPayloadLimits struct {
+	Type         models.EventType
+	Dates        []primitive.DateTime
+	Times        []primitive.DateTime
+	Remindees    []string
+	SignUpBlocks *[]models.SignUpBlock
+}
+
+// validateEventPayload rejects an unusable event payload, writing the response
+// and returning false if so.
+//
+// Cardinality violations are rejected rather than truncated: silently dropping
+// dates would store a subtly-wrong event that looks fine to the organizer, which
+// is worse than an error. Free text is truncated instead (see sanitizeEventText)
+// because an over-long name is harmless once bounded.
+func validateEventPayload(c *gin.Context, p eventPayloadLimits) bool {
+	// The `binding:"required"` tag only rejects "", so the enum needs an
+	// explicit check or any string is stored (TODO E11).
+	if !models.IsKnownEventType(p.Type) {
+		c.JSON(http.StatusBadRequest, responses.Error{Error: errs.InvalidEventType})
+		return false
+	}
+
+	tooMany := func(n, max int) bool { return n > max }
+	switch {
+	case tooMany(len(p.Dates), maxEventDates),
+		tooMany(len(p.Times), maxEventTimes),
+		tooMany(len(p.Remindees), maxEventRemindees),
+		p.SignUpBlocks != nil && tooMany(len(*p.SignUpBlocks), maxEventSignUpBlocks):
+		c.JSON(http.StatusBadRequest, responses.Error{Error: errs.PayloadTooLarge})
+		return false
+	}
+	return true
+}
+
+// sanitizeEventText trims and bounds an event's free-text fields. A nil
+// description stays nil so "absent" remains distinguishable from "cleared",
+// matching trimmedLocation.
+func sanitizeEventText(name string, description *string) (string, *string) {
+	name = truncateRunes(strings.TrimSpace(name), maxEventNameLength)
+	if description != nil {
+		d := truncateRunes(strings.TrimSpace(*description), maxEventDescriptionLength)
+		description = &d
+	}
+	return name, description
+}
+
 // @Summary Creates a new event
 // @Tags events
 // @Accept json
@@ -110,6 +188,18 @@ func createEvent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
 		return
 	}
+	if !validateEventPayload(c, eventPayloadLimits{
+		Type:         payload.Type,
+		Dates:        payload.Dates,
+		Times:        payload.Times,
+		Remindees:    payload.Remindees,
+		SignUpBlocks: payload.SignUpBlocks,
+	}) {
+		return
+	}
+	// createEvent takes no description; editEvent adds one later.
+	payload.Name, _ = sanitizeEventText(payload.Name, nil)
+
 	session := sessions.Default(c)
 
 	// If user logged in, set owner id to their user id, otherwise set owner id to nil
@@ -244,6 +334,16 @@ func editEvent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
 		return
 	}
+	if !validateEventPayload(c, eventPayloadLimits{
+		Type:         payload.Type,
+		Dates:        payload.Dates,
+		Times:        payload.Times,
+		Remindees:    payload.Remindees,
+		SignUpBlocks: payload.SignUpBlocks,
+	}) {
+		return
+	}
+	payload.Name, payload.Description = sanitizeEventText(payload.Name, payload.Description)
 
 	eventId := c.Param("eventId")
 	event, eventErr := db.GetEventByEitherId(eventId)

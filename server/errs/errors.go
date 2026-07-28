@@ -43,6 +43,10 @@ const (
 	EmailTaken string = "email-taken"
 	// GatheringNotScheduled: the event has no confirmed gathering time yet
 	GatheringNotScheduled string = "gathering-not-scheduled"
+	// InvalidEventType: the event type is not one of the defined EventTypes
+	InvalidEventType string = "invalid-event-type"
+	// PayloadTooLarge: a create/edit payload exceeded a cardinality cap
+	PayloadTooLarge string = "payload-too-large"
 )
 
 // Sentinel error returned by signInHelper when an email is not allowlisted, so

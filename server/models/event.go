@@ -13,6 +13,20 @@ const (
 	DOW            EventType = "dow"
 )
 
+// IsKnownEventType reports whether t is one of the defined event types. The
+// `binding:"required"` tag on the create/edit payloads only rejects the empty
+// string, so without this an arbitrary value is stored — and the frontend
+// computes calendar bounds for these two types only, leaving an unknown-type
+// event with no calendar overlay. Mirrors models.IsKnownRole.
+func IsKnownEventType(t EventType) bool {
+	switch t {
+	case SPECIFIC_DATES, DOW:
+		return true
+	default:
+		return false
+	}
+}
+
 // Object containing information associated with the remindee
 type Remindee struct {
 	Email     string `json:"email" bson:"email,omitempty"`
