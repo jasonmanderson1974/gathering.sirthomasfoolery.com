@@ -115,6 +115,15 @@ MONGODB_URI=mongodb://localhost:27017 go test ./models/ ./routes/ ./utils/ ./db/
 > fields) — build/test the specific packages listed above instead. This list is
 > exactly what `backend-ci.yml` runs; keep the two in sync.
 
+> **Careful running `./db/` against a restored prod dump.** The B7 sweep test
+> calls `db.EncryptPlaintextOAuthTokens()`, which walks *every* user in whatever
+> database `MONGODB_URI` points at — so any real OAuth token still stored in the
+> clear gets encrypted with the **test** key, and the local server (which boots
+> with the real `ENCRYPTION_KEY` via `compose.dev.secrets.yaml`) can then no
+> longer read it. Harmless on the throwaway `compose.dev.yaml` Mongo; on a
+> restored dump, re-restore it, or decrypt with the test key and write the
+> plaintext back so the next boot re-encrypts it correctly.
+
 **Lint (backend) — BLOCKING since 2026-07-28 (TODO B5).** The backlog is at
 zero, so anything the linter reports is new and will fail the build. Run it
 before pushing:
