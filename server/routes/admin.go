@@ -176,13 +176,13 @@ func addAllowlistEmail(c *gin.Context) {
 // It does NOT contain a code — the invitee requests their own sign-in code when
 // they visit the link and enter this address.
 func buildInvitationEmailBody(signInURL string) string {
-	return utils.RenderEmail(
+	return utils.RenderEmailWithFooter(
 		"You are invited",
 		utils.EmailParagraphHTML(
 			"You have been invited to take your place among The Fellowship. To accept, present "+
 				"yourself at the gate and sign in with "+utils.EmailEmphasis("this email address")+". "+
-				"A one-time code will be sent to confirm your entry.")+
-			utils.EmailFooterURL(signInURL),
+				"A one-time code will be sent to confirm your entry."),
+		utils.EmailFooterURL(signInURL),
 		utils.EmailAction{Label: "Enter the Gathering", URL: signInURL},
 	)
 }

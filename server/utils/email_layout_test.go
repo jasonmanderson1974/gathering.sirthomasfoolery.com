@@ -101,6 +101,28 @@ func TestRenderEmailActions(t *testing.T) {
 	}
 }
 
+// The "Or visit:" fallback backs up the button, so it has to render after it.
+// Putting it in bodyHTML puts it above, which is how it first shipped.
+func TestRenderEmailWithFooterOrdersFooterAfterActions(t *testing.T) {
+	out := RenderEmailWithFooter(
+		"Heading",
+		EmailParagraph("body copy"),
+		EmailFooterURL("https://example.test/e/abc"),
+		EmailAction{Label: "View the Gathering", URL: "https://example.test/e/abc"},
+	)
+
+	body := strings.Index(out, "body copy")
+	button := strings.Index(out, "View the Gathering")
+	footer := strings.Index(out, "Or visit:")
+
+	if body == -1 || button == -1 || footer == -1 {
+		t.Fatalf("missing a section (body=%d button=%d footer=%d)", body, button, footer)
+	}
+	if !(body < button && button < footer) {
+		t.Errorf("expected body < button < footer, got body=%d button=%d footer=%d", body, button, footer)
+	}
+}
+
 func TestEmailCodeBlockEscapes(t *testing.T) {
 	got := EmailCodeBlock("482913")
 	if !strings.Contains(got, "482913") {

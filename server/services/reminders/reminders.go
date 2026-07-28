@@ -370,13 +370,13 @@ func buildReminderEmail(event *models.Event, start time.Time) (subject, body str
 		descriptionRow = utils.EmailParagraph(*event.Description)
 	}
 
-	body = utils.RenderEmail(
+	body = utils.RenderEmailWithFooter(
 		"A gathering approaches",
 		utils.EmailStrongLine(event.Name)+
 			utils.EmailAccentLine(when)+
 			locationRow+
-			descriptionRow+
-			utils.EmailFooterURL(eventUrl),
+			descriptionRow,
+		utils.EmailFooterURL(eventUrl),
 		utils.EmailAction{Label: "View the Gathering", URL: eventUrl},
 		utils.EmailAction{Label: "Add to calendar", URL: icsUrl, Secondary: true},
 	)

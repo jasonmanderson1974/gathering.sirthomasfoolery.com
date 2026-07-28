@@ -27,12 +27,12 @@ func eventURLFor(event *models.Event) string {
 func buildSomeoneRespondedEmail(ownerName, respondentName, eventName, eventURL string) (subject, body string) {
 	subject = fmt.Sprintf("%s responded to %s", respondentName, eventName)
 
-	body = utils.RenderEmail(
+	body = utils.RenderEmailWithFooter(
 		"A reply has arrived",
 		utils.EmailParagraph(fmt.Sprintf("%s, another man has marked his availability.", ownerName))+
 			utils.EmailStrongLine(eventName)+
-			utils.EmailAccentLine(respondentName+" has responded")+
-			utils.EmailFooterURL(eventURL),
+			utils.EmailAccentLine(respondentName+" has responded"),
+		utils.EmailFooterURL(eventURL),
 		utils.EmailAction{Label: "View the Gathering", URL: eventURL},
 	)
 	return subject, body
@@ -47,12 +47,12 @@ func buildXResponsesEmail(ownerName, eventName, eventURL string, numResponses in
 	}
 	subject = fmt.Sprintf("%d %s responded to %s", numResponses, people, eventName)
 
-	body = utils.RenderEmail(
+	body = utils.RenderEmailWithFooter(
 		"The replies are in",
 		utils.EmailParagraph(fmt.Sprintf("%s, the Gathering has reached the tally you asked to be told of.", ownerName))+
 			utils.EmailStrongLine(eventName)+
-			utils.EmailAccentLine(fmt.Sprintf("%d %s responded", numResponses, people))+
-			utils.EmailFooterURL(eventURL),
+			utils.EmailAccentLine(fmt.Sprintf("%d %s responded", numResponses, people)),
+		utils.EmailFooterURL(eventURL),
 		utils.EmailAction{Label: "View the Gathering", URL: eventURL},
 	)
 	return subject, body
@@ -62,11 +62,11 @@ func buildXResponsesEmail(ownerName, eventName, eventURL string, numResponses in
 func buildEveryoneRespondedEmail(ownerName, eventName, eventURL string) (subject, body string) {
 	subject = fmt.Sprintf("Everyone has responded to %s", eventName)
 
-	body = utils.RenderEmail(
+	body = utils.RenderEmailWithFooter(
 		"The whole Order has answered",
 		utils.EmailParagraph(fmt.Sprintf("%s, every man you summoned has marked his availability. You may now settle upon an hour.", ownerName))+
-			utils.EmailStrongLine(eventName)+
-			utils.EmailFooterURL(eventURL),
+			utils.EmailStrongLine(eventName),
+		utils.EmailFooterURL(eventURL),
 		utils.EmailAction{Label: "Settle the hour", URL: eventURL},
 	)
 	return subject, body

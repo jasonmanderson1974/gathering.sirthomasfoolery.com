@@ -160,11 +160,10 @@ func buildRemindeeNudgeEmail(stage int, ownerName, eventName, eventURL, responde
 		lead = fmt.Sprintf("This is the last we shall trouble you about %s's Gathering.", ownerName)
 	}
 
-	body = utils.RenderEmail(
+	body = utils.RenderEmailWithFooter(
 		heading,
-		utils.EmailParagraph(lead)+
-			utils.EmailStrongLine(eventName)+
-			utils.EmailFooterURL(eventURL),
+		utils.EmailParagraph(lead)+utils.EmailStrongLine(eventName),
+		utils.EmailFooterURL(eventURL),
 		utils.EmailAction{Label: "Share your availability", URL: eventURL},
 		utils.EmailAction{Label: "I've already responded", URL: respondedURL, Secondary: true},
 	)

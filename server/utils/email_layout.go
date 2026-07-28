@@ -166,6 +166,13 @@ func renderAction(a EmailAction) string {
 // be composed from the Email* helpers above (which escape their own input) —
 // never pass raw user text to it.
 func RenderEmail(heading string, bodyHTML string, actions ...EmailAction) string {
+	return RenderEmailWithFooter(heading, bodyHTML, "", actions...)
+}
+
+// RenderEmailWithFooter is RenderEmail with a block rendered *after* the
+// actions. That is where the "Or visit: <url>" fallback belongs — it backs up
+// the button, so it has to follow it; putting it in bodyHTML pushes it above.
+func RenderEmailWithFooter(heading string, bodyHTML string, footerHTML string, actions ...EmailAction) string {
 	var buttons strings.Builder
 	for _, a := range actions {
 		buttons.WriteString(renderAction(a))
@@ -185,6 +192,7 @@ func RenderEmail(heading string, bodyHTML string, actions ...EmailAction) string
               <div style="font-size:22px;color:%s;margin-bottom:10px;">%s</div>
               %s
               %s
+              %s
             </td>
           </tr>
         </table>
@@ -195,6 +203,6 @@ func RenderEmail(heading string, bodyHTML string, actions ...EmailAction) string
 </html>`,
 		emailPageBg, emailPageBg, emailCardBg, emailBorder, emailInk,
 		emailBrass, emailBorder, emailInk, html.EscapeString(heading),
-		bodyHTML, buttons.String(),
+		bodyHTML, buttons.String(), footerHTML,
 	)
 }
