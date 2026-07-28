@@ -2,11 +2,13 @@ package db_test
 
 import (
 	"context"
+	"io"
 	"os"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"sirtom/server/db"
+	"sirtom/server/logger"
 	"sirtom/server/models"
 )
 
@@ -14,6 +16,12 @@ import (
 // mongodb://localhost by default). Requires a reachable Mongo — CI provides an
 // ephemeral one; locally use `docker compose -f compose.dev.yaml up -d mongo`.
 func TestMain(m *testing.M) {
+	// logger.StdOut/StdErr are nil until logger.Init runs, which only main.go
+	// does. Any db function that logs on an error path would nil-deref inside a
+	// test rather than returning its error — the same trap routes' TestMain
+	// already guards against. Discard the output; we assert on behaviour.
+	logger.Init(io.Discard)
+
 	closeConn := db.Init()
 	code := m.Run()
 	closeConn()

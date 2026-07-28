@@ -120,6 +120,17 @@ func main() {
 	closeConnection := db.Init()
 	defer closeConnection()
 
+	// B6: bring any calendar secret still in the pre-B6 AES-CFB format up to
+	// AES-GCM. Idempotent and cheap — once everything carries the current
+	// version marker it finds nothing. Runs before the router starts serving,
+	// so it never races a request. Best-effort: a failure here leaves the
+	// values readable through the v1 path, so it must not stop the boot.
+	if scanned, migrated, err := db.ReEncryptLegacyCalendarSecrets(); err != nil {
+		logger.StdErr.Println("legacy ciphertext sweep failed (values remain readable):", err)
+	} else if migrated > 0 {
+		logger.StdOut.Printf("re-encrypted %d of %d calendar accounts to AES-GCM", migrated, scanned)
+	}
+
 	// Start the in-process email scheduler: pre-gathering reminders and
 	// remindee nudges, both over Gmail SMTP
 	stopReminders := reminders.StartReminderScheduler()

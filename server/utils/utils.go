@@ -311,6 +311,13 @@ func decryptV2GCM(encoded string) (string, error) {
 	return string(plain), nil
 }
 
+// IsLegacyCiphertext reports whether a stored value is still v1 (AES-CFB), so a
+// caller can rewrite it in the current format. Empty is not legacy — there is
+// nothing to migrate.
+func IsLegacyCiphertext(text string) bool {
+	return text != "" && !strings.HasPrefix(text, encV2Prefix)
+}
+
 // decryptV1CFB reads ciphertext written before B6. It stays only until no v1
 // values remain; see TODO B6 for the retirement condition.
 func decryptV1CFB(text string) (string, error) {
