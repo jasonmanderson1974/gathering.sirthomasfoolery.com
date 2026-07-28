@@ -226,7 +226,11 @@ func Encrypt(text string) (string, error) {
 	if _, err := rand.Read(iv); err != nil {
 		return "", err
 	}
-	cfb := cipher.NewCFBEncrypter(block, iv)
+	// AES-CFB is deprecated (unauthenticated: a tamperer can flip plaintext bits
+	// undetected). Switching to an AEAD is the right answer, but it is a data
+	// migration, not an edit — every calendar refresh token already stored is
+	// CFB, and a new cipher can't read them. Tracked as B6.
+	cfb := cipher.NewCFBEncrypter(block, iv) //nolint:staticcheck // SA1019: see B6
 	cfb.XORKeyStream(cipherText[aes.BlockSize:], plainText)
 	return Encode(cipherText), nil
 }
@@ -243,7 +247,9 @@ func Decrypt(text string) (string, error) {
 	}
 	iv := cipherText[:aes.BlockSize]
 	cipherText = cipherText[aes.BlockSize:]
-	cfb := cipher.NewCFBDecrypter(block, iv)
+	// Must stay CFB for as long as CFB ciphertext exists in the database. See
+	// the note in Encrypt; tracked as B6.
+	cfb := cipher.NewCFBDecrypter(block, iv) //nolint:staticcheck // SA1019: see B6
 	plainText := make([]byte, len(cipherText))
 	cfb.XORKeyStream(plainText, cipherText)
 	return string(plainText), nil

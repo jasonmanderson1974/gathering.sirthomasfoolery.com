@@ -89,7 +89,7 @@ func importEvent(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, responses.Error{Error: "remote-fetch-failed"})
 		return
 	}
-	defer eventResp.Body.Close()
+	defer func() { _ = eventResp.Body.Close() }()
 
 	if eventResp.StatusCode != http.StatusOK {
 		c.JSON(http.StatusBadGateway, responses.Error{Error: "remote-event-not-found"})
@@ -140,7 +140,7 @@ func importEvent(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, responses.Error{Error: "remote-fetch-failed"})
 		return
 	}
-	defer respResp.Body.Close()
+	defer func() { _ = respResp.Body.Close() }()
 
 	respBody, err := io.ReadAll(respResp.Body)
 	if err != nil {
@@ -213,14 +213,19 @@ func importEvent(c *gin.Context) {
 		*remoteEvent.NumResponses++
 	}
 
-	// Update NumResponses on the event
-	db.EventsCollection.UpdateOne(context.Background(),
+	// Update NumResponses on the event. Best-effort: the import itself has
+	// succeeded by this point, and a stale count is not worth discarding it.
+	if _, err := db.EventsCollection.UpdateOne(context.Background(),
 		bson.M{"_id": newId},
 		bson.M{"$set": bson.M{"numResponses": remoteEvent.NumResponses}},
-	)
+	); err != nil {
+		logger.StdErr.Println("failed to set numResponses on the imported event:", err)
+	}
 
-	// Increment user's NumEventsCreated
-	db.UsersCollection.UpdateOne(context.Background(), bson.M{"_id": user.Id}, bson.M{"$inc": bson.M{"numEventsCreated": 1}})
+	// Increment user's NumEventsCreated (a statistic — log and carry on)
+	if _, err := db.UsersCollection.UpdateOne(context.Background(), bson.M{"_id": user.Id}, bson.M{"$inc": bson.M{"numEventsCreated": 1}}); err != nil {
+		logger.StdErr.Println("failed to increment numEventsCreated:", err)
+	}
 
 	c.JSON(http.StatusCreated, gin.H{"eventId": newId.Hex(), "shortId": shortId})
 }

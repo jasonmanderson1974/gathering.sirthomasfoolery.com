@@ -458,11 +458,45 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   `DEVELOPMENT.md` local-test command had drifted further still (it was also missing
   `./services/reminders/`); both lists are now identical, with a note to keep them in sync.
 
-- [ ] **B5 · Work down the golangci-lint errcheck backlog; flip lint to blocking.** `M` · **P2**
-  The backend lint step is still `continue-on-error: true` over the **112-issue backlog A8
-  surfaced (98 errcheck)** — exactly the defect class behind E5 (discarded `session.Save`) and A21.
-  Burn it down incrementally (per-package), then make the step blocking like `go vet` and the
-  frontend `Lint` already are. Highest-leverage process change available.
+- [x] **B5 · Work down the golangci-lint errcheck backlog; flip lint to blocking.** `M` · **P2 —
+  DONE 2026-07-28** (0 issues; lint is blocking; build/vet + full suite green on both an empty
+  Mongo and a restored prod replica).
+  **First finding: the lint step was linting nothing.** golangci-lint takes *directories* and
+  `go list ./...` emits *import paths*, so every package resolved against the wrong root — CI
+  printed a few "typechecking error: directory not found" lines and then `0 issues`, which reads
+  exactly like a clean run. Confirmed in the workflow log for 67d8bcd, not just locally. Fixed with
+  `go list -f '{{.Dir}}'` and a comment, because the failure mode is so quiet.
+  With it actually running: **119 issues**, not the ~112 estimated blind. errcheck is now relaxed
+  for `_test.go` only (~50 were teardown where the error has nowhere to go); the remaining 66 were
+  all production and are now zero.
+  **Four were real bugs, not noise:**
+  - `services/calendar/apple_calendar.go` — `loc, err :=` declared a **second `err`** scoped to the
+    TZID branch, so the `ParseInLocation` failure landed in the shadow and the outer check read a
+    nil. An unparseable time with a TZID returned the zero time and no error. A
+    `//lint:ignore SA4006 err is in fact used later` comment sat on top asserting the opposite.
+    Four regression tests; the first fails against the old code with `0001-01-01`.
+  - `main.go` — `router.Run`'s error was discarded, so a server that couldn't bind its port exited
+    silently with status 0. A failed start was indistinguishable from a clean shutdown.
+  - `db/init.go` — four indexes created unchecked (Chronicle at-most-once, OTP expiry, allowlist
+    uniqueness, one default folder per kind). Existing duplicate data makes creation fail
+    permanently while the code carries on assuming the invariant holds. Now logged loudly, naming
+    the guarantee that is not in force; deliberately not fatal.
+  - `services/auth/auth.go` — both OAuth token responses were decoded with the error dropped, so a
+    malformed body became a zero-valued token that failed confusingly later.
+  Plus: `GetAllowlist` swallowed its `Find` and `cursor.All` errors and returned an empty slice, so
+  a broken query rendered as "the Fellowship has no members" (**closes the allowlist half of E10**);
+  the response write in `updateEventResponse` and both response deletes answered 200 on a failed
+  write; removing a calendar account reported success while still linked; and the OTP attempt
+  counter, whose failure silently un-caps the 5-try brute-force guard.
+  **`continue-on-error` is gone** — anything the linter reports now fails the build.
+
+- [ ] **B6 · AES-CFB is deprecated and unauthenticated.** `M` · **P2**
+  `utils/utils.go:229,246` use `cipher.NewCFBEncrypter`/`Decrypter` for `ENCRYPTION_KEY` (calendar
+  refresh tokens). CFB is unauthenticated: a tamperer can flip plaintext bits undetected, and Go
+  deprecated it in 1.24. Surfaced by **B5** and suppressed there with `//nolint:staticcheck`
+  pointing here, because this is a **data migration, not an edit** — every token already stored is
+  CFB and a new cipher cannot read them. Needs: an AEAD (AES-GCM), a version marker on stored
+  ciphertext, and a read-old/write-new transition before the CFB path is dropped.
 
 ---
 

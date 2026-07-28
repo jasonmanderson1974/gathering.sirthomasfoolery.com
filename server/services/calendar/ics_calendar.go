@@ -31,7 +31,7 @@ func (cal *ICSCalendar) GetCalendarEvents(calendarId string, timeMin time.Time, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch ICS feed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ICS feed returned status %d", resp.StatusCode)

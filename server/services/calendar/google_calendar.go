@@ -30,7 +30,7 @@ func (calendar GoogleCalendar) GetCalendarList() (map[string]models.SubCalendar,
 		logger.StdErr.Println(err)
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Define stucts to parse json response
 	type Response struct {
@@ -87,7 +87,7 @@ func (calendar *GoogleCalendar) GetCalendarEvents(calendarId string, timeMin tim
 		logger.StdErr.Println(err)
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Define some structs to parse the json response
 	type Attendee struct {

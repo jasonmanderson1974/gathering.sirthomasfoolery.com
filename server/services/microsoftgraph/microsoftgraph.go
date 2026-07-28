@@ -25,7 +25,7 @@ func GetUserInfo(user *models.User, calendarAuth *models.OAuth2CalendarAuth) (Us
 	if err != nil {
 		return UserInfo{}, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	userResponse := struct {
 		GivenName string `json:"givenName"`

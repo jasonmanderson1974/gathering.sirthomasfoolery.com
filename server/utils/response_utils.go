@@ -36,7 +36,7 @@ func getZeroValue(value interface{}) interface{} {
 		return make(map[string]interface{})
 	case reflect.Slice, reflect.Array:
 		return []interface{}{}
-	case reflect.Ptr:
+	case reflect.Pointer:
 		return nil
 	default:
 		// For unknown types, try to infer from the actual value

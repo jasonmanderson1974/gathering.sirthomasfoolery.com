@@ -110,7 +110,9 @@ func processRemindeeNudges(now time.Time, send SendFunc) {
 			// Too old to be worth nudging — retire it so it stops matching the
 			// query, without sending anything.
 			if now.Sub(addedAt) > nudgeMaxAge {
-				db.MarkRemindeeNudged(event.Id, remindee.Email, remindee.NudgeStage, maxNudgeStage, primitive.NewDateTimeFromTime(now))
+				if _, err := db.MarkRemindeeNudged(event.Id, remindee.Email, remindee.NudgeStage, maxNudgeStage, primitive.NewDateTimeFromTime(now)); err != nil {
+					logger.StdErr.Println("failed to retire a stale remindee:", err)
+				}
 				continue
 			}
 

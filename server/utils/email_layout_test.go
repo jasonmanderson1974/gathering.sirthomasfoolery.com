@@ -118,7 +118,7 @@ func TestRenderEmailWithFooterOrdersFooterAfterActions(t *testing.T) {
 	if body == -1 || button == -1 || footer == -1 {
 		t.Fatalf("missing a section (body=%d button=%d footer=%d)", body, button, footer)
 	}
-	if !(body < button && button < footer) {
+	if body >= button || button >= footer {
 		t.Errorf("expected body < button < footer, got body=%d button=%d footer=%d", body, button, footer)
 	}
 }

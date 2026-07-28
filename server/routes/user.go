@@ -180,7 +180,9 @@ func requestEmailChange(c *gin.Context) {
 	}
 
 	// Store a fresh code for the new email and send it there.
-	db.OtpCodesCollection.DeleteMany(context.Background(), bson.M{"email": newEmail})
+	if _, err := db.OtpCodesCollection.DeleteMany(context.Background(), bson.M{"email": newEmail}); err != nil {
+		logger.StdErr.Println("failed to clear previous otp codes:", err)
+	}
 	code := generateOtpCode()
 	otpDoc := models.OtpCode{
 		Email:     newEmail,
@@ -200,7 +202,10 @@ func requestEmailChange(c *gin.Context) {
 		buildEmailChangeOtpBody(code),
 		"text/html",
 	); sendErr != nil {
-		db.OtpCodesCollection.DeleteMany(context.Background(), bson.M{"email": newEmail})
+		// The code never reached anyone, so don't leave it usable.
+		if _, err := db.OtpCodesCollection.DeleteMany(context.Background(), bson.M{"email": newEmail}); err != nil {
+			logger.StdErr.Println("failed to clear an unsent otp code:", err)
+		}
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.OtpSendFailed})
 		return
 	}
@@ -244,19 +249,28 @@ func verifyEmailChange(c *gin.Context) {
 
 	// Max 5 attempts per code.
 	if otpDoc.Attempts >= 5 {
-		db.OtpCodesCollection.DeleteOne(context.Background(), bson.M{"_id": otpDoc.Id})
+		if _, err := db.OtpCodesCollection.DeleteOne(context.Background(), bson.M{"_id": otpDoc.Id}); err != nil {
+			logger.StdErr.Println("failed to delete exhausted otp:", err)
+		}
 		c.JSON(http.StatusTooManyRequests, responses.Error{Error: errs.OtpTooManyAttempts})
 		return
 	}
-	db.OtpCodesCollection.UpdateByID(context.Background(), otpDoc.Id, bson.M{"$inc": bson.M{"attempts": 1}})
+	// If the attempt counter doesn't advance the 5-try cap stops capping, so
+	// say so rather than silently widening the guessing window.
+	if _, err := db.OtpCodesCollection.UpdateByID(context.Background(), otpDoc.Id, bson.M{"$inc": bson.M{"attempts": 1}}); err != nil {
+		logger.StdErr.Println("failed to increment otp attempts:", err)
+	}
 
 	if otpDoc.Code != payload.Code {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: errs.OtpInvalidCode})
 		return
 	}
 
-	// Verified — consume the code.
-	db.OtpCodesCollection.DeleteOne(context.Background(), bson.M{"_id": otpDoc.Id})
+	// Verified — consume the code. A code that survives its own use is
+	// replayable, so this failing is worth knowing about.
+	if _, err := db.OtpCodesCollection.DeleteOne(context.Background(), bson.M{"_id": otpDoc.Id}); err != nil {
+		logger.StdErr.Println("failed to consume otp:", err)
+	}
 
 	// Re-check the conflict in case an account claimed the email meanwhile.
 	existing, existingErr := db.GetUserByEmail(newEmail)
@@ -276,10 +290,18 @@ func verifyEmailChange(c *gin.Context) {
 	// the account, then remove the old allowlist entry (replace semantics — no
 	// dangling invite at the user's old address).
 	role := authUser.EffectiveRole()
+	// This has to succeed before the account moves: AuthRequired checks the roll
+	// on every request, so flipping the email with the new address unlisted
+	// locks the member out of their own account on their very next click.
 	if err := db.AddToAllowlist(newEmail, oldEmail, role); err != nil {
-		logger.StdErr.Println(err)
+		logger.StdErr.Println("allowlisting the new address failed — not changing the email:", err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
 	}
-	db.SetAllowlistRole(newEmail, role) // ensure role is correct even if the entry pre-existed
+	// Ensure the role is correct even if the entry pre-existed.
+	if err := db.SetAllowlistRole(newEmail, role); err != nil {
+		logger.StdErr.Println("failed to set role on the new allowlist entry:", err)
+	}
 
 	if _, err := db.UsersCollection.UpdateByID(context.Background(), authUser.Id, bson.M{
 		"$set": bson.M{"email": newEmail},
@@ -290,7 +312,12 @@ func verifyEmailChange(c *gin.Context) {
 	}
 
 	if oldEmail != newEmail {
-		db.RemoveFromAllowlist(oldEmail)
+		// Best-effort: the account has already moved. A failure here leaves a
+		// dangling invite at the old address, which is worth a log but not worth
+		// failing a change that has otherwise succeeded.
+		if err := db.RemoveFromAllowlist(oldEmail); err != nil {
+			logger.StdErr.Println("failed to remove the old allowlist entry:", err)
+		}
 	}
 
 	user, userErr := db.GetUserById(authUser.Id.Hex())
@@ -387,7 +414,7 @@ func getEvents(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 		return
 	}
-	defer cursor.Close(context.Background())
+	defer func() { _ = cursor.Close(context.Background()) }()
 	eventIds := make([]primitive.ObjectID, 0)
 	for cursor.Next(context.Background()) {
 		var eventResponse models.EventResponse
@@ -741,7 +768,7 @@ func addCalendarAccount(c *gin.Context, args addCalendarAccountArgs) {
 	// Get auth user
 	authUser := utils.GetAuthUser(c)
 
-	ident := args.email
+	var ident string
 	if args.calendarType != models.ICSCalendarType {
 		ident = utils.NormalizeEmail(args.email)
 	} else {
@@ -825,7 +852,9 @@ func removeCalendarAccount(c *gin.Context) {
 		calendarAccountKey = utils.GetCalendarAccountKey(payload.Email, payload.CalendarType)
 	}
 
-	db.UsersCollection.UpdateByID(context.Background(), authUser.Id, bson.A{
+	// Returning 200 on a failed write told the member their calendar was
+	// disconnected while it was still linked.
+	if _, err := db.UsersCollection.UpdateByID(context.Background(), authUser.Id, bson.A{
 		bson.M{"$set": bson.M{
 			"calendarAccounts": bson.M{
 				"$setField": bson.M{
@@ -835,7 +864,11 @@ func removeCalendarAccount(c *gin.Context) {
 				},
 			},
 		}},
-	})
+	}); err != nil {
+		logger.StdErr.Println(err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{})
 }

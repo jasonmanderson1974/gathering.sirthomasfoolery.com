@@ -71,7 +71,7 @@ func SearchContacts(user *models.User, query string) ([]models.User, *errs.Googl
 		logger.StdErr.Println(err)
 		return nil, &errs.GoogleAPIError{Code: 500, Message: err.Error()}
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	// Parse response
 	contactsData := struct {
@@ -102,7 +102,7 @@ func SearchContacts(user *models.User, query string) ([]models.User, *errs.Googl
 			logger.StdErr.Println(err)
 			return nil, &errs.GoogleAPIError{Code: 500, Message: err.Error()}
 		}
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 
 		// Parse response
 		if err := json.NewDecoder(response.Body).Decode(&directoryData); err != nil {

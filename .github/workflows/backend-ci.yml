@@ -54,8 +54,10 @@ jobs:
       - name: go vet
         run: go vet $(go list ./... | grep -v '/scripts')
 
-      # golangci-lint stays WARNINGS-first while the backlog is worked down
-      # (TODO B5); tighten to blocking once it reaches zero.
+      # BLOCKING since 2026-07-28 (TODO B5): the backlog is at zero, so anything
+      # this reports is new. Fix it or suppress it with a reason, as
+      # utils/utils.go does for the CFB deprecation — don't reintroduce
+      # continue-on-error.
       #
       # NOTE the `-f '{{.Dir}}'`: golangci-lint takes DIRECTORIES, and plain
       # `go list` emits import paths. Passing those made it resolve every
@@ -64,7 +66,6 @@ jobs:
       # nothing at all until 2026-07-28. Whatever else changes here, keep the
       # arguments as paths.
       - name: golangci-lint
-        continue-on-error: true
         run: |
           curl -sL https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz | tar xz -C /tmp
           /tmp/golangci-lint-2.12.2-linux-amd64/golangci-lint run $(go list -f '{{.Dir}}' ./... | grep -v '/scripts')

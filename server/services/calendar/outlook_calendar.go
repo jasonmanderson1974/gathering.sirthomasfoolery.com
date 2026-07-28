@@ -21,7 +21,7 @@ func (calendar *OutlookCalendar) GetCalendarList() (map[string]models.SubCalenda
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	responseBody := struct {
 		Value []struct {
@@ -60,7 +60,7 @@ func (calendar *OutlookCalendar) GetCalendarEvents(calendarId string, timeMin ti
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	responseBody := struct {
 		Value []struct {

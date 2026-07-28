@@ -267,13 +267,19 @@ func updateEventResponse(c *gin.Context) {
 
 		// Update event responses
 		if userHasResponded {
-			db.EventResponsesCollection.UpdateOne(context.Background(), bson.M{
+			// This IS the availability being saved — swallowing the error meant
+			// answering 200 to a member whose response was never stored.
+			if _, err := db.EventResponsesCollection.UpdateOne(context.Background(), bson.M{
 				"_id": eventResponses[idx].Id,
 			}, bson.M{
 				"$set": bson.M{
 					"response": &response,
 				},
-			})
+			}); err != nil {
+				logger.StdErr.Println(err)
+				c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+				return
+			}
 		} else {
 			if _, err := db.EventResponsesCollection.InsertOne(context.Background(), models.EventResponse{
 				UserId:   userIdString,
@@ -484,9 +490,15 @@ func deleteEventResponse(c *gin.Context) {
 			// Remove response from array
 			for i := range eventResponses {
 				if eventResponses[i].Response.Name == payload.Name {
-					db.EventResponsesCollection.DeleteOne(context.Background(), bson.M{
+					// Only adjust the count if the response actually went —
+					// otherwise numResponses drifts away from the responses.
+					if _, err := db.EventResponsesCollection.DeleteOne(context.Background(), bson.M{
 						"_id": eventResponses[i].Id,
-					})
+					}); err != nil {
+						logger.StdErr.Println(err)
+						c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+						return
+					}
 					*event.NumResponses--
 					numResponsesDelta = -1
 					break
@@ -516,9 +528,15 @@ func deleteEventResponse(c *gin.Context) {
 			// Remove response from array
 			for i := range eventResponses {
 				if eventResponses[i].UserId == payload.UserId {
-					db.EventResponsesCollection.DeleteOne(context.Background(), bson.M{
+					// Only adjust the count if the response actually went —
+					// otherwise numResponses drifts away from the responses.
+					if _, err := db.EventResponsesCollection.DeleteOne(context.Background(), bson.M{
 						"_id": eventResponses[i].Id,
-					})
+					}); err != nil {
+						logger.StdErr.Println(err)
+						c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+						return
+					}
 					*event.NumResponses--
 					numResponsesDelta = -1
 					break

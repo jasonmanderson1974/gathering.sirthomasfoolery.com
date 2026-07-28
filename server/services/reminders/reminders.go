@@ -124,7 +124,11 @@ func advanceRecurringGatherings(now time.Time) {
 		// Capture the just-completed occurrence into the Chronicle (C10) BEFORE
 		// advancing, since AdvanceGathering clears this cycle's RSVPs. Dup-safe
 		// (unique index on eventId+startDate), so a racing tick can't double-record.
-		db.InsertChronicleEntry(buildChronicleEntry(&event, now))
+		// Advance even if this fails: the occurrence has ended either way, and
+		// a missing Chronicle row is better than a gathering stuck on a past date.
+		if err := db.InsertChronicleEntry(buildChronicleEntry(&event, now)); err != nil {
+			logger.StdErr.Println("failed to chronicle an advancing occurrence:", err)
+		}
 
 		newStart := primitive.NewDateTimeFromTime(next)
 		newEnd := primitive.NewDateTimeFromTime(next.Add(duration))
@@ -152,7 +156,11 @@ func archivePastGatherings(now time.Time) {
 		if err := db.InsertChronicleEntry(buildChronicleEntry(&event, now)); err != nil {
 			continue // transient — retry next tick (not yet marked chronicled)
 		}
-		db.MarkEventChronicled(event.Id)
+		// If this fails the entry is written again next tick, which the unique
+		// index turns into a no-op rather than a duplicate.
+		if err := db.MarkEventChronicled(event.Id); err != nil {
+			logger.StdErr.Println("failed to mark an event chronicled:", err)
+		}
 	}
 }
 
@@ -257,8 +265,11 @@ func processDueReminders(now time.Time, send SendFunc) {
 			}
 		}
 
-		// Mark sent regardless of per-recipient failures to avoid resend loops.
-		db.MarkGatheringReminderSent(event.Id, primitive.NewDateTimeFromTime(now))
+		// Mark sent regardless of per-recipient failures to avoid resend loops —
+		// which makes a failure HERE the thing that causes one.
+		if err := db.MarkGatheringReminderSent(event.Id, primitive.NewDateTimeFromTime(now)); err != nil {
+			logger.StdErr.Println("failed to mark a reminder sent — it may resend next tick:", err)
+		}
 	}
 }
 

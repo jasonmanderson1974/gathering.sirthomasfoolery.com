@@ -150,7 +150,8 @@ func signInHelper(c *gin.Context, token auth.TokenResponse, tokenOrigin models.T
 	}
 
 	var email, firstName, lastName, picture string
-	if calendarType == models.GoogleCalendarType {
+	switch calendarType {
+	case models.GoogleCalendarType:
 		// Verify the ID token before trusting any of its claims. The id token
 		// can be supplied directly by the client (e.g. the mobile sign-in
 		// endpoint), so decoding it without verifying the signature, audience,
@@ -171,7 +172,7 @@ func signInHelper(c *gin.Context, token auth.TokenResponse, tokenOrigin models.T
 		firstName = info.GivenName
 		lastName = info.FamilyName
 		picture = info.Picture
-	} else if calendarType == models.OutlookCalendarType {
+	case models.OutlookCalendarType:
 		// Get user info from microsoft graph
 		userInfo, userInfoErr := microsoftgraph.GetUserInfo(nil, &calendarAuth)
 		if userInfoErr != nil {
@@ -441,7 +442,9 @@ func sendOtp(c *gin.Context) {
 	}
 
 	// Delete any existing OTP codes for this email
-	db.OtpCodesCollection.DeleteMany(context.Background(), bson.M{"email": email})
+	if _, err := db.OtpCodesCollection.DeleteMany(context.Background(), bson.M{"email": email}); err != nil {
+		logger.StdErr.Println("failed to clear previous otp codes:", err)
+	}
 
 	code := generateOtpCode()
 	otpDoc := models.OtpCode{
@@ -470,7 +473,9 @@ func sendOtp(c *gin.Context) {
 		// Delivery failed (e.g. missing/invalid SMTP creds). Remove the code we
 		// just stored — it's useless if it never reached the user — and surface
 		// the failure so the UI can tell them instead of pretending success.
-		db.OtpCodesCollection.DeleteMany(context.Background(), bson.M{"email": email})
+		if _, err := db.OtpCodesCollection.DeleteMany(context.Background(), bson.M{"email": email}); err != nil {
+			logger.StdErr.Println("failed to clear an unsent otp code:", err)
+		}
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.OtpSendFailed})
 		return
 	}
@@ -524,23 +529,30 @@ func verifyOtp(c *gin.Context) {
 
 	// Rate-limit: max 5 attempts per code
 	if otpDoc.Attempts >= 5 {
-		db.OtpCodesCollection.DeleteOne(context.Background(), bson.M{"_id": otpDoc.Id})
+		if _, err := db.OtpCodesCollection.DeleteOne(context.Background(), bson.M{"_id": otpDoc.Id}); err != nil {
+			logger.StdErr.Println("failed to delete exhausted otp:", err)
+		}
 		c.JSON(http.StatusTooManyRequests, responses.Error{Error: errs.OtpTooManyAttempts})
 		return
 	}
 
-	// Increment attempts
-	db.OtpCodesCollection.UpdateByID(context.Background(), otpDoc.Id, bson.M{
+	// Increment attempts. If this silently fails the 5-try cap stops capping,
+	// which is the whole brute-force guard on a 6-digit code.
+	if _, err := db.OtpCodesCollection.UpdateByID(context.Background(), otpDoc.Id, bson.M{
 		"$inc": bson.M{"attempts": 1},
-	})
+	}); err != nil {
+		logger.StdErr.Println("failed to increment otp attempts:", err)
+	}
 
 	if otpDoc.Code != payload.Code {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: errs.OtpInvalidCode})
 		return
 	}
 
-	// OTP verified — delete it
-	db.OtpCodesCollection.DeleteOne(context.Background(), bson.M{"_id": otpDoc.Id})
+	// OTP verified — delete it. A code that survives its own use is replayable.
+	if _, err := db.OtpCodesCollection.DeleteOne(context.Background(), bson.M{"_id": otpDoc.Id}); err != nil {
+		logger.StdErr.Println("failed to consume otp:", err)
+	}
 
 	// Find or create user
 	var userId primitive.ObjectID

@@ -72,7 +72,7 @@ func VerifyGoogleIdToken(idToken string, allowedAuds []string) (GoogleIdTokenInf
 	if err != nil {
 		return GoogleIdTokenInfo{}, fmt.Errorf("failed to reach token verification endpoint: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var info GoogleIdTokenInfo
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
@@ -129,11 +129,16 @@ func GetTokensFromAuthCode(code string, scope string, origin string, calendarTyp
 		logger.StdErr.Println(err)
 		return TokenResponse{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var res TokenResponse
 
-	json.NewDecoder(resp.Body).Decode(&res)
+	// A body we can't parse is not an empty token — say so rather than carrying
+	// on with zero values and failing further down with no explanation.
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		logger.StdErr.Println(err)
+		return TokenResponse{}, fmt.Errorf("token endpoint returned an unparseable body: %w", err)
+	}
 	if len(res.Error) > 0 {
 		data, _ := json.MarshalIndent(res, "", "  ")
 		logger.StdErr.Println(string(data))
@@ -162,10 +167,13 @@ func RefreshAccessToken(accountAuth *models.OAuth2CalendarAuth, calendarType mod
 		logger.StdErr.Println(err)
 		return AccessTokenResponse{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var res AccessTokenResponse
-	json.NewDecoder(resp.Body).Decode(&res)
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		logger.StdErr.Println(err)
+		return AccessTokenResponse{}, fmt.Errorf("access token endpoint returned an unparseable body: %w", err)
+	}
 
 	return res, nil
 }
@@ -250,9 +258,10 @@ func RefreshUserTokenIfNecessary(u *models.User, accounts models.Set[string]) {
 }
 
 func getCredentialsFromCalendarType(calendarType models.CalendarType) (string, string) {
-	if calendarType == models.GoogleCalendarType {
+	switch calendarType {
+	case models.GoogleCalendarType:
 		return os.Getenv("CLIENT_ID"), os.Getenv("CLIENT_SECRET")
-	} else if calendarType == models.OutlookCalendarType {
+	case models.OutlookCalendarType:
 		return os.Getenv("MICROSOFT_CLIENT_ID"), os.Getenv("MICROSOFT_CLIENT_SECRET")
 	}
 
@@ -260,9 +269,10 @@ func getCredentialsFromCalendarType(calendarType models.CalendarType) (string, s
 }
 
 func getTokenEndpointFromCalendarType(calendarType models.CalendarType) string {
-	if calendarType == models.GoogleCalendarType {
+	switch calendarType {
+	case models.GoogleCalendarType:
 		return "https://oauth2.googleapis.com/token"
-	} else if calendarType == models.OutlookCalendarType {
+	case models.OutlookCalendarType:
 		return "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 	}
 
