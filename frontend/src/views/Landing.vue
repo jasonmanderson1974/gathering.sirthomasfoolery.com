@@ -122,14 +122,6 @@
     </div>
 
     <AppFooter />
-
-    <!-- Sign in dialog -->
-    <SignInDialog
-      v-model="signInDialog"
-      @signIn="_signIn"
-      @emailSignIn="_emailSignIn"
-    />
-
   </div>
 </template>
 
@@ -148,14 +140,12 @@
 </style>
 
 <script>
-import { isPhone, signInGoogle, signInOutlook } from "@/utils"
+import { isPhone } from "@/utils"
 import FAQ from "@/components/FAQ.vue"
 import NumberBullet from "@/components/NumberBullet.vue"
 import LandingPageHeader from "@/components/landing/LandingPageHeader.vue"
-import SignInDialog from "@/components/SignInDialog.vue"
-import { calendarTypes } from "@/constants"
 import AppFooter from "@/components/Footer.vue"
-import { mapState, mapMutations } from "vuex"
+import { mapState } from "vuex"
 import AuthUserMenu from "@/components/AuthUserMenu.vue"
 import SirThomasFoolery from "@/components/general/SirThomasFoolery.vue"
 
@@ -171,13 +161,11 @@ export default {
     FAQ,
     NumberBullet,
     LandingPageHeader,
-    SignInDialog,
     AppFooter,
     AuthUserMenu,
   },
 
   data: () => ({
-    signInDialog: false,
     howItWorksSteps: [
       "Call a Gathering and propose the candidate evenings",
       "Circulate the summons, that each man may mark his availability",
@@ -260,24 +248,6 @@ export default {
   },
 
   methods: {
-    ...mapMutations(["setAuthUser"]),
-    _signIn(calendarType) {
-      if (calendarType === calendarTypes.GOOGLE) {
-        signInGoogle({ state: null, selectAccount: true })
-      } else if (calendarType === calendarTypes.OUTLOOK) {
-        // NOTE: selectAccount is not supported implemented yet for Outlook, maybe add it later
-        signInOutlook({ state: null, selectAccount: true })
-      }
-    },
-    _emailSignIn(user) {
-      this.setAuthUser(user)
-      this.$posthog?.identify(user._id, {
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-      })
-      this.$router.replace({ name: "home" })
-    },
     signIn() {
       this.$router.push({ name: "sign-in" })
     },
