@@ -80,14 +80,16 @@ func TestFindResponse_Empty(t *testing.T) {
 	}
 }
 
-// stripSensitiveUserFields must clear calendar/billing fields (never exposed in
-// event responses) while leaving identity fields (name, email) intact — email
-// visibility is handled separately by the caller.
+// stripSensitiveUserFields must clear calendar/billing fields plus phone and
+// role (never exposed in event responses) while leaving identity fields (name,
+// email) intact — email visibility is handled separately by the caller.
 func TestStripSensitiveUserFields(t *testing.T) {
 	user := &models.User{
 		Email:             "user@example.test",
 		FirstName:         "First",
 		LastName:          "Last",
+		Phone:             "+15555550123",
+		Role:              models.RoleAdmin,
 		CalendarAccounts:  map[string]models.CalendarAccount{"k": {}},
 		CalendarOptions:   &models.CalendarOptions{},
 		StripeCustomerId:  strPtrTest("cus_123"),
@@ -106,6 +108,14 @@ func TestStripSensitiveUserFields(t *testing.T) {
 	}
 	if user.PrimaryAccountKey != nil {
 		t.Error("PrimaryAccountKey should be nil after stripping")
+	}
+	// A respondent's phone number belongs to the Fellowship directory, not to
+	// every event viewer; their access level is nobody's business here.
+	if user.Phone != "" {
+		t.Errorf("Phone should be cleared after stripping, got %q", user.Phone)
+	}
+	if user.Role != "" {
+		t.Errorf("Role should be cleared after stripping, got %q", user.Role)
 	}
 	// Identity fields must be preserved.
 	if user.Email != "user@example.test" || user.FirstName != "First" || user.LastName != "Last" {

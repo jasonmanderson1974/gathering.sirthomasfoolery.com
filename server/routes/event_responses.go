@@ -639,6 +639,12 @@ func findResponse(responses []models.EventResponse, userId string) (int, *models
 // exposed in the event page API response (calendar accounts, billing info, etc.).
 // Email is NOT stripped here as callers handle email visibility separately based
 // on the collectEmails setting and owner status.
+//
+// Phone and Role are stripped unconditionally: an event response only needs to
+// identify the respondent (name + picture). A member's phone number belongs to
+// the Fellowship directory (/admin/allowlist), not to every event viewer, and
+// their access level is nobody's business outside member admin. Neither field
+// is read from event responses by the frontend.
 func stripSensitiveUserFields(user *models.User) {
 	if user == nil {
 		return
@@ -647,6 +653,8 @@ func stripSensitiveUserFields(user *models.User) {
 	user.CalendarOptions = nil
 	user.StripeCustomerId = nil
 	user.PrimaryAccountKey = nil
+	user.Phone = ""
+	user.Role = ""
 }
 
 // Helper function to get all responses as a map (for backward compatibility)

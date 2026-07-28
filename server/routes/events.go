@@ -497,6 +497,26 @@ func getEvent(c *gin.Context) {
 		event.SignUpResponses[userId] = response
 	}
 
+	// RSVPs (C1) carry the responder's email — backfilled from the account for
+	// signed-in RSVPs — and bypassed the showEmails gate entirely, so every
+	// event viewer could read every attendee's address. Apply the same rule the
+	// responses above use. The RSVP UI only renders status/name/guestCount.
+	if !showEmails {
+		for key, rsvp := range event.Rsvps {
+			if rsvp != nil {
+				rsvp.Email = ""
+			}
+			event.Rsvps[key] = rsvp
+		}
+	}
+
+	// Remindees are the owner's invite list: a bare roll of email addresses,
+	// previously serialized to every viewer. Only the owner has a use for it
+	// (NewEvent prefills the invite field from it when editing).
+	if !isOwner {
+		event.Remindees = nil
+	}
+
 	// Update event.ResponsesMap to match the final responsesMap
 	event.ResponsesMap = responsesMap
 
