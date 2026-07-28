@@ -26,6 +26,18 @@ const sessionEndedCodes = [
   errors.UserDoesNotExist,
   errors.NotInvited,
 ]
+
+// The auth probe is how the app *asks* whether there is a session, so a 401
+// from it is the expected answer for a signed-out visitor — not a session
+// ending mid-flight. The router guard calls it and handles the failure itself.
+//
+// Routing it through the handler as well is what broke the signed-out site: the
+// guard's own probe fired the handler, which pushed to /sign-in while
+// beforeEach was still resolving, cancelling the navigation and re-running the
+// guard — an endless / -> /sign-in loop that never rendered either page.
+const authProbeRoutes = ["/user/profile"]
+const isAuthProbe = (route) =>
+  authProbeRoutes.some((r) => route === r || route.startsWith(r + "?"))
 export const get = (route) => {
   return fetchMethod("GET", route)
 }
@@ -91,6 +103,7 @@ export const fetchMethod = (method, route, body = {}) => {
         if (
           res.status === 401 &&
           unauthorizedHandler &&
+          !isAuthProbe(route) &&
           sessionEndedCodes.includes(
             returnValue && typeof returnValue === "object"
               ? returnValue.error

@@ -145,6 +145,11 @@ setUnauthorizedHandler(() => {
   store.commit("setAuthUser", null)
   const current = router.currentRoute
   if (publicRoutes.includes(current.name)) return
+  // Before the first navigation resolves, currentRoute is Vue Router's
+  // placeholder (name null). Pushing then cancels the navigation in flight and
+  // the guard re-runs, so belt-and-braces against a redirect loop: the guard
+  // already sends signed-out visitors to sign-in on its own.
+  if (!current.name) return
   router.push({
     name: "sign-in",
     query: { redirect: current.fullPath },

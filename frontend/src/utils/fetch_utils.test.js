@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { get, post } from "./fetch_utils"
+import { get, post, setUnauthorizedHandler } from "./fetch_utils"
 import { errors } from "@/constants"
 
 // Mock global.fetch to return a canned Response-like object. fetchMethod only
@@ -70,5 +70,50 @@ describe("fetchMethod error shape (A10 standardized contract)", () => {
   it("throws a JsonError when a non-empty body isn't valid JSON", async () => {
     mockFetch({ ok: true, body: "not json" })
     await expect(get("/x")).rejects.toMatchObject({ error: errors.JsonError })
+  })
+})
+
+describe("session-ended 401 handler", () => {
+  it("fires for a normal route whose session has ended", async () => {
+    const onUnauthorized = vi.fn()
+    setUnauthorizedHandler(onUnauthorized)
+    mockFetch({
+      ok: false,
+      status: 401,
+      body: JSON.stringify({ error: errors.NotSignedIn }),
+    })
+    await expect(get("/events/abc")).rejects.toBeTruthy()
+    expect(onUnauthorized).toHaveBeenCalledTimes(1)
+    setUnauthorizedHandler(null)
+  })
+
+  // The router guard probes /user/profile to decide whether anyone is signed
+  // in; a 401 there is the expected answer, not a session ending. Firing the
+  // handler pushed to /sign-in mid-navigation and looped the signed-out site
+  // between / and /sign-in, rendering neither.
+  it("does NOT fire for the auth probe", async () => {
+    const onUnauthorized = vi.fn()
+    setUnauthorizedHandler(onUnauthorized)
+    mockFetch({
+      ok: false,
+      status: 401,
+      body: JSON.stringify({ error: errors.NotSignedIn }),
+    })
+    await expect(get("/user/profile")).rejects.toBeTruthy()
+    expect(onUnauthorized).not.toHaveBeenCalled()
+    setUnauthorizedHandler(null)
+  })
+
+  it("does not fire on a 403", async () => {
+    const onUnauthorized = vi.fn()
+    setUnauthorizedHandler(onUnauthorized)
+    mockFetch({
+      ok: false,
+      status: 403,
+      body: JSON.stringify({ error: errors.NotAuthorized }),
+    })
+    await expect(get("/events/abc")).rejects.toBeTruthy()
+    expect(onUnauthorized).not.toHaveBeenCalled()
+    setUnauthorizedHandler(null)
   })
 })
