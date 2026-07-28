@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/gin-contrib/sessions"
@@ -852,15 +851,9 @@ func requireResponseManager(c *gin.Context, event *models.Event) bool {
 // uncapped one inflates the document on every write path a guest can reach.
 const maxResponderNameLength = 100
 
-// sanitizeResponderName trims a display name and bounds it. Rune-aware so a cut
-// can't land mid-character.
+// sanitizeResponderName trims a display name and bounds it.
 func sanitizeResponderName(name string) string {
-	name = strings.TrimSpace(name)
-	r := []rune(name)
-	if len(r) > maxResponderNameLength {
-		return string(r[:maxResponderNameLength])
-	}
-	return name
+	return trimAndTruncate(name, maxResponderNameLength)
 }
 
 // responderKey resolves the caller's identity key for an RSVP or a poll vote.

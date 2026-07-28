@@ -35,14 +35,11 @@ const (
 )
 
 // sanitizeCommentText trims a comment and reports whether it's usable (non-empty
-// after trimming). Over-long text is truncated to maxCommentLength.
+// after trimming). Over-long text is truncated to maxCommentLength runes.
 func sanitizeCommentText(text string) (string, bool) {
-	trimmed := strings.TrimSpace(text)
+	trimmed := trimAndTruncate(text, maxCommentLength)
 	if trimmed == "" {
 		return "", false
-	}
-	if len(trimmed) > maxCommentLength {
-		trimmed = trimmed[:maxCommentLength]
 	}
 	return trimmed, true
 }

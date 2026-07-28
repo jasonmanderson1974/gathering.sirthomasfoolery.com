@@ -337,10 +337,24 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   two simultaneous joins, which wants a different fix (conditional update on the block's count)
   and is not what A16 describes.
 
-- [ ] **A17 · Rune-safe text truncation.** `S` · **P2**
-  `comments.go:45` and `polls.go:36,47` truncate with byte slicing (`trimmed[:maxLen]`); a cut
-  landing mid-rune (emoji, accents — likely in club comments) stores an invalid UTF-8 tail that
-  renders as a replacement char. Use `utf8.RuneCountInString` + rune-aware truncation.
+- [x] **A17 · Rune-safe text truncation.** `S` · **P2 — DONE 2026-07-28** (build/vet clean,
+  golangci **0 issues**, suite green over 6 consecutive runs).
+  All truncation in `routes` now goes through one helper. `truncateRunes` moved out of
+  `events.go` into a new **`routes/text.go`** — with four callers across four files it no longer
+  belonged beside the event payload code — joined by `trimAndTruncate`, which pairs trim-then-bound
+  in that order so padding can't eat the budget.
+  - **The A17 sites**: `comments.go` (`maxCommentLength`) and `polls.go` (`maxPollTitleLength`,
+    `maxPollOptionLength`) — byte slicing → `trimAndTruncate`.
+  - **Also unified**: `sanitizeResponderName` (`event_responses.go`) was already rune-aware but had
+    the logic inlined, and `sanitizeEventText` called trim+truncate by hand. Both delegate now, so
+    there is exactly one truncation implementation to get right. **-37 lines, +8.**
+  - **Semantic note:** these caps now bound **characters**, not bytes — which is what "2,000
+    characters" means to a member, and still bounds storage (≤4 bytes per rune).
+  - **Tests** (`routes/text_test.go`): the load-bearing one sweeps every cap from 0 past the string
+    length over emoji/accented inputs and asserts `utf8.ValidString` throughout — plus a case where
+    two poll options identical after truncation must collapse and fail the ≥2-distinct rule rather
+    than storing duplicates. **Verified by reverting the helper to byte slicing: 6 tests fail**,
+    including the pre-existing `TestTruncateRunes`.
 
 - [x] **A18 · Dead-code deletion batch (frontend + backend).** `S` · **P2 — DONE 2026-07-28**
   (backend build/vet + full suite green; frontend eslint 0 errors, 80/80 tests, build OK).

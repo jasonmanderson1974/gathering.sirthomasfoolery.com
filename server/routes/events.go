@@ -95,18 +95,6 @@ const (
 	maxEventSignUpBlocks      = 200
 )
 
-// truncateRunes cuts s to at most max runes. Rune-aware so a cut landing inside
-// a multi-byte character (an emoji or accent in a gathering name) can't leave an
-// invalid UTF-8 tail. See TODO A17, which owes the same treatment to comments
-// and polls.
-func truncateRunes(s string, max int) string {
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	return string(r[:max])
-}
-
 // eventPayloadLimits is the shared shape of the create/edit payload fields that
 // need bounding, so both handlers enforce one rule set.
 type eventPayloadLimits struct {
@@ -148,9 +136,9 @@ func validateEventPayload(c *gin.Context, p eventPayloadLimits) bool {
 // description stays nil so "absent" remains distinguishable from "cleared",
 // matching trimmedLocation.
 func sanitizeEventText(name string, description *string) (string, *string) {
-	name = truncateRunes(strings.TrimSpace(name), maxEventNameLength)
+	name = trimAndTruncate(name, maxEventNameLength)
 	if description != nil {
-		d := truncateRunes(strings.TrimSpace(*description), maxEventDescriptionLength)
+		d := trimAndTruncate(*description, maxEventDescriptionLength)
 		description = &d
 	}
 	return name, description

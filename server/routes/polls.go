@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
@@ -29,20 +28,14 @@ const (
 // the cleaned title, the cleaned non-empty option labels, and ok=false if the
 // poll is unusable (no title, or fewer than 2 distinct options).
 func sanitizePollInput(title string, options []string) (string, []string, bool) {
-	t := strings.TrimSpace(title)
-	if len(t) > maxPollTitleLength {
-		t = t[:maxPollTitleLength]
-	}
+	t := trimAndTruncate(title, maxPollTitleLength)
 
 	seen := make(map[string]bool)
 	cleaned := make([]string, 0, len(options))
 	for _, o := range options {
-		o = strings.TrimSpace(o)
+		o = trimAndTruncate(o, maxPollOptionLength)
 		if o == "" {
 			continue
-		}
-		if len(o) > maxPollOptionLength {
-			o = o[:maxPollOptionLength]
 		}
 		if seen[o] {
 			continue // drop duplicate labels
