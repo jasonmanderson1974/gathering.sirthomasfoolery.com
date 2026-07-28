@@ -2,15 +2,14 @@ package calendar
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
-	"github.com/emersion/go-ical"
 	"github.com/jonyTF/go-webdav"
 	"github.com/jonyTF/go-webdav/caldav"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"sirtom/server/encryption"
+	"sirtom/server/logger"
 	"sirtom/server/models"
 	"sirtom/server/utils"
 )
@@ -105,17 +104,26 @@ func (calendar *AppleCalendar) GetCalendarEvents(calendarId string, timeMin time
 
 		if !strings.Contains(startTimeString, "T") {
 			// Handle all day events
-			startTime, _ = time.Parse("20060102", startTimeString)
-			endTime, _ = time.Parse("20060102", event.Data.Children[0].Props["DTEND"][0].Value)
+			startTime, endTime, err = parseAllDayRange(
+				allDayLayoutICal,
+				startTimeString,
+				event.Data.Children[0].Props["DTEND"][0].Value,
+			)
+			if err != nil {
+				logger.StdErr.Println(err)
+				continue
+			}
 			allDay = true
 		} else {
 			// Handle normal events
 			startTime, err = parseTimeWithTZ(event.Data.Children[0].Props.Get("DTSTART"))
 			if err != nil {
+				logger.StdErr.Println(err)
 				continue
 			}
 			endTime, err = parseTimeWithTZ(event.Data.Children[0].Props.Get("DTEND"))
 			if err != nil {
+				logger.StdErr.Println(err)
 				continue
 			}
 		}
@@ -152,33 +160,4 @@ func (calendar *AppleCalendar) getClients() (*webdav.Client, *caldav.Client, err
 	}
 
 	return webdavClient, caldavClient, nil
-}
-
-func parseTimeWithTZ(prop *ical.Prop) (time.Time, error) {
-	timeStr := prop.Value
-	tzID := prop.Params.Get("TZID")
-
-	var t time.Time
-	var err error
-
-	if tzID != "" {
-		// locErr, not err: `loc, err :=` declared a SECOND err scoped to this
-		// block, so the ParseInLocation failure below landed in the shadow and
-		// the outer `if err != nil` read a nil. An unparseable time with a TZID
-		// came back as the zero time with no error, and the suppression that
-		// used to sit here asserted the opposite.
-		loc, locErr := time.LoadLocation(tzID)
-		if locErr != nil {
-			return time.Time{}, fmt.Errorf("invalid timezone: %v", locErr)
-		}
-		t, err = time.ParseInLocation("20060102T150405", timeStr, loc)
-	} else {
-		t, err = time.Parse("20060102T150405Z", timeStr)
-	}
-
-	if err != nil {
-		return time.Time{}, fmt.Errorf("unable to parse time: %v", err)
-	}
-
-	return t, nil
 }

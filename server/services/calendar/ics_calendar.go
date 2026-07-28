@@ -8,6 +8,7 @@ import (
 
 	"github.com/emersion/go-ical"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"sirtom/server/logger"
 	"sirtom/server/models"
 	"sirtom/server/utils"
 )
@@ -66,17 +67,22 @@ func (cal *ICSCalendar) GetCalendarEvents(calendarId string, timeMin time.Time, 
 
 		// Check that event is not all day
 		if !strings.Contains(dtStart.Value, "T") {
-			startTime, _ = time.Parse("20060102", dtStart.Value)
-			endTime, _ = time.Parse("20060102", dtEnd.Value)
+			startTime, endTime, err = parseAllDayRange(allDayLayoutICal, dtStart.Value, dtEnd.Value)
+			if err != nil {
+				logger.StdErr.Println(err)
+				continue
+			}
 			allDay = true
 		} else {
 			startTime, err = parseTimeWithTZ(dtStart)
 			if err != nil {
+				logger.StdErr.Println(err)
 				continue
 			}
 
 			endTime, err = parseTimeWithTZ(dtEnd)
 			if err != nil {
+				logger.StdErr.Println(err)
 				continue
 			}
 		}

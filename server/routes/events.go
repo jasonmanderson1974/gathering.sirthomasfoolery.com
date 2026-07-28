@@ -3,7 +3,6 @@ package routes
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -690,12 +689,6 @@ func getEvent(c *gin.Context) {
 		return
 	}
 
-	// Log response body
-	responseJSON, err := json.MarshalIndent(privatizedResponse, "", "  ")
-	if err != nil {
-		logger.StdErr.Printf("Failed to marshal privatized response for logging: %v\n", err)
-	}
-	_ = responseJSON
 	// Return the privatized response
 	c.JSON(http.StatusOK, privatizedResponse)
 }

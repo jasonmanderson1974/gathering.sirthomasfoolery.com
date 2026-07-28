@@ -392,12 +392,46 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   `currentAvailabilityMixin.js` — the per-navigation round-trip was the expensive part and is gone;
   consolidating those four is cheap follow-up whenever they're next touched.
 
-- [ ] **A21 · Calendar-service error-handling leftovers.** `S` · **P3**
-  `services/calendar/google_calendar.go:22,79` — `req, _ := http.NewRequest` (the same latent
-  nil-deref A2 batch 4 fixed in `services.go CallApi`). `google_calendar.go:136-137`,
-  `apple_calendar.go:107-108`, `ics_calendar.go:69-70` — `time.Parse` errors discarded, so an
-  unparseable all-day date silently becomes year-0001 and renders as a bogus availability block
-  instead of being skipped.
+- [x] **A21 · Calendar-service error-handling leftovers.** `S` · **P3 — DONE 2026-07-28**
+  (build/vet clean, golangci **0 issues**, full suite green against local Mongo).
+  All five sites fixed as reported, plus the `getEvent` dead marshal folded in from **A22**.
+
+  **⚠️ The finding's stated symptom was wrong, and the correction matters.** It said an unparseable
+  all-day date "renders as a bogus availability block". It does not: year-0001 falls outside every
+  display window, so the frontend's overlap check in `getAvailabilityFromCalendarEvents`
+  (`currentAvailabilityMixin.js:79`) never matches it, and for ICS the existing
+  `endTime.Before(timeMin)` filter discarded it outright. The real defect is the reverse and quieter
+  — **a malformed event was silently dropped with no error and no log**, so a member appears *free*
+  during a gathering they are actually busy for, and nothing anywhere says why. Skipping is the
+  right handling; doing it silently was not.
+  - **New `services/calendar/timeparse.go`.** `parseAllDayRange(layout, start, end)` — one
+    implementation for what were three copies, per **A17**'s "exactly one truncation implementation"
+    reasoning. Either date failing fails the pair and returns two zero times, so a caller that
+    ignores the error can't half-use the range. Two named layout constants
+    (`allDayLayoutRFC3339` = Google, `allDayLayoutICal` = CalDAV/ICS) — the two are **not**
+    interchangeable and passing the wrong one is now a test case rather than a plausible-looking
+    parse.
+  - **`parseTimeWithTZ` moved there too** (verbatim), out of `apple_calendar.go` — it has two
+    callers in two files and hadn't belonged beside the CalDAV client since ICS started using it.
+    `apple_calendar_test.go` was *entirely* its tests, so it became `timeparse_test.go` (`git mv`).
+  - **Also fixed beyond the letter of A21:** the *timed* branches in both `apple_calendar.go` and
+    `ics_calendar.go` already checked their error but `continue`d **silently**. That is **B8**'s
+    lesson exactly — a correct error that reaches no log is still invisible — so all six skip paths
+    now log. Two lines each; the same finding, the same function.
+  - **`google_calendar.go:22,79`** — `req, _ := http.NewRequest` now checked (the latent nil-deref
+    A2 batch 4 fixed in `services.go CallApi`). The all-day branch uses `parseErr`, **not** a `:=`
+    on `err`, deliberately: `err` is already live from the request above and `:=` inside the loop
+    would shadow it — the exact shape of the bug **B5** found in `apple_calendar.go`.
+  - **Tests** (`timeparse_test.go`, +11 subtests): 9 negative cases (garbage, empty, timed value,
+    and each layout fed the other's format) asserting an error, both times zero, and that the
+    message quotes the offending value — since the event then vanishes and the log is its only
+    trace. **Verified by reverting the helper to `time.Parse` with a discarded error: all 9 fail
+    with `0001-01-01`.**
+  - **Not touched (out of scope, flagged):** `apple_calendar.go` indexes
+    `event.Data.Children[0].Props["DTEND"][0]` unguarded, and the whole loop assumes `Children[0]`
+    exists — a CalDAV response missing DTEND panics rather than skipping. Pre-existing and unrelated
+    to error handling; worth its own item if Apple accounts ever get real use (prod currently has
+    **zero**, per **B6** step 4).
 
 - [ ] **A22 · Small cleanup batch.** `S` · **P3**
   - Byte-identical toggle→PATCH `/user/calendar-options`→emit logic in
@@ -405,8 +439,11 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
     extract one mixin.
   - PostHog is a no-op `Proxy` stub (`plugins/posthog.js`) yet `$posthog.capture` call sites remain
     scattered — remove both.
-  - `getEvent` dead debug scaffolding (`events.go:568-573`): marshals the whole privatized response
-    to indented JSON on every call, assigns it to `_`. Hot read path; delete.
+  - ✅ **DONE 2026-07-28 (folded into A21).** `getEvent` dead debug scaffolding: marshalled the whole
+    privatized response to indented JSON on every call and assigned it to `_` — dead work on a hot
+    read path, and on the *largest* payload the API returns. Deleted (7 lines, and `encoding/json`
+    left `events.go`'s imports with it). The `err` it declared was the last use of that name in the
+    function, so nothing downstream depended on it.
   - `errs/errors.go:10` TODO — error codes are bare strings; make them a type.
   - `Event.vue:981` / `SignUp.vue:57` — EventNotFound bounces to `home`, which re-bounces
     non-members; go direct to the right destination (mostly moot after E3, still a double redirect).
@@ -1009,14 +1046,18 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
    Then **A17**, **B6** and **B7** — all closed 2026-07-28, four steps each — then **B8** (the OAuth
    refresh error type B7 filed), **E10** (misc hardening) and **E12** (derive the test-package list,
    filed by E10) the same day.
-   **What's left is five items, and Parts A, B and E are done to P3.** Every P0/P1/P2 in the
-   refactoring, testing and security tracks is closed. Remaining: **A21**, **A22**, **A23** (`P3`),
-   **D2** (`L`/P3, infra-coupled rebranding — not a code-only change), and **C8**, which is `P2` but
-   **deferred on a false premise** and needs its value reassessed before anyone picks it up, since
-   it would reintroduce a service worker that was deliberately removed.
-   Nothing remaining blocks anything else. Natural next pick is **A21** — it's the last item with a
-   user-visible wrong answer (an unparseable all-day date silently becomes a year-0001 availability
-   block) rather than a cleanup.
+   Then **A21** (2026-07-28), which took the `getEvent` dead-marshal bullet out of **A22** with it.
+   **What's left is four items, and Parts A, B and E are done to P3** apart from two cleanup
+   batches. Every P0/P1/P2 in the refactoring, testing and security tracks is closed. Remaining:
+   **A22** (minus the marshal bullet) and **A23** (`P3`), **D2** (`L`/P3, infra-coupled rebranding —
+   not a code-only change), and **C8**, which is `P2` but **deferred on a false premise** and needs
+   its value reassessed before anyone picks it up, since it would reintroduce a service worker that
+   was deliberately removed.
+   Nothing remaining blocks anything else, and **nothing left has a correctness symptom** — A21 was
+   the last one. What remains is cleanup (**A22**), a large optional refactor (**A23**), an infra
+   migration deliberately left undone (**D2**), and a feature whose value is in doubt (**C8**).
+   If picking one: **A22** is five small independent bullets and is the cheapest way to close out
+   Part A.
 
 ---
 

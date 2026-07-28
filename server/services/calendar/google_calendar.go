@@ -19,11 +19,15 @@ type GoogleCalendar struct {
 }
 
 func (calendar GoogleCalendar) GetCalendarList() (map[string]models.SubCalendar, error) {
-	req, _ := http.NewRequest(
+	req, err := http.NewRequest(
 		"GET",
 		"https://www.googleapis.com/calendar/v3/users/me/calendarList?fields=items(id,summary,selected)",
 		nil,
 	)
+	if err != nil {
+		logger.StdErr.Println(err)
+		return nil, err
+	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", calendar.AccessToken))
 	resp, err := utils.HTTPClient.Do(req)
 	if err != nil {
@@ -76,11 +80,15 @@ func (calendar GoogleCalendar) GetCalendarList() (map[string]models.SubCalendar,
 func (calendar *GoogleCalendar) GetCalendarEvents(calendarId string, timeMin time.Time, timeMax time.Time) ([]models.CalendarEvent, error) {
 	min, _ := timeMin.MarshalText()
 	max, _ := timeMax.MarshalText()
-	req, _ := http.NewRequest(
+	req, err := http.NewRequest(
 		"GET",
 		fmt.Sprintf("https://www.googleapis.com/calendar/v3/calendars/%s/events?fields=items(id,summary,start,end,transparency,attendees)&timeMin=%s&timeMax=%s&singleEvents=true&eventTypes=default&eventTypes=outOfOffice", url.PathEscape(calendarId), min, max),
 		nil,
 	)
+	if err != nil {
+		logger.StdErr.Println(err)
+		return nil, err
+	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", calendar.AccessToken))
 	resp, err := utils.HTTPClient.Do(req)
 	if err != nil {
@@ -133,9 +141,15 @@ func (calendar *GoogleCalendar) GetCalendarEvents(calendarId string, timeMin tim
 
 		// Handle all day events
 		if item.Start.DateTime.IsZero() {
-			startDate, _ = time.Parse(time.DateOnly, item.Start.Date)
-			endDate, _ = time.Parse(time.DateOnly, item.End.Date)
-			allDay = true
+			// parseErr, not err: the enclosing err belongs to the request above,
+			// and a `:=` here would shadow it — the shape of the bug B5 found in
+			// apple_calendar.go.
+			allDayStart, allDayEnd, parseErr := parseAllDayRange(allDayLayoutRFC3339, item.Start.Date, item.End.Date)
+			if parseErr != nil {
+				logger.StdErr.Println(parseErr)
+				continue
+			}
+			startDate, endDate, allDay = allDayStart, allDayEnd, true
 		}
 
 		// Determine if user is free during this event
