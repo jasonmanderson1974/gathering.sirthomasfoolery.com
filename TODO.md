@@ -308,15 +308,34 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 
 ### 2026-07-27 review additions
 
-- [ ] **A16 · Lost-update race: whole-document `$set` on event writes.** `M` · **P1**
-  `updateEventResponse` writes back the **entire in-memory event** it loaded at the top of the
-  handler (`event_responses.go:391-395` — `UpdateByID(..., bson.M{"$set": event})`). Two concurrent
-  responders (realistic: a reminder email goes out and everyone clicks at once) both load, both
-  `$set` the whole doc, and the second silently clobbers the first's response. It also makes the
-  `SendEmailAfterXResponses` de-dup guard racy (`:361` sets `-1` in memory, persisted only by that
-  same racy write) — the "everyone responded" email can fire twice. Fix: scope `$set` to the fields
-  actually changed (the pattern `polls.go:173` already uses). ~~Related: `stripe.go:264`~~ — moot,
-  **E4** deleted it. This is the concrete case behind A3's "unchecked-write sweep" follow-up.
+- [x] **A16 · Lost-update race: whole-document `$set` on event writes.** `M` · **P1 — DONE
+  2026-07-28** (build/vet clean, full suite green against both an empty Mongo and a restored prod
+  replica). Finding confirmed and slightly wider than reported: **four** handlers wrote the whole
+  document back — `updateEventResponse`, `deleteEventResponse`, `userResponded` and `editEvent`.
+  The last is the worst of them: an edit reverted any response, RSVP, poll or comment made while
+  the dialog was open.
+  New scoped writers in `db/events.go`, so Mongo access stays in `db/`:
+  - `IncrementNumResponses` — `$inc`, not read-modify-write. A 20-goroutine test counts 20.
+  - `SetSignUpResponse` / `DeleteSignUpResponse` — target the one map key by dotted path so two
+    people claiming different slots don't overwrite each other. Keys are user ids (safe) or
+    guest-supplied names, so a key containing `.` or leading `$` can't be addressed and falls back
+    to rewriting the map; both paths are tested.
+  - `DisarmSendEmailAfterXResponses` — compare-and-set on the threshold. This is what makes the
+    "N people have responded" email fire **exactly once**: the guard used to be flipped in memory
+    and persisted by the very write that raced. Ten concurrent callers, one winner.
+  - `MarkRemindeeResponded` — guarded positional update. Also makes "everyone has responded"
+    send once; `userResponded` now re-reads before deciding "everyone", rather than judging it
+    from a snapshot that may be seconds stale.
+  - `UpdateEditableEventFields` — `$set` limited to the 17 fields the edit form owns. It marshals
+    and filters rather than naming values, because every one is `omitempty`: under the old write a
+    nil pointer was omitted and kept its stored value, and naming them would have written nulls
+    instead. Pinned by a test.
+  11 new DB-gated tests, several of which fail against the old whole-document write.
+  **Not addressed (deliberate):** `routes/events.go` `scheduleEvent`/`archiveEvent` and the RSVP
+  handlers already write scoped `$set`s; the remaining read-modify-write window on
+  `signUpResponses` capacity assignment is narrower but real — a slot can still be overfilled by
+  two simultaneous joins, which wants a different fix (conditional update on the block's count)
+  and is not what A16 describes.
 
 - [ ] **A17 · Rune-safe text truncation.** `S` · **P2**
   `comments.go:45` and `polls.go:36,47` truncate with byte slicing (`trimmed[:maxLen]`); a cut

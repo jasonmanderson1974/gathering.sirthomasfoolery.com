@@ -449,17 +449,10 @@ func editEvent(c *gin.Context) {
 		event.Remindees = &updatedRemindees
 	}
 
-	// Update event object
-	_, err := db.EventsCollection.UpdateOne(
-		context.Background(),
-		bson.M{
-			"_id": event.Id,
-		},
-		bson.M{
-			"$set": event,
-		},
-	)
-
+	// Persist only the fields the edit form owns (A16). Writing the whole
+	// document meant an edit silently reverted any response, RSVP, poll or
+	// comment made since the page was loaded.
+	err := db.UpdateEditableEventFields(event)
 	if err != nil {
 		logger.StdErr.Println(err)
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})

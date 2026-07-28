@@ -222,6 +222,12 @@ func updateEventResponse(c *gin.Context) {
 
 	var userIdString string
 	var userHasResponded bool
+	// A16: what this request actually changes on the event document, so the
+	// write at the end can be scoped to it rather than re-writing the whole
+	// event over whatever anyone else has done in the meantime.
+	numResponsesDelta := 0
+	var signUpResponseKey string
+	var signUpResponse *models.SignUpResponse
 	if !utils.Coalesce(event.IsSignUpForm) {
 		// Populate response differently if guest vs signed in user
 		var response models.Response
@@ -277,6 +283,7 @@ func updateEventResponse(c *gin.Context) {
 				logger.StdErr.Println(err)
 			} else {
 				*event.NumResponses++
+				numResponsesDelta = 1
 			}
 		}
 	} else {
@@ -314,6 +321,7 @@ func updateEventResponse(c *gin.Context) {
 			event.SignUpResponses = make(map[string]*models.SignUpResponse)
 		}
 		event.SignUpResponses[userIdString] = &response
+		signUpResponseKey, signUpResponse = userIdString, &response
 	}
 
 	// Send notification emails
@@ -362,10 +370,19 @@ func updateEventResponse(c *gin.Context) {
 
 	// Send email after X responses
 	sendEmailAfterXResponses := utils.Coalesce(event.SendEmailAfterXResponses)
+	// A16: claim the send with a compare-and-set instead of flipping the field
+	// in memory and hoping the write lands first. Two people responding at the
+	// same moment could both read the threshold as unmet-but-now-met; only the
+	// one that actually flips it in the database sends.
+	disarmed := false
 	if sendEmailAfterXResponses > 0 && !userHasResponded && sendEmailAfterXResponses == len(eventResponses)+1 { // We add 1 because eventResponses is the old event responses before the current user is added
-		// Set SendEmailAfterXResponses variable to -1 to prevent additional emails from being sent
-		*event.SendEmailAfterXResponses = -1
-
+		won, err := db.DisarmSendEmailAfterXResponses(event.Id, sendEmailAfterXResponses)
+		if err == nil && won {
+			disarmed = true
+			*event.SendEmailAfterXResponses = -1
+		}
+	}
+	if disarmed {
 		// Send email asynchronously
 		go func() {
 			// Recover from panics
@@ -394,16 +411,20 @@ func updateEventResponse(c *gin.Context) {
 		}()
 	}
 
-	// Update event in mongodb
-	_, err := db.EventsCollection.UpdateByID(
-		context.Background(),
-		event.Id,
-		bson.M{"$set": event},
-	)
-	if err != nil {
-		logger.StdErr.Println(err)
-		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-		return
+	// Persist only what this request changed. Writing the whole event back here
+	// meant a second responder's snapshot silently undid the first's — and took
+	// any RSVP, poll or comment made in between with it (A16).
+	if numResponsesDelta != 0 {
+		if err := db.IncrementNumResponses(event.Id, numResponsesDelta); err != nil {
+			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+			return
+		}
+	}
+	if signUpResponse != nil {
+		if err := db.SetSignUpResponse(event.Id, signUpResponseKey, signUpResponse, event.SignUpResponses); err != nil {
+			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{})
@@ -444,6 +465,11 @@ func deleteEventResponse(c *gin.Context) {
 		return
 	}
 
+	// A16: track what this delete actually changed, so the write below is
+	// scoped to it.
+	numResponsesDelta := 0
+	removedSignUpKey := ""
+
 	if *payload.Guest {
 		// Deleting a by-name response is acting on someone else's data, so it
 		// is an owner action. This branch previously had NO authorization: any
@@ -453,6 +479,7 @@ func deleteEventResponse(c *gin.Context) {
 		}
 		if utils.Coalesce(event.IsSignUpForm) {
 			delete(event.SignUpResponses, payload.Name)
+			removedSignUpKey = payload.Name
 		} else {
 			// Remove response from array
 			for i := range eventResponses {
@@ -461,6 +488,7 @@ func deleteEventResponse(c *gin.Context) {
 						"_id": eventResponses[i].Id,
 					})
 					*event.NumResponses--
+					numResponsesDelta = -1
 					break
 				}
 			}
@@ -483,6 +511,7 @@ func deleteEventResponse(c *gin.Context) {
 
 		if utils.Coalesce(event.IsSignUpForm) {
 			delete(event.SignUpResponses, payload.UserId)
+			removedSignUpKey = payload.UserId
 		} else {
 			// Remove response from array
 			for i := range eventResponses {
@@ -491,6 +520,7 @@ func deleteEventResponse(c *gin.Context) {
 						"_id": eventResponses[i].Id,
 					})
 					*event.NumResponses--
+					numResponsesDelta = -1
 					break
 				}
 			}
@@ -498,14 +528,15 @@ func deleteEventResponse(c *gin.Context) {
 
 	}
 
-	// Update responses in mongodb
-	_, err := db.EventsCollection.UpdateByID(
-		context.Background(),
-		event.Id,
-		bson.M{
-			"$set": event,
-		},
-	)
+	// Scoped to what was actually removed, so a concurrent responder isn't
+	// undone by this delete (A16).
+	var err error
+	if numResponsesDelta != 0 {
+		err = db.IncrementNumResponses(event.Id, numResponsesDelta)
+	}
+	if err == nil && removedSignUpKey != "" {
+		err = db.DeleteSignUpResponse(event.Id, removedSignUpKey, event.SignUpResponses)
+	}
 	if err != nil {
 		logger.StdErr.Println(err)
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
@@ -618,16 +649,32 @@ func userResponded(c *gin.Context) {
 	}
 	// Marking them responded is also what stops any further nudges: the
 	// scheduler's query skips remindees who have answered.
-	(*event.Remindees)[index].Responded = utils.TruePtr()
-
-	// Update event in database
-	db.EventsCollection.UpdateByID(context.Background(), event.Id, bson.M{
-		"$set": event,
-	})
-
-	// Email owner of event if all remindees have responded
+	//
+	// A16: a guarded, positional write. Two remindees clicking their links at
+	// once used to write the whole event each, so one flag could be lost — and
+	// with it the nudges kept coming. The guard also means only the caller that
+	// actually flips it can go on to send the "everyone responded" mail.
+	flipped, flipErr := db.MarkRemindeeResponded(event.Id, payload.Email)
+	if flipErr != nil {
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
+	if !flipped {
+		// Someone else got there first; nothing more to do.
+		c.JSON(http.StatusOK, gin.H{})
+		return
+	}
+	// Email owner of event if all remindees have responded. Re-read rather than
+	// trusting the snapshot: another remindee may have answered since it was
+	// loaded, and deciding "everyone" from stale data is how this either misses
+	// the last one or fires early.
+	fresh, freshErr := db.GetEventById(event.Id.Hex())
+	if freshErr != nil || fresh == nil || fresh.Remindees == nil {
+		c.JSON(http.StatusOK, gin.H{})
+		return
+	}
 	everyoneResponded := true
-	for _, remindee := range *event.Remindees {
+	for _, remindee := range *fresh.Remindees {
 		if !remindeeResponded(remindee) {
 			everyoneResponded = false
 			break

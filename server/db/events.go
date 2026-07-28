@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"math/rand"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -141,6 +142,162 @@ func MarkGatheringReminderSent(eventId primitive.ObjectID, sentAt primitive.Date
 		bson.M{"_id": eventId},
 		bson.M{"$set": bson.M{"gatheringReminder.sentAt": sentAt}},
 	)
+	if err != nil {
+		logger.StdErr.Println(err)
+	}
+	return err
+}
+
+// --- Scoped event writes (A16) ----------------------------------------------
+//
+// These exist so a handler can persist the one thing it changed instead of
+// writing the whole document back. `$set: event` looks harmless but re-writes
+// every field from a snapshot taken at the top of the handler, so two people
+// acting at once silently undo each other: a reminder goes out, everyone opens
+// the event, and the last write wins for responses, RSVPs, polls and comments
+// alike.
+//
+// Where a field is a counter or a guard, these use an atomic operator or a
+// compare-and-set rather than a read-modify-write, so concurrency is handled by
+// the database instead of by luck.
+
+// IncrementNumResponses adjusts the cached response count by delta ($inc, so
+// two concurrent responders both count).
+func IncrementNumResponses(eventId primitive.ObjectID, delta int) error {
+	_, err := EventsCollection.UpdateByID(context.Background(), eventId,
+		bson.M{"$inc": bson.M{"numResponses": delta}},
+	)
+	if err != nil {
+		logger.StdErr.Println(err)
+	}
+	return err
+}
+
+// signUpResponseKeyIsAddressable reports whether a map key can be written with
+// a dotted path. Keys are user ids (safe) or guest-supplied names (arbitrary):
+// Mongo cannot address a field containing "." through a path, and a leading "$"
+// reads as an operator.
+func signUpResponseKeyIsAddressable(key string) bool {
+	return key != "" && !strings.Contains(key, ".") && !strings.HasPrefix(key, "$")
+}
+
+// SetSignUpResponse writes one member's sign-up response. It targets that key
+// alone where the key allows it, so two people claiming different slots don't
+// overwrite each other, and falls back to rewriting the map when the key can't
+// be expressed as a path.
+func SetSignUpResponse(eventId primitive.ObjectID, key string, response *models.SignUpResponse, all map[string]*models.SignUpResponse) error {
+	var update bson.M
+	if signUpResponseKeyIsAddressable(key) {
+		update = bson.M{"$set": bson.M{"signUpResponses." + key: response}}
+	} else {
+		update = bson.M{"$set": bson.M{"signUpResponses": all}}
+	}
+
+	_, err := EventsCollection.UpdateByID(context.Background(), eventId, update)
+	if err != nil {
+		logger.StdErr.Println(err)
+	}
+	return err
+}
+
+// DeleteSignUpResponse removes one member's sign-up response, targeting that
+// key alone where possible (see SetSignUpResponse).
+func DeleteSignUpResponse(eventId primitive.ObjectID, key string, all map[string]*models.SignUpResponse) error {
+	var update bson.M
+	if signUpResponseKeyIsAddressable(key) {
+		update = bson.M{"$unset": bson.M{"signUpResponses." + key: ""}}
+	} else {
+		update = bson.M{"$set": bson.M{"signUpResponses": all}}
+	}
+
+	_, err := EventsCollection.UpdateByID(context.Background(), eventId, update)
+	if err != nil {
+		logger.StdErr.Println(err)
+	}
+	return err
+}
+
+// DisarmSendEmailAfterXResponses flips the threshold to -1, but only if it is
+// still the value the caller saw. That compare-and-set is what makes the
+// "N people have responded" email fire exactly once: previously the guard was
+// set in memory and persisted by the same whole-document write that raced, so
+// two simultaneous responses could each believe they were the Nth.
+//
+// Reports whether this caller won and should send.
+func DisarmSendEmailAfterXResponses(eventId primitive.ObjectID, expected int) (bool, error) {
+	res, err := EventsCollection.UpdateOne(context.Background(),
+		bson.M{"_id": eventId, "sendEmailAfterXResponses": expected},
+		bson.M{"$set": bson.M{"sendEmailAfterXResponses": -1}},
+	)
+	if err != nil {
+		logger.StdErr.Println(err)
+		return false, err
+	}
+	return res.ModifiedCount == 1, nil
+}
+
+// MarkRemindeeResponded flips one remindee's responded flag, and only if it is
+// not already set. Reports whether this caller was the one that flipped it, so
+// the "everyone has responded" email can't be sent twice for the same event.
+func MarkRemindeeResponded(eventId primitive.ObjectID, email string) (bool, error) {
+	res, err := EventsCollection.UpdateOne(context.Background(),
+		bson.M{
+			"_id": eventId,
+			"remindees": bson.M{"$elemMatch": bson.M{
+				"email":     email,
+				"responded": bson.M{"$ne": true},
+			}},
+		},
+		bson.M{"$set": bson.M{"remindees.$.responded": true}},
+	)
+	if err != nil {
+		logger.StdErr.Println(err)
+		return false, err
+	}
+	return res.ModifiedCount == 1, nil
+}
+
+// editableEventFields are the only fields the edit form owns. Everything else
+// on an event — responses, RSVPs, polls, comments, the scheduled time, nudge
+// bookkeeping — belongs to other handlers, and an edit has no business writing
+// them back from a snapshot it loaded seconds earlier.
+var editableEventFields = []string{
+	"name", "description", "location", "duration", "dates", "times",
+	"hasSpecificTimes", "wholeBlockSelection", "signUpBlocks", "startOnMonday",
+	"notificationsEnabled", "blindAvailabilityEnabled", "daysOnly",
+	"sendEmailAfterXResponses", "collectEmails", "type", "remindees",
+}
+
+// UpdateEditableEventFields persists an edit, touching only the fields above.
+//
+// It marshals the event and filters, rather than listing values by hand,
+// because every one of those fields is `omitempty`: under the old whole-document
+// `$set` a nil pointer was omitted and kept its stored value, and naming the
+// fields explicitly would instead write nulls over them. Filtering the marshalled
+// document preserves that behaviour exactly while narrowing what's written.
+func UpdateEditableEventFields(event *models.Event) error {
+	raw, err := bson.Marshal(event)
+	if err != nil {
+		logger.StdErr.Println(err)
+		return err
+	}
+	var all bson.M
+	if err := bson.Unmarshal(raw, &all); err != nil {
+		logger.StdErr.Println(err)
+		return err
+	}
+
+	set := bson.M{}
+	for _, field := range editableEventFields {
+		if v, ok := all[field]; ok {
+			set[field] = v
+		}
+	}
+	if len(set) == 0 {
+		return nil
+	}
+
+	_, err = EventsCollection.UpdateByID(context.Background(), event.Id, bson.M{"$set": set})
 	if err != nil {
 		logger.StdErr.Println(err)
 	}
