@@ -41,19 +41,18 @@ func (s EncryptedString) MarshalBSONValue() (bsontype.Type, []byte, error) {
 
 // UnmarshalBSONValue decrypts on the way out of Mongo.
 //
-// Values written before B7 are stored in the clear and are passed through
-// unchanged — a tagged value is unambiguous (':' is outside the base64
-// alphabet), so there is no guessing involved. The startup sweep in
-// db.EncryptPlaintextOAuthTokens migrates them; step 4 removes this branch once
-// prod is confirmed to hold none, and the passthrough is the only reason these
-// steps are separate deploys.
+// The pre-B7 plaintext passthrough is gone (B7 step 4): an untagged value is
+// refused rather than used. It was retired only once prod held none — the
+// startup sweep that migrated them, db.EncryptPlaintextOAuthTokens, stays,
+// because it is what lets a restored pre-B7 backup heal itself before the
+// router serves a single request.
 //
-// A value that is tagged but *fails* to decrypt is an error, not an empty
-// string. It has to be, because several handlers read the user document,
-// change one field and write the whole thing back: degrading a failed decrypt
-// to "" would let a wrong ENCRYPTION_KEY quietly destroy every refresh token in
-// the database on the next calendar fetch. Failing the decode instead means
-// nothing is written back at all.
+// A value that fails to decrypt is an error, not an empty string. It has to be,
+// because several handlers read the user document, change one field and write
+// the whole thing back: degrading a failed decrypt to "" would let a wrong
+// ENCRYPTION_KEY quietly destroy every refresh token in the database on the
+// next calendar fetch. Failing the decode instead means nothing is written back
+// at all.
 func (s *EncryptedString) UnmarshalBSONValue(t bsontype.Type, data []byte) error {
 	// The interface fixes the parameter as a bsontype.Type; the constants
 	// naming its values now live on bson (the bsontype ones are deprecated).
@@ -69,11 +68,6 @@ func (s *EncryptedString) UnmarshalBSONValue(t bsontype.Type, data []byte) error
 	raw, ok := bson.RawValue{Type: t, Value: data}.StringValueOK()
 	if !ok {
 		return fmt.Errorf("malformed string value for an encrypted field")
-	}
-	if !encryption.IsCiphertext(raw) {
-		// Legacy plaintext (pre-B7).
-		*s = EncryptedString(raw)
-		return nil
 	}
 
 	plain, err := encryption.Decrypt(raw)

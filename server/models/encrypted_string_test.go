@@ -98,9 +98,10 @@ func TestEncryptedString_RoundTripsThroughBSON(t *testing.T) {
 	}
 }
 
-// Values written before B7 are stored in the clear. They must keep working
-// until the sweep has moved them; step 4 removes this.
-func TestEncryptedString_ReadsLegacyPlaintext(t *testing.T) {
+// B7 step 4: the pre-B7 plaintext passthrough is gone. An untagged value is
+// refused rather than used — this is the check that fails if it comes back.
+// The startup sweep, not this branch, is what handles a restored old backup.
+func TestEncryptedString_RefusesUntaggedValue(t *testing.T) {
 	withKey(t, testEncryptionKey)
 
 	var s EncryptedString
@@ -108,11 +109,11 @@ func TestEncryptedString_ReadsLegacyPlaintext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.UnmarshalBSONValue(typ, data); err != nil {
-		t.Fatalf("legacy plaintext should be readable: %v", err)
+	if err := s.UnmarshalBSONValue(typ, data); err == nil {
+		t.Fatalf("an untagged value was accepted as %q", s)
 	}
-	if s != "plaintext-refresh-token" {
-		t.Errorf("got %q", s)
+	if s != "" {
+		t.Errorf("a refused value must not be assigned, got %q", s)
 	}
 }
 

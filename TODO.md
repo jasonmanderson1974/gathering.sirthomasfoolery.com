@@ -555,8 +555,8 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
     (The handover listed two v1 tests; there were three — `TestV1CiphertextIsNeverMistakenForV2`
     also used the fixture.)
 
-- [ ] **B7 · Google/Outlook OAuth tokens are stored unencrypted.** `M` · **P1 — steps 1–3 DONE
-  2026-07-28 and deployed; step 4 gated.**
+- [x] **B7 · Google/Outlook OAuth tokens are stored unencrypted.** `M` · **P1 — DONE 2026-07-28,
+  all four steps deployed (1–3 together, 4 separately as required).**
   Surfaced while scoping **B6**. `OAuth2CalendarAuth.AccessToken` / `.RefreshToken` were written
   straight to the user document at four live sites — `routes/auth.go` (`signIn`, `signInMobile`)
   and `routes/user.go` (add Google / add Outlook) — with no encryption. A **refresh token is a
@@ -589,20 +589,33 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
     `$set: user` now use `db.SetUserCalendarAccounts`; **`addCalendarAccount` also returns its
     error**, and its four callers answer 500 instead of reporting a calendar connected when
     nothing was stored (the class of bug **B5** fixed for `removeCalendarAccount`).
-  - **4/4 GATED — do not land until 1–3 are deployed and prod is verified to hold no untagged
-    token.** Drop the legacy-plaintext branch in `UnmarshalBSONValue` so an untagged token is
-    refused, mirroring B6 step 4. Verification query: aggregate `calendarAccounts` and assert no
-    `accessToken`/`refreshToken` lacks the `v2:` prefix.
-    Optional at the same time: fold the Apple password onto `EncryptedString` too, so there is one
-    mechanism rather than two. **Not** before step 4 — the Apple path is already strict (B6), and
-    moving it onto a type that passes plaintext through would be a regression.
+  - **4/4 DONE** (separate deploy, as required): the plaintext passthrough is gone, so an untagged
+    token is refused rather than used. `encryption.Decrypt` already refuses one, so this was a
+    deletion, not a new check; `TestEncryptedString_RefusesUntaggedValue` is what fails if it comes
+    back.
+    **The sweep stays**, unlike B6 step 4, and that is the point rather than an oversight: it walks
+    raw BSON and so does not depend on the read path it feeds. Restore a pre-B7 backup and the next
+    boot re-encrypts it before the router serves a request, where under B6's arrangement the
+    refusal would simply lock those members out. Nothing can write a plaintext token after boot —
+    every write goes through the codec.
+    Not folded in: the Apple password onto the same type, so there is one mechanism rather than
+    two. It is a fair follow-up but not a regression risk either way now; **B6's path is already
+    strict**, and it was only unsafe to move it while this type still passed plaintext through.
 
-  **Verified end to end locally, not only in tests:** restored-prod dump, plaintext token in Mongo,
-  boot → `encrypted stored OAuth tokens for 1 of 1 users`, stored value `v2:`-tagged (103 → 179
-  chars, exactly base64(12-byte nonce + 103 + 16-byte tag) + prefix), then a real OTP login and
-  `/api/user/profile` 200 — which is the read-path proof, since a failed decrypt fails the whole
-  document decode. The Google leg (does Google still accept the token) is **not** verifiable on this
-  box: `CLIENT_ID`/`CLIENT_SECRET` aren't set locally, so the refresh returns `invalid_client`.
+  **Gate satisfied before deleting anything:** 1–3 deployed at `f039fe7`; the boot log showed
+  `encrypted stored OAuth tokens for 1 of 1 users with calendar accounts`, and prod then held zero
+  untagged tokens (254 → 379 and 103 → 179 chars, exactly base64(12-byte nonce + n + 16-byte tag)
+  plus the prefix). Checked the rest of the database too, not just `users`: `DailyUserLog.Users
+  []User` embeds whole user documents, which would have been a second copy of every token — but
+  `UpdateDailyUserLog` only ever appends `userIds`, and prod has **0** logs carrying a `users`
+  field. No other collection holds one.
+
+  **Verified end to end on prod, not only in tests:** real OTP login, then
+  `/api/user/calendars` → **200 with 21 events** — the whole loop, since that path decrypts the
+  stored refresh token, exchanges it with Google for a fresh access token and writes the new one
+  back. Confirmed the write landed tagged with an expiry an hour out, which also exercises step 3's
+  scoped writer. (Locally only the read path is provable: `CLIENT_ID`/`CLIENT_SECRET` aren't set on
+  the dev box, so the refresh returns `invalid_client` — which is how **B8** surfaced.)
 
 - [ ] **B8 · A failed OAuth token refresh reports the wrong reason.** `S` · **P3**
   Found while verifying B7. `services/auth/types.go` types `AccessTokenResponse.Error` as `bson.M`,
@@ -960,10 +973,10 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 6. **2026-07-27 wave — COMPLETE through A16/B5/E9 (2026-07-28).** Landed in this order: **B4** →
    **E3** (all five phases) → **E5/E6** → **E4** → **E7** → **A18/A19/A20** → **E8/E11** →
    **A16** → **B5** → **E9**.
-   Then **A17**, **B6** (closed 2026-07-28, all four steps), and **B7** steps 1–3 (2026-07-28).
-   **What's left:** **B7 step 4** (gated on the deploy of 1–3 — see the item), **B8** (OAuth refresh
-   error type, `S`/P3, filed by B7), **E10** (misc hardening, `S`/P3, one sub-item already closed by
-   B5), and the A21–A23 / P3 tail. Nothing in the remaining set blocks anything else.
+   Then **A17**, **B6** and **B7** — all closed 2026-07-28, four steps each.
+   **What's left:** **B8** (OAuth refresh error type, `S`/P3, filed by B7), **E10** (misc hardening,
+   `S`/P3, one sub-item already closed by B5), and the A21–A23 / P3 tail. Nothing in the remaining
+   set blocks anything else.
 
 ---
 
