@@ -115,6 +115,35 @@ MONGODB_URI=mongodb://localhost:27017 go test ./models/ ./routes/ ./utils/ ./db/
 > fields) — build/test the specific packages listed above instead. This list is
 > exactly what `backend-ci.yml` runs; keep the two in sync.
 
+**Lint (backend) — BLOCKING since 2026-07-28 (TODO B5).** The backlog is at
+zero, so anything the linter reports is new and will fail the build. Run it
+before pushing:
+
+```bash
+cd server
+curl -sL https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz | tar xz -C /tmp
+/tmp/golangci-lint-2.12.2-linux-amd64/golangci-lint run $(go list -f '{{.Dir}}' ./... | grep -v '/scripts')
+```
+
+> **Keep the `-f '{{.Dir}}'`.** golangci-lint takes *directories*; plain
+> `go list` emits *import paths*. Passing those makes it resolve everything
+> against the wrong root, print a few "typechecking error: directory not found"
+> lines, and then report `0 issues` — which is indistinguishable from a clean
+> run. CI silently linted nothing this way until 2026-07-28.
+
+If something is genuinely not worth fixing, suppress it narrowly **with a
+reason** — see the `//nolint:staticcheck` on AES-CFB in `utils/utils.go`
+(tracked as B6) — rather than restoring `continue-on-error`. errcheck is
+already relaxed for `_test.go` teardown; see `server/.golangci.yml`.
+
+**Cross-package test isolation.** `go test` runs packages in parallel against
+one Mongo, and `services/reminders` sweeps *every* eligible event in the
+database. Fixtures in other packages must not look nudgeable (set
+`NudgeStage: 3`), and assertions about "how many were sent" must filter to
+their own recipients. This was a real CI failure that reproduces roughly one
+run in three — if you touch either package, run them together a dozen times,
+not once.
+
 If you have no local Go toolchain, run the tests in a container (matches CI):
 ```bash
 docker run --rm -e MONGODB_URI=mongodb://host.docker.internal:27017 \
@@ -208,9 +237,12 @@ Remember to delete the seeded documents afterwards.
 
 ## CI (GitHub Actions)
 
-- **`backend-ci.yml`** — on `server/**` changes: `go build .` + `go test` for
-  `models/ routes/ utils/ db/`, with an ephemeral Mongo service for the `db`
-  integration tests.
+- **`backend-ci.yml`** — on `server/**` changes: `go build` + **`go vet`** +
+  **`golangci-lint` (blocking since 2026-07-28)** + `go test` for
+  `models/ routes/ utils/ db/ services/reminders/ services/calendar/
+  services/contacts/ services/microsoftgraph/`, with an ephemeral Mongo service
+  for the DB-backed tests. Keep that package list in sync with the Testing
+  section above.
 - **`frontend-ci.yml`** — on `frontend/**` changes: `npm run test:unit` + build.
 - Both run on push to `main` and PRs. `gh run list` targets this repo directly
   (it was detached from the schej-it fork network), so no `--repo` flag is needed.

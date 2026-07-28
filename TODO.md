@@ -842,9 +842,13 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 4. **A5 (split ScheduleOverlap.vue) → B3** — the biggest frontend win; tackle in slices.
 5. **Feature track in parallel:** C2 → C3 → C1 (reminder infra → universal calendar → RSVP) are the
    highest-leverage, lowest-new-infrastructure wins for an active club.
-6. **2026-07-27 wave:** **B4** (free) → **E3** (the product change, phased — see its embedded plan)
-   → **E5/E6** (small P1 security) → **E4** (Stripe deletion) → **A16** → the P2/P3 batches
-   (A17–A23, E7–E10, B5).
+6. **2026-07-27 wave — COMPLETE through A16/B5/E9 (2026-07-28).** Landed in this order: **B4** →
+   **E3** (all five phases) → **E5/E6** → **E4** → **E7** → **A18/A19/A20** → **E8/E11** →
+   **A16** → **B5** → **E9**.
+   **What's left:** **A17** (rune-safe truncation, `S`/P2), **B6** (AES-CFB → AEAD, `M`/P2 — a data
+   migration, filed by B5), **E10** (misc hardening, `S`/P3, one sub-item already closed by B5),
+   and the A21–A23 / P3 tail. Nothing in the remaining set blocks anything else, so pick by
+   appetite: A17 is the quickest, B6 the most consequential.
 
 ---
 
@@ -1272,16 +1276,19 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   planted id is findable, so the collision probe can't pass vacuously.
 
 - [ ] **E10 · Misc hardening batch.** `S` · **P3**
-  - `main.go:98-110`: `CORS_ORIGINS` split on `,` without trimming — `"a.com, b.com"` silently
+  *(line numbers re-checked 2026-07-28 against `06b2efb` — the A16/B5/E9 work shifted them.)*
+  - `main.go:106`: `CORS_ORIGINS` split on `,` without trimming — `"a.com, b.com"` silently
     yields a never-matching `" b.com"` origin.
-  - `db/allowlist.go:117-121`: `GetAllowlist` ignores the `cursor.All` error → silently-empty roll;
-    combined with fail-open-when-empty (`:51-59`) the swallowed error is the sharp edge
-    (`INVITE_ONLY_ENFORCED` mitigates in prod).
+  - ~~`db/allowlist.go` `GetAllowlist` ignores the `cursor.All` error~~ — **DONE 2026-07-28** in
+    **B5**: it returns `([]AllowlistEntry, error)` now, logs both the `Find` and `cursor.All`
+    failures, and its one caller (`routes/admin.go` `getAllowlist`) 500s instead of rendering a
+    broken query as "the Fellowship has no members".
   - `utils/utils.go:212`: bare `panic(err)` on base64 decode in a shared helper.
-  - `deleteEvent` (`events.go:627-652`) / `archiveEvent` (`:784-798`): non-owner gets a 500
+  - `deleteEvent` (`routes/events.go:719`) / `archiveEvent` (`:902`): non-owner gets a 500
     (`Decode` on the empty result) instead of 403/404; `archiveEvent` also still uses
-    `ObjectIDFromHex` directly (`:774`) so short ids 400 — same sharp edge E2 fixed for delete.
-  - `utils/ratelimit.go:47-49`: janitor goroutine has no stop channel / ticker never stopped —
+    `ObjectIDFromHex` directly (13 lines into the handler) so short ids 400 — same sharp edge E2
+    fixed for delete.
+  - `utils/ratelimit.go:49`: janitor goroutine has no stop channel / ticker never stopped —
     fine as a process-lifetime singleton, unsafe if ever constructed per-test; document or add a
     stop.
 
