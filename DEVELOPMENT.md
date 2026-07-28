@@ -108,16 +108,19 @@ npm run test:unit
 **Backend** (`cd server`) — needs a Go toolchain and a reachable Mongo for the
 `db` integration tests (`compose.dev.yaml` provides one on `localhost:27017`):
 ```bash
-MONGODB_URI=mongodb://localhost:27017 go test ./models/ ./routes/ ./utils/ ./db/
+MONGODB_URI=mongodb://localhost:27017 go test ./models/ ./routes/ ./utils/ ./db/ \
+  ./services/reminders/ ./services/calendar/ ./services/contacts/ ./services/microsoftgraph/
 ```
 > `go test ./...` fails on the stale one-off `server/scripts/` (outdated model
-> fields) — build/test the specific packages listed above instead.
+> fields) — build/test the specific packages listed above instead. This list is
+> exactly what `backend-ci.yml` runs; keep the two in sync.
 
 If you have no local Go toolchain, run the tests in a container (matches CI):
 ```bash
 docker run --rm -e MONGODB_URI=mongodb://host.docker.internal:27017 \
   -v "$PWD/server:/src" -w /src golang:1.25-alpine \
-  sh -c "go build . && go test ./models/ ./routes/ ./utils/ ./db/"
+  sh -c "go build . && go test ./models/ ./routes/ ./utils/ ./db/ \
+    ./services/reminders/ ./services/calendar/ ./services/contacts/ ./services/microsoftgraph/"
 ```
 
 **What's covered today:** role/permission logic (`models`), the admin
