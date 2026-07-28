@@ -1,7 +1,8 @@
 import Vue from "vue"
 import VueRouter from "vue-router"
 import Landing from "@/views/Landing"
-import { get } from "@/utils"
+import { setUnauthorizedHandler } from "@/utils/fetch_utils"
+import store from "@/store"
 
 Vue.use(VueRouter)
 
@@ -89,24 +90,65 @@ const router = new VueRouter({
   routes,
 })
 
-router.beforeEach(async (to, from, next) => {
-  const authRoutes = ["home", "settings", "admin", "fellowship"]
-  const noAuthRoutes = ["sign-in", "sign-up"]
-  try {
-    await get("/auth/status")
+// Routes reachable without a session. Everything else requires one, so a route
+// added later is gated by default rather than open by default — which is how
+// `chronicle` ended up unprotected under the old opt-in list.
+const publicRoutes = [
+  "landing",
+  "sign-in",
+  "sign-up",
+  "auth",
+  "privacy-policy",
+  "404",
+]
 
-    if (noAuthRoutes.includes(to.name)) {
-      next({ name: "home" })
-    } else {
-      next()
-    }
-  } catch (err) {
-    if (authRoutes.includes(to.name)) {
-      next({ name: "landing" })
-    } else {
-      next()
+// Only same-origin paths may be redirected to, so a crafted
+// ?redirect=https://evil.example link can't turn our login into an open
+// redirect. A leading "//" is protocol-relative, i.e. off-site.
+export const isSafeRedirect = (path) =>
+  typeof path === "string" && path.startsWith("/") && !path.startsWith("//")
+
+router.beforeEach(async (to, from, next) => {
+  // A20: this used to await GET /auth/status on EVERY navigation, duplicating
+  // state the store already holds. Consult the store first and only fetch when
+  // it's empty — a cold load, or after signing out.
+  let authUser = store.state.authUser
+  if (!authUser) {
+    try {
+      authUser = await store.dispatch("refreshAuthUser")
+    } catch {
+      authUser = null
     }
   }
+
+  if (!authUser) {
+    if (publicRoutes.includes(to.name)) return next()
+    // Remember where they were headed so a shared /e/:id link survives login.
+    return next({ name: "sign-in", query: { redirect: to.fullPath } })
+  }
+
+  // Signed in: keep them off the sign-in screens, but honour a pending
+  // redirect rather than dropping it (the old guard sent them to `home` and
+  // lost the query entirely).
+  if (to.name === "sign-in" || to.name === "sign-up") {
+    return isSafeRedirect(to.query.redirect)
+      ? next(to.query.redirect)
+      : next({ name: "home" })
+  }
+
+  return next()
+})
+
+// A 401 mid-session (signed out elsewhere, account deleted, struck from the
+// roll) drops the cached user and sends them to sign-in with a way back.
+setUnauthorizedHandler(() => {
+  store.commit("setAuthUser", null)
+  const current = router.currentRoute
+  if (publicRoutes.includes(current.name)) return
+  router.push({
+    name: "sign-in",
+    query: { redirect: current.fullPath },
+  })
 })
 
 export default router

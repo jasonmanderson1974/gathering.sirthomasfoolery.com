@@ -216,6 +216,7 @@
 
 <script>
 import { post } from "@/utils"
+import { isSafeRedirect } from "@/router"
 import { mapMutations } from "vuex"
 import SirThomasFoolery from "@/components/general/SirThomasFoolery.vue"
 
@@ -383,9 +384,15 @@ export default {
         this.verifying = false
       }
     },
-    // Kept as a seam even though it only does one thing today — E3 will extend
-    // it to honor a same-origin ?redirect so shared event links survive login.
     async handlePostAuthRedirect() {
+      // The router guard parks the intended destination here when it bounces an
+      // unauthenticated visitor, so a shared /e/:id link round-trips through
+      // login back to the event instead of dumping them on the dashboard.
+      const redirect = this.$route.query.redirect
+      if (isSafeRedirect(redirect)) {
+        this.$router.replace(redirect)
+        return
+      }
       this.$router.replace({ name: "home" })
     },
     startResendCooldown() {

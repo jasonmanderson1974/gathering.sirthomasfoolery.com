@@ -119,9 +119,12 @@ export default new Vuex.Store({
       setTimeout(() => commit("setInfo", info), 0)
     },
 
+    // Returns the user as well as committing it, so callers that need the
+    // result immediately (the router guard) don't have to re-read the state.
     async refreshAuthUser({ commit }) {
       const authUser = await get("/user/profile")
       commit("setAuthUser", authUser)
+      return authUser
     },
 
     createNew(

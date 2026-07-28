@@ -12,6 +12,7 @@ export const errors = Object.freeze({
   OtpExpired: "otp-expired",
   OtpInvalidCode: "otp-invalid-code",
   OtpTooManyAttempts: "otp-too-many-attempts",
+  NotInvited: "not-invited",
 })
 
 // User roles (must match server/models/roles.go), ordered by privilege.
