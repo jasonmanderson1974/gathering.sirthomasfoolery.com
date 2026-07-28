@@ -555,28 +555,63 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
     (The handover listed two v1 tests; there were three — `TestV1CiphertextIsNeverMistakenForV2`
     also used the fixture.)
 
-- [ ] **B7 · Google/Outlook OAuth tokens are stored unencrypted.** `M` · **P1**
-  Surfaced while scoping **B6**. `OAuth2CalendarAuth.AccessToken` / `.RefreshToken`
-  (`models/calendar.go:19,21`) are written straight to the user document at four live sites —
-  `routes/auth.go` (`signIn`, `signInMobile` paths) and `routes/user.go` (add Google / add Outlook
-  account) — with no encryption. A **refresh token is a long-lived credential** granting ongoing
-  read access to a member's calendar; anyone with a copy of the database has them all.
-  The inconsistency is the tell: the codebase already treats this class of secret as needing
-  encryption — that is exactly what the Apple password path does — so this is an omission rather
-  than a decision. **Rank above B6**, which protects one field that few members even use.
-  Fix: encrypt on write, decrypt on read, and migrate existing values.
-  **On reusing B6's sweep:** B6 step 4 deleted `db.ReEncryptLegacyCalendarSecrets`, so it is no
-  longer in the tree — but the reusable part was only the *walk* (find users holding
-  `calendarAccounts` → iterate the map → mutate → write the whole field back, since the
-  `email_TYPE` key contains dots and defeats a scoped dotted-path update). Lift it from
-  `37ea8330:server/db/encryption_migration.go`, which is ~40 lines of scaffolding; the predicate and
-  fields differ anyway (encrypt-if-plaintext on two OAuth fields, not re-encrypt-if-v1 on one Apple
-  one), so nothing was lost by retiring it first. Keeping a dead migration in the tree to save that
-  much would have been the worse trade — and leaving the v1 read path alive meant leaving an
-  unauthenticated decryption path alive with it.
-  Related: `routes/user.go` `addCalendarAccount` persists with `$set: authUser` — the whole user
-  document, the same lost-update pattern **A16** fixed for events, still live on the users
-  collection and discarding its result. Worth folding in.
+- [ ] **B7 · Google/Outlook OAuth tokens are stored unencrypted.** `M` · **P1 — steps 1–3 DONE
+  2026-07-28 and deployed; step 4 gated.**
+  Surfaced while scoping **B6**. `OAuth2CalendarAuth.AccessToken` / `.RefreshToken` were written
+  straight to the user document at four live sites — `routes/auth.go` (`signIn`, `signInMobile`)
+  and `routes/user.go` (add Google / add Outlook) — with no encryption. A **refresh token is a
+  long-lived credential** granting ongoing read access to a member's calendar; anyone with a copy
+  of the database had them all. The inconsistency was the tell: the Apple password path already
+  encrypted, so this was an omission rather than a decision.
+
+  - **1/4 DONE** (`0a4ac8f`): encryption is a property of the **type**, not of the call sites —
+    `models.EncryptedString` encrypts in `MarshalBSONValue` and decrypts in `UnmarshalBSONValue`.
+    The call sites are the problem: four write paths, six read paths, and any one of them
+    forgetting leaves a credential in the clear. It also covers the three handlers that persist
+    the whole user document and never name a token at all.
+    `Encrypt`/`Decrypt` **moved out of `utils` into a new leaf package `encryption`** — they had
+    to, because models needs them and `utils` imports `models`, so leaving them was an import
+    cycle. Verbatim apart from unexporting `Encode`; new `IsCiphertext` is what lets the codec
+    tell ciphertext from legacy plaintext. Two dangling comments in the moved tests, left when B6
+    step 4 deleted the v1 tests out from under them, went at the same time.
+    **The judgement call:** a value that is tagged but fails to decrypt errors rather than
+    degrading to `""`. It has to — `getCalendars`, `addCalendarAccount` and
+    `RefreshUserTokenIfNecessary` all read the document, change one field and write it back, so a
+    silent `""` would let a wrong `ENCRYPTION_KEY` destroy every stored refresh token on the next
+    calendar fetch. Failing the decode means nothing is written back at all.
+  - **2/4 DONE** (`fa9be3d`): `db.EncryptPlaintextOAuthTokens()` at startup, before the router
+    serves. Walks **raw BSON**, not `models.User`: decoding into the model returns plaintext
+    either way (the legacy passthrough), so the model cannot tell you which documents still need
+    migrating. Structure lifted from B6's sweep at `37ea8330`, as B7 anticipated; whole
+    `calendarAccounts` field again, because `email_TYPE` keys contain dots. A token that can't be
+    encrypted is left in the clear rather than blanked.
+  - **3/4 DONE** (`e9247cf`) — the fold-in this item called for. All three sites that wrote
+    `$set: user` now use `db.SetUserCalendarAccounts`; **`addCalendarAccount` also returns its
+    error**, and its four callers answer 500 instead of reporting a calendar connected when
+    nothing was stored (the class of bug **B5** fixed for `removeCalendarAccount`).
+  - **4/4 GATED — do not land until 1–3 are deployed and prod is verified to hold no untagged
+    token.** Drop the legacy-plaintext branch in `UnmarshalBSONValue` so an untagged token is
+    refused, mirroring B6 step 4. Verification query: aggregate `calendarAccounts` and assert no
+    `accessToken`/`refreshToken` lacks the `v2:` prefix.
+    Optional at the same time: fold the Apple password onto `EncryptedString` too, so there is one
+    mechanism rather than two. **Not** before step 4 — the Apple path is already strict (B6), and
+    moving it onto a type that passes plaintext through would be a regression.
+
+  **Verified end to end locally, not only in tests:** restored-prod dump, plaintext token in Mongo,
+  boot → `encrypted stored OAuth tokens for 1 of 1 users`, stored value `v2:`-tagged (103 → 179
+  chars, exactly base64(12-byte nonce + 103 + 16-byte tag) + prefix), then a real OTP login and
+  `/api/user/profile` 200 — which is the read-path proof, since a failed decrypt fails the whole
+  document decode. The Google leg (does Google still accept the token) is **not** verifiable on this
+  box: `CLIENT_ID`/`CLIENT_SECRET` aren't set locally, so the refresh returns `invalid_client`.
+
+- [ ] **B8 · A failed OAuth token refresh reports the wrong reason.** `S` · **P3**
+  Found while verifying B7. `services/auth/types.go` types `AccessTokenResponse.Error` as `bson.M`,
+  but Google and Microsoft both return `"error": "invalid_grant"` — a *string*. So the decode in
+  `RefreshAccessToken` fails and the caller is told `json: cannot unmarshal string into Go struct
+  field AccessTokenResponse.error of type primitive.M`, while the actual reason (revoked consent,
+  expired refresh token, bad client credentials) is thrown away. `TokenResponse.Error` next door is
+  already correctly a `string` + `error_description`; make the two match. Pre-existing, unrelated to
+  B7 — the encryption work just made it visible.
 
 ---
 
@@ -925,10 +960,10 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 6. **2026-07-27 wave — COMPLETE through A16/B5/E9 (2026-07-28).** Landed in this order: **B4** →
    **E3** (all five phases) → **E5/E6** → **E4** → **E7** → **A18/A19/A20** → **E8/E11** →
    **A16** → **B5** → **E9**.
-   **What's left:** **A17** (rune-safe truncation, `S`/P2), **B6** (AES-CFB → AEAD, `M`/P2 — a data
-   migration, filed by B5), **E10** (misc hardening, `S`/P3, one sub-item already closed by B5),
-   and the A21–A23 / P3 tail. Nothing in the remaining set blocks anything else, so pick by
-   appetite: A17 is the quickest, B6 the most consequential.
+   Then **A17**, **B6** (closed 2026-07-28, all four steps), and **B7** steps 1–3 (2026-07-28).
+   **What's left:** **B7 step 4** (gated on the deploy of 1–3 — see the item), **B8** (OAuth refresh
+   error type, `S`/P3, filed by B7), **E10** (misc hardening, `S`/P3, one sub-item already closed by
+   B5), and the A21–A23 / P3 tail. Nothing in the remaining set blocks anything else.
 
 ---
 
