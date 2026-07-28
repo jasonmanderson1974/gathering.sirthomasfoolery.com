@@ -206,8 +206,9 @@ func loadDotEnv() {
 		logger.StdOut.Println("No .env file found, using environment variables")
 	}
 
-	// Validate session secret
+	// Validate secrets
 	validateSessionSecret()
+	validateEncryptionKey()
 }
 
 // validateSessionSecret ensures SESSION_SECRET is set and meets security requirements
@@ -221,6 +222,34 @@ func validateSessionSecret() {
 	// Minimum 32 characters for adequate security (256 bits)
 	if len(secret) < 32 {
 		logger.StdErr.Panicln("SESSION_SECRET must be at least 32 characters long")
+	}
+}
+
+// validateEncryptionKey ensures ENCRYPTION_KEY is a usable AES key.
+//
+// It is passed to aes.NewCipher as raw bytes, which accepts ONLY 16, 24 or 32
+// of them. Nothing checked that before, so a wrong-length key failed per
+// request, deep inside a calendar call, long after boot — and the failure that
+// makes this worth a startup check is a quiet one: DEPLOYMENT.md recommended
+// generating it with `openssl rand -base64 32`, which produces a 44-character
+// string that AES rejects outright. Fail the boot instead.
+func validateEncryptionKey() {
+	key := os.Getenv("ENCRYPTION_KEY")
+
+	if key == "" {
+		logger.StdErr.Panicln("ENCRYPTION_KEY environment variable is required but not set")
+	}
+
+	switch len(key) {
+	case 16, 24, 32:
+		// AES-128, AES-192, AES-256 respectively.
+	default:
+		logger.StdErr.Panicf(
+			"ENCRYPTION_KEY must be exactly 16, 24 or 32 bytes (got %d). "+
+				"Generate one with `openssl rand -hex 16` (32 chars). "+
+				"Note `openssl rand -base64 32` yields 44 characters, which AES rejects.\n",
+			len(key),
+		)
 	}
 }
 

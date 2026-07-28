@@ -103,7 +103,7 @@ Create `server/.env` from the template (`server/.env.template`).
 | ---------------- | --------------------------------------------------------------------------- |
 | `CLIENT_ID`      | Google OAuth client ID                                                      |
 | `CLIENT_SECRET`  | Google OAuth client secret                                                  |
-| `ENCRYPTION_KEY` | Key for encrypting sensitive data (generate with `openssl rand -base64 32`) |
+| `ENCRYPTION_KEY` | AES key for data encrypted at rest. Must be **exactly 16, 24 or 32 characters** — it is used as raw AES key bytes. Generate with `openssl rand -hex 16` (32 chars ⇒ AES-256). **Not** `openssl rand -base64 32`: that yields 44 characters, which AES rejects. Validated at startup. |
 | `SESSION_SECRET` | Session cookie encryption key (generate with `openssl rand -base64 32`)     |
 
 #### Optional — Additional Calendars

@@ -48,7 +48,7 @@ The Go module is `sirtom/server` (renamed from `schej.it/server`, 2026-07-23). T
 - MongoDB backup/restore: `mongodump --host=localhost:27017 --db=schej-it` / `mongorestore --uri mongodb://localhost:27017 ./dump --drop`.
 
 ### Required env vars for local server boot
-`SESSION_SECRET` (≥32 chars) is enforced at startup. `CLIENT_ID`/`CLIENT_SECRET` (Google OAuth) and `ENCRYPTION_KEY` are required for most flows. See `server/.env.template` and `DEPLOYMENT.md` for the full list (Microsoft, Gmail, etc.).
+`SESSION_SECRET` (≥32 chars) and `ENCRYPTION_KEY` (exactly 16/24/32 chars — raw AES key bytes) are both enforced at startup. `CLIENT_ID`/`CLIENT_SECRET` (Google OAuth) are required for most flows. See `server/.env.template` and `DEPLOYMENT.md` for the full list (Microsoft, Gmail, etc.).
 
 For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` in `server/.env`.
 
