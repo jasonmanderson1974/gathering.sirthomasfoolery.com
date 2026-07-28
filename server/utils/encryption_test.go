@@ -2,8 +2,6 @@ package utils
 
 import (
 	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
 	"strings"
 	"testing"
 )
@@ -17,25 +15,6 @@ const testKey = "0123456789abcdef0123456789abcdef"
 func withKey(t *testing.T, key string) {
 	t.Helper()
 	t.Setenv("ENCRYPTION_KEY", key)
-}
-
-// encryptV1CFB reproduces exactly what Encrypt did before B6, so the dual-read
-// path is tested against genuine legacy ciphertext rather than an assumption
-// about its shape.
-func encryptV1CFB(t *testing.T, text string) string {
-	t.Helper()
-	block, err := aes.NewCipher([]byte(testKey))
-	if err != nil {
-		t.Fatalf("v1 cipher: %v", err)
-	}
-	cipherText := make([]byte, aes.BlockSize+len(text))
-	iv := cipherText[:aes.BlockSize]
-	if _, err := rand.Read(iv); err != nil {
-		t.Fatalf("v1 iv: %v", err)
-	}
-	cfb := cipher.NewCFBEncrypter(block, iv) //nolint:staticcheck // SA1019: fixture reproducing v1
-	cfb.XORKeyStream(cipherText[aes.BlockSize:], []byte(text))
-	return Encode(cipherText)
 }
 
 func TestEncryptDecrypt_RoundTrip(t *testing.T) {
@@ -73,30 +52,6 @@ func TestEncrypt_TagsOutputAsV2(t *testing.T) {
 }
 
 // A v1 blob can never be mistaken for a tagged one: ':' is not in the base64
-// alphabet, so it cannot appear at index 2 of an untagged value.
-func TestV1CiphertextIsNeverMistakenForV2(t *testing.T) {
-	withKey(t, testKey)
-	for i := 0; i < 200; i++ {
-		v1 := encryptV1CFB(t, "secret")
-		if strings.HasPrefix(v1, "v2:") {
-			t.Fatalf("v1 ciphertext looks tagged: %q", v1)
-		}
-	}
-}
-
-// The migration's whole premise: values written before B6 must still decrypt.
-func TestDecrypt_ReadsLegacyV1Ciphertext(t *testing.T) {
-	withKey(t, testKey)
-	const secret = "legacy-apple-app-password"
-	got, err := Decrypt(encryptV1CFB(t, secret))
-	if err != nil {
-		t.Fatalf("legacy decrypt: %v", err)
-	}
-	if got != secret {
-		t.Errorf("got %q, want %q", got, secret)
-	}
-}
-
 // The point of moving to an AEAD. Flipping a byte of v2 ciphertext must be
 // detected; the same edit to v1 silently yields corrupted plaintext.
 func TestDecrypt_V2DetectsTampering(t *testing.T) {
@@ -126,29 +81,7 @@ func TestDecrypt_V2DetectsTampering(t *testing.T) {
 }
 
 // Contrast, pinned so the reason for the migration stays visible: v1 accepts a
-// tampered value and returns altered plaintext, no error.
-func TestDecrypt_V1SilentlyAcceptsTampering(t *testing.T) {
-	withKey(t, testKey)
-	const secret = "transfer to alice"
-	v1 := encryptV1CFB(t, secret)
-
-	raw, err := decodeBase64(v1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw[aes.BlockSize] ^= 0x01
-
-	got, err := Decrypt(Encode(raw))
-	if err != nil {
-		t.Fatalf("v1 unexpectedly errored: %v", err)
-	}
-	if got == secret {
-		t.Fatal("expected the flipped bit to alter the plaintext")
-	}
-	// No error, different plaintext — exactly what an AEAD prevents.
-}
-
-// A wrong key must fail loudly on v2. (On v1 it cannot: CFB returns garbage.)
+// A wrong key must fail loudly.
 func TestDecrypt_V2WrongKeyErrors(t *testing.T) {
 	withKey(t, testKey)
 	enc, err := Encrypt("secret")
@@ -221,5 +154,23 @@ func TestEncrypt_NonceIsFreshEachCall(t *testing.T) {
 			t.Fatal("Encrypt produced identical ciphertext twice — nonce reuse")
 		}
 		seen[enc] = true
+	}
+}
+
+// v1 is retired (B6 step 4). An untagged value is no longer decrypted by a mode
+// that cannot detect tampering — it is refused. This is the check that would
+// fail if the CFB read path were ever reintroduced.
+func TestDecrypt_RejectsUntaggedCiphertext(t *testing.T) {
+	withKey(t, testKey)
+
+	// Shaped like a v1 blob: base64 of a 16-byte IV plus a body, no "v2:" tag.
+	untagged := Encode(append(make([]byte, aes.BlockSize), []byte("whatever")...))
+
+	got, err := Decrypt(untagged)
+	if err == nil {
+		t.Fatalf("expected an untagged value to be refused, got %q", got)
+	}
+	if !strings.Contains(err.Error(), "current format") {
+		t.Errorf("error should say why it was refused, got %v", err)
 	}
 }

@@ -504,8 +504,8 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   counter, whose failure silently un-caps the 5-try brute-force guard.
   **`continue-on-error` is gone** — anything the linter reports now fails the build.
 
-- [ ] **B6 · AES-CFB is deprecated and unauthenticated.** `M` · **P2 — 3 of 4 DONE 2026-07-28;
-  step 4 is GATED ON A DEPLOY, see below.**
+- [x] **B6 · AES-CFB is deprecated and unauthenticated.** `M` · **P2 — DONE 2026-07-28, all four
+  steps deployed.**
   `utils/utils.go` used `cipher.NewCFBEncrypter/Decrypter` for `ENCRYPTION_KEY`. CFB is
   unauthenticated: a tamperer with database write access can flip plaintext bits undetected, and a
   wrong key yields plausible garbage rather than an error. Deprecated in Go 1.24.
@@ -541,21 +541,19 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
     seed → boot → stored `v2:` → decrypts back to the original secret.
     Also fixed `db`'s `TestMain`, which never called `logger.Init`, so any db function logging on an
     error path **panicked inside tests** instead of returning its error (`routes` was already fixed).
-  - **4/4 NOT DONE — must not land until 1–3 are deployed and the sweep has run in prod.**
-    Dropping the v1 read path removes what the sweep itself depends on: `ReEncryptLegacyCalendarSecrets`
-    calls `utils.Decrypt` on v1 values. Shipping all four together would leave every legacy password
-    undecryptable, the sweep would skip them, and **Apple calendar accounts would break**.
-    Sequence: deploy 1–3 → confirm the boot log reports the re-encrypt (or reports nothing, meaning
-    there was nothing to migrate) → confirm no `appleCalendarAuth.password` lacks the `v2:` prefix →
-    then delete `decryptV1CFB`, its `//nolint:staticcheck`, `IsLegacyCiphertext`, the sweep, and its
-    `main.go` call.
-    Check for remaining v1 values with:
-    ```
-    db.users.aggregate([
-      {$project: {a: {$objectToArray: "$calendarAccounts"}}}, {$unwind: "$a"},
-      {$match: {"a.v.appleCalendarAuth.password": {$exists: true, $not: /^v2:/}}},
-      {$count: "legacy"}])
-    ```
+  - **4/4 DONE** (separate deploy, as required): `decryptV1CFB`, its `//nolint:staticcheck`,
+    `IsLegacyCiphertext`, `db/encryption_migration.go` + its test, and the `main.go` sweep call are
+    all gone. `Decrypt` is GCM-only and **refuses** an untagged value rather than handing it to a
+    mode that cannot detect tampering.
+    **Gate satisfied before deleting anything:** 1–3 deployed at `7722dc7`; prod holds **1 user with
+    calendar accounts and zero Apple accounts**, so there was never any v1 ciphertext — the sweep
+    correctly logged nothing (a success, per the step-3 note), and the verification aggregation
+    returned empty both before and after. The `//nolint:staticcheck` that B5 added to `utils/utils.go`
+    is now gone from the repo entirely; no CFB call remains, only comments explaining why.
+    Tests: the three v1 tests and the `encryptV1CFB` fixture went with the path, replaced by
+    `TestDecrypt_RejectsUntaggedCiphertext` — the check that fails if CFB is ever reintroduced.
+    (The handover listed two v1 tests; there were three — `TestV1CiphertextIsNeverMistakenForV2`
+    also used the fixture.)
 
 - [ ] **B7 · Google/Outlook OAuth tokens are stored unencrypted.** `M` · **P1**
   Surfaced while scoping **B6**. `OAuth2CalendarAuth.AccessToken` / `.RefreshToken`
@@ -566,9 +564,16 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   The inconsistency is the tell: the codebase already treats this class of secret as needing
   encryption — that is exactly what the Apple password path does — so this is an omission rather
   than a decision. **Rank above B6**, which protects one field that few members even use.
-  Fix: encrypt on write, decrypt on read, and migrate existing values — the same shape as B6's
-  sweep, which can be reused wholesale (`db.ReEncryptLegacyCalendarSecrets` already walks every
-  calendar account). Do it **before** B6 step 4 retires that machinery, or it will need rebuilding.
+  Fix: encrypt on write, decrypt on read, and migrate existing values.
+  **On reusing B6's sweep:** B6 step 4 deleted `db.ReEncryptLegacyCalendarSecrets`, so it is no
+  longer in the tree — but the reusable part was only the *walk* (find users holding
+  `calendarAccounts` → iterate the map → mutate → write the whole field back, since the
+  `email_TYPE` key contains dots and defeats a scoped dotted-path update). Lift it from
+  `37ea8330:server/db/encryption_migration.go`, which is ~40 lines of scaffolding; the predicate and
+  fields differ anyway (encrypt-if-plaintext on two OAuth fields, not re-encrypt-if-v1 on one Apple
+  one), so nothing was lost by retiring it first. Keeping a dead migration in the tree to save that
+  much would have been the worse trade — and leaving the v1 read path alive meant leaving an
+  unauthenticated decryption path alive with it.
   Related: `routes/user.go` `addCalendarAccount` persists with `$set: authUser` — the whole user
   document, the same lost-update pattern **A16** fixed for events, still live on the users
   collection and discarding its result. Worth folding in.

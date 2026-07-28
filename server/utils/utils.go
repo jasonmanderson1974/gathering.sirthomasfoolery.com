@@ -270,16 +270,20 @@ func Encrypt(text string) (string, error) {
 	return encV2Prefix + Encode(sealed), nil
 }
 
-// Decrypt accepts either version: v2 (AES-GCM, tagged) or v1 (AES-CFB,
-// untagged) for values written before the migration.
+// Decrypt reads a v2 (AES-GCM) value.
+//
+// The v1 AES-CFB read path is gone (B6 step 4). It was retired only once no v1
+// value remained — the boot sweep that migrated them is gone with it. An
+// untagged value now fails loudly rather than being decrypted by a mode that
+// cannot tell tampered ciphertext from genuine.
 //
 // It never panics. The ciphertext comes from the database, so a truncated or
 // corrupt value has to surface as an error rather than take down the request.
 func Decrypt(text string) (string, error) {
-	if strings.HasPrefix(text, encV2Prefix) {
-		return decryptV2GCM(strings.TrimPrefix(text, encV2Prefix))
+	if !strings.HasPrefix(text, encV2Prefix) {
+		return "", errors.New("ciphertext is not in the current format (expected a v2 prefix)")
 	}
-	return decryptV1CFB(text)
+	return decryptV2GCM(strings.TrimPrefix(text, encV2Prefix))
 }
 
 func decryptV2GCM(encoded string) (string, error) {
@@ -309,39 +313,6 @@ func decryptV2GCM(encoded string) (string, error) {
 		return "", fmt.Errorf("decrypt: %w", err)
 	}
 	return string(plain), nil
-}
-
-// IsLegacyCiphertext reports whether a stored value is still v1 (AES-CFB), so a
-// caller can rewrite it in the current format. Empty is not legacy — there is
-// nothing to migrate.
-func IsLegacyCiphertext(text string) bool {
-	return text != "" && !strings.HasPrefix(text, encV2Prefix)
-}
-
-// decryptV1CFB reads ciphertext written before B6. It stays only until no v1
-// values remain; see TODO B6 for the retirement condition.
-func decryptV1CFB(text string) (string, error) {
-	key, err := encryptionKey()
-	if err != nil {
-		return "", err
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-	cipherText, err := decodeBase64(text)
-	if err != nil {
-		return "", fmt.Errorf("ciphertext is not valid base64: %w", err)
-	}
-	if len(cipherText) < aes.BlockSize {
-		return "", errors.New("ciphertext too short")
-	}
-	iv := cipherText[:aes.BlockSize]
-	cipherText = cipherText[aes.BlockSize:]
-	cfb := cipher.NewCFBDecrypter(block, iv) //nolint:staticcheck // SA1019: v1 read path, see B6
-	plainText := make([]byte, len(cipherText))
-	cfb.XORKeyStream(plainText, cipherText)
-	return string(plainText), nil
 }
 
 // ConvertEventToOldFormat converts an event's responses from ResponsesList to ResponsesMap format
