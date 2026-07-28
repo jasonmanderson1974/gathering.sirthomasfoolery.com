@@ -21,6 +21,8 @@ services:
         VUE_APP_POSTHOG_API_KEY: ${VUE_APP_POSTHOG_API_KEY:-}
         VUE_APP_GOOGLE_CLIENT_ID: ${CLIENT_ID:-}
         VUE_APP_MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+        # Optional. Baked in at build time, so changing it needs a frontend rebuild.
+        VUE_APP_GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
     volumes:
       - frontend_dist:/app/dist
     command:

@@ -16,10 +16,13 @@ COPY . .
 ARG VUE_APP_POSTHOG_API_KEY=""
 ARG VUE_APP_GOOGLE_CLIENT_ID=""
 ARG VUE_APP_MICROSOFT_CLIENT_ID=""
+# Optional: address suggestions in the event location field. Unset = plain text field.
+ARG VUE_APP_GOOGLE_MAPS_API_KEY=""
 
 ENV VUE_APP_POSTHOG_API_KEY=$VUE_APP_POSTHOG_API_KEY
 ENV VUE_APP_GOOGLE_CLIENT_ID=$VUE_APP_GOOGLE_CLIENT_ID
 ENV VUE_APP_MICROSOFT_CLIENT_ID=$VUE_APP_MICROSOFT_CLIENT_ID
+ENV VUE_APP_GOOGLE_MAPS_API_KEY=$VUE_APP_GOOGLE_MAPS_API_KEY
 
 # Build the app and move to /build so it's not hidden by volume mount
 RUN npm run build && mv dist /build

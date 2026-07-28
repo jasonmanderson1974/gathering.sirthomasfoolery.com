@@ -121,6 +121,17 @@ Create `server/.env` from the template (`server/.env.template`).
 | `MICROSOFT_CLIENT_ID`     | Microsoft OAuth client ID (for Outlook) |
 | `MICROSOFT_CLIENT_SECRET` | Microsoft OAuth client secret           |
 
+#### Optional — Address lookup
+
+Set in the **root `.env`** (not `server/.env`): compose passes it to the frontend
+image as a build arg, so it is baked in at build time and changing it needs a
+frontend rebuild (`./deploy.sh` does this when the frontend changes; otherwise
+`docker compose build frontend && docker compose up -d`).
+
+| Variable                | Description                                                                                                    |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GOOGLE_MAPS_API_KEY`   | Maps Platform **browser** key for address suggestions in the event location field. Unset = plain text field, no Maps script loaded. Needs "Places API (New)" + "Maps JavaScript API", restricted by HTTP referrer to the site's domain. |
+
 #### Optional — CORS
 
 | Variable       | Description                                                                                                          |
