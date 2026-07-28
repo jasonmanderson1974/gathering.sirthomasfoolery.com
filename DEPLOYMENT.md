@@ -135,9 +135,7 @@ frontend rebuild (`./deploy.sh` does this when the frontend changes; otherwise
 | Variable                                     | Description                                  |
 | -------------------------------------------- | -------------------------------------------- |
 | `ANALYTICS_USERNAME` / `ANALYTICS_PASSWORD`  | Basic auth for /api/analytics routes         |
-| `SLACK_*_WEBHOOK_URL`                        | Slack webhooks for notifications             |
 | `GMAIL_APP_PASSWORD` / `SCHEJ_EMAIL_ADDRESS` | Gmail SMTP — the only mail transport. Without it no email is sent at all: OTP sign-in codes, invitations, pre-gathering reminders, remindee nudges and response notifications. |
-| `DISCORD_BOT_TOKEN` / `GUILD_ID`             | Discord bot integration                      |
 
 See `server/.env.template` for the complete list.
 

@@ -195,15 +195,9 @@ func createEvent(c *gin.Context) {
 	}
 	insertedId := result.InsertedID.(primitive.ObjectID).Hex()
 
-	// Send slackbot message
-	// var creator string
 	if signedIn {
-		// creator = fmt.Sprintf("%s %s (%s)", user.FirstName, user.LastName, user.Email)
 		db.UsersCollection.UpdateOne(context.Background(), bson.M{"_id": ownerId}, bson.M{"$inc": bson.M{"numEventsCreated": 1}})
-	} else {
-		// creator = "Guest :face_with_open_eyes_and_hand_over_mouth:"
 	}
-	// slackbot.SendEventCreatedMessage(insertedId, creator, event, len(attendees))
 
 	c.JSON(http.StatusCreated, gin.H{"eventId": insertedId, "shortId": event.ShortId})
 }

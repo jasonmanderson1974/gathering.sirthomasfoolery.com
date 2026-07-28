@@ -1686,28 +1686,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/slackbot": {
-            "post": {
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "slackbot"
-                ],
-                "summary": "Gets the number of signed up users",
-                "responses": {
-                    "200": {
-                        "description": "Text response",
-                        "schema": {
-                            "$ref": "#/definitions/commands.Response"
-                        }
-                    }
-                }
-            }
-        },
         "/user": {
             "delete": {
                 "produces": [
@@ -2623,10 +2601,6 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "bson.M": {
-            "type": "object",
-            "additionalProperties": true
-        },
         "calendar.CalendarEventsWithError": {
             "type": "object",
             "properties": {
@@ -2637,24 +2611,6 @@ const docTemplate = `{
                     }
                 },
                 "error": {}
-            }
-        },
-        "commands.Response": {
-            "type": "object",
-            "properties": {
-                "blocks": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/bson.M"
-                    }
-                },
-                "response_type": {
-                    "description": "ephemeral or in_channel",
-                    "type": "string"
-                },
-                "text": {
-                    "type": "string"
-                }
             }
         },
         "models.AppleCalendarAuth": {

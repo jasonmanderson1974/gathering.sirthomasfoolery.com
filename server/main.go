@@ -23,7 +23,6 @@ import (
 	"sirtom/server/logger"
 	"sirtom/server/routes"
 	"sirtom/server/services/reminders"
-	"sirtom/server/slackbot"
 	"sirtom/server/utils"
 
 	swaggerfiles "github.com/swaggo/files"
@@ -144,7 +143,6 @@ func main() {
 	routes.InitChronicle(apiRouter)
 	routes.InitFolders(apiRouter)
 	routes.InitAdmin(apiRouter)
-	slackbot.InitSlackbot(apiRouter)
 
 	frontendDist := os.Getenv("FRONTEND_DIST")
 	if frontendDist == "" {
