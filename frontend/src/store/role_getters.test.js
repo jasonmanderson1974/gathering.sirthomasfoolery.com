@@ -13,6 +13,7 @@ function evalFor(authUser) {
   g.canInvite = roleGetters.canInvite(state, g)
   g.canManageUsers = roleGetters.canManageUsers(state, g)
   g.canCreateEvents = roleGetters.canCreateEvents(state, g)
+  g.canSeeMembersOnly = roleGetters.canSeeMembersOnly(state, g)
   return g
 }
 
@@ -26,6 +27,9 @@ describe("store role getters", () => {
     expect(g.canManageUsers).toBe(false)
     // anon may create (matches backend, which only blocks signed-in guests)
     expect(g.canCreateEvents).toBe(true)
+    // ...but never sees members-only threads (the server sends them no
+    // comments at all — the discussion is sign-in-only)
+    expect(g.canSeeMembersOnly).toBe(false)
   })
 
   test("guest", () => {
@@ -35,6 +39,8 @@ describe("store role getters", () => {
     expect(g.canInvite).toBe(false)
     expect(g.canManageUsers).toBe(false)
     expect(g.canCreateEvents).toBe(false)
+    // the whole point of members-only threads
+    expect(g.canSeeMembersOnly).toBe(false)
   })
 
   test("member", () => {
@@ -44,6 +50,7 @@ describe("store role getters", () => {
     expect(g.canInvite).toBe(true)
     expect(g.canManageUsers).toBe(false)
     expect(g.canCreateEvents).toBe(true)
+    expect(g.canSeeMembersOnly).toBe(true)
   })
 
   test("empty role is treated as member", () => {
@@ -52,6 +59,7 @@ describe("store role getters", () => {
     expect(g.canInvite).toBe(true)
     expect(g.canManageUsers).toBe(false)
     expect(g.canCreateEvents).toBe(true)
+    expect(g.canSeeMembersOnly).toBe(true)
   })
 
   test("unknown role is treated as member", () => {
@@ -59,6 +67,7 @@ describe("store role getters", () => {
     expect(g.role).toBe(roles.MEMBER)
     expect(g.canInvite).toBe(true)
     expect(g.canManageUsers).toBe(false)
+    expect(g.canSeeMembersOnly).toBe(true)
   })
 
   test("admin", () => {
@@ -68,6 +77,7 @@ describe("store role getters", () => {
     expect(g.canInvite).toBe(true)
     expect(g.canManageUsers).toBe(true)
     expect(g.canCreateEvents).toBe(true)
+    expect(g.canSeeMembersOnly).toBe(true)
   })
 
   test("super admin", () => {
@@ -77,5 +87,6 @@ describe("store role getters", () => {
     expect(g.canInvite).toBe(true)
     expect(g.canManageUsers).toBe(true)
     expect(g.canCreateEvents).toBe(true)
+    expect(g.canSeeMembersOnly).toBe(true)
   })
 })

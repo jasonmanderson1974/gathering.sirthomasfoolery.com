@@ -57,6 +57,10 @@ func (r Role) CanManageUsers() bool { return r.AtLeast(RoleAdmin) }
 // CanInvite: member and up may add emails to the allowlist (members: guests only).
 func (r Role) CanInvite() bool { return r.AtLeast(RoleMember) }
 
+// CanSeeMembersOnly: member and up may read (and post in) members-only
+// discussion threads, and may tag a comment as a thread. Guests are excluded.
+func (r Role) CanSeeMembersOnly() bool { return r.AtLeast(RoleMember) }
+
 // CanCreateEvents: everyone except guests.
 func (r Role) CanCreateEvents() bool { return NormalizeRole(r) != RoleGuest }
 

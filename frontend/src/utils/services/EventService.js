@@ -1,4 +1,4 @@
-import { post, put, _delete } from "../fetch_utils"
+import { post, patch, put, _delete } from "../fetch_utils"
 
 export const archiveEvent = (eventId, archive) => {
   return post(`/events/${eventId}/archive`, {
@@ -32,21 +32,38 @@ export const clearRsvp = (eventId, payload) => {
   return _delete(`/events/${eventId}/rsvp`, payload)
 }
 
-// --- Discussion thread (C7) ---
+// --- Discussion (C7) + threads (C13) ---
+// All of these require a signed-in user; the discussion is not open to guests.
 
-/** Post a comment. payload: {text, guest, name?} */
+/** Post a comment, or a reply when threadId is set. payload: {text, threadId?} */
 export const addComment = (eventId, payload) => {
   return post(`/events/${eventId}/comments`, payload)
 }
 
-/** Edit your own comment. payload: {text, guest, name?} */
+/** Edit your own comment. payload: {text} */
 export const editComment = (eventId, commentId, payload) => {
   return put(`/events/${eventId}/comments/${commentId}`, payload)
 }
 
-/** Delete a comment (own, or any if you're the owner). payload: {guest, name?} */
-export const deleteComment = (eventId, commentId, payload) => {
-  return _delete(`/events/${eventId}/comments/${commentId}`, payload)
+/** Delete a comment (own, or any if you're the owner). Deleting a thread root
+ *  also deletes its replies. */
+export const deleteComment = (eventId, commentId) => {
+  return _delete(`/events/${eventId}/comments/${commentId}`)
+}
+
+/** Tag a comment as a thread (member+). payload: {membersOnly: boolean} */
+export const tagThread = (eventId, commentId, payload) => {
+  return post(`/events/${eventId}/comments/${commentId}/thread`, payload)
+}
+
+/** Flip a thread's members-only setting. payload: {membersOnly: boolean} */
+export const setThreadMembersOnly = (eventId, commentId, payload) => {
+  return patch(`/events/${eventId}/comments/${commentId}/thread`, payload)
+}
+
+/** Un-tag a thread. Rejects with 409 "thread-has-replies" once it has replies. */
+export const untagThread = (eventId, commentId) => {
+  return _delete(`/events/${eventId}/comments/${commentId}/thread`)
 }
 
 // --- Venue / activity polls (C6) ---

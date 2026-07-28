@@ -141,21 +141,42 @@ definitions:
         description: Denormalized author display name (guest name, or the account's
           "First Last").
         type: string
+      canManageThread:
+        description: |-
+          CanManageThread is computed per-request for the calling user (never stored):
+          true when the caller may untag this root or flip its members-only flag.
+        type: boolean
       createdAt:
         type: integer
       eventId:
         type: string
       isGuest:
         type: boolean
+      isThread:
+        description: |-
+          IsThread marks this top-level comment as a thread root: it collapses in the
+          UI and accepts replies. Only ever true on a comment with no ThreadId.
+        type: boolean
+      membersOnly:
+        description: |-
+          MembersOnly hides this thread and every reply in it from guests. Only
+          meaningful on a thread root; replies inherit the root's setting rather than
+          carrying their own.
+        type: boolean
       text:
+        type: string
+      threadId:
+        description: ThreadId is the root comment this is a reply to. Nil for top-level
+          comments.
         type: string
       updatedAt:
         description: set when edited
         type: integer
       userId:
         description: |-
-          UserId is the guest's name OR a signed-in user's id hex — it authorizes
-          edit / delete-own. IsGuest disambiguates the two.
+          UserId is the author's user id hex. Legacy rows may instead hold a guest's
+          typed-in name, with IsGuest true — the discussion is sign-in-only now, so
+          no new guest rows are written, but old ones still render.
         type: string
     type: object
   models.Event:
@@ -1077,17 +1098,15 @@ paths:
         name: eventId
         required: true
         type: string
-      - description: Comment text + author identity
+      - description: Comment text, plus the thread root to reply under
         in: body
         name: payload
         required: true
         schema:
           properties:
-            guest:
-              type: boolean
-            name:
-              type: string
             text:
+              type: string
+            threadId:
               type: string
           type: object
       produces:
@@ -1097,13 +1116,14 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.Comment'
-      summary: Posts a comment to an event's discussion thread
+      summary: Posts a comment to an event's discussion, optionally as a thread reply
       tags:
       - events
   /events/{eventId}/comments/{commentId}:
     delete:
       consumes:
       - application/json
+      description: Deleting a thread root also deletes every reply within it.
       parameters:
       - description: Event ID
         in: path
@@ -1115,17 +1135,6 @@ paths:
         name: commentId
         required: true
         type: string
-      - description: Author identity
-        in: body
-        name: payload
-        required: true
-        schema:
-          properties:
-            guest:
-              type: boolean
-            name:
-              type: string
-          type: object
       produces:
       - application/json
       responses:
@@ -1148,16 +1157,12 @@ paths:
         name: commentId
         required: true
         type: string
-      - description: New text + author identity
+      - description: New text
         in: body
         name: payload
         required: true
         schema:
           properties:
-            guest:
-              type: boolean
-            name:
-              type: string
             text:
               type: string
           type: object
@@ -1167,6 +1172,99 @@ paths:
         "200":
           description: OK
       summary: Edits the caller's own comment
+      tags:
+      - events
+  /events/{eventId}/comments/{commentId}/thread:
+    delete:
+      consumes:
+      - application/json
+      description: Only possible while the thread has no replies — un-tagging a thread
+        with replies would scatter them into the top-level discussion out of context.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: Comment ID
+        in: path
+        name: commentId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "409":
+          description: thread-has-replies
+          schema:
+            $ref: '#/definitions/responses.Error'
+      summary: Un-tags a thread, returning it to an ordinary comment
+      tags:
+      - events
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: Comment ID
+        in: path
+        name: commentId
+        required: true
+        type: string
+      - description: New members-only setting
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            membersOnly:
+              type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Toggles whether a thread is members-only
+      tags:
+      - events
+    post:
+      consumes:
+      - application/json
+      description: Members and admins may promote a top-level comment to a thread,
+        optionally hiding it from guests. Replies then hang off it.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: Comment ID
+        in: path
+        name: commentId
+        required: true
+        type: string
+      - description: Whether the thread is hidden from guests
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            membersOnly:
+              type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Tags a comment as a discussion thread
       tags:
       - events
   /events/{eventId}/duplicate:

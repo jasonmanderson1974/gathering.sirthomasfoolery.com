@@ -741,7 +741,7 @@ const docTemplate = `{
                 "tags": [
                     "events"
                 ],
-                "summary": "Posts a comment to an event's discussion thread",
+                "summary": "Posts a comment to an event's discussion, optionally as a thread reply",
                 "parameters": [
                     {
                         "type": "string",
@@ -751,20 +751,17 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Comment text + author identity",
+                        "description": "Comment text, plus the thread root to reply under",
                         "name": "payload",
                         "in": "body",
                         "required": true,
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "guest": {
-                                    "type": "boolean"
-                                },
-                                "name": {
+                                "text": {
                                     "type": "string"
                                 },
-                                "text": {
+                                "threadId": {
                                     "type": "string"
                                 }
                             }
@@ -809,19 +806,13 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "New text + author identity",
+                        "description": "New text",
                         "name": "payload",
                         "in": "body",
                         "required": true,
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "guest": {
-                                    "type": "boolean"
-                                },
-                                "name": {
-                                    "type": "string"
-                                },
                                 "text": {
                                     "type": "string"
                                 }
@@ -836,6 +827,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "description": "Deleting a thread root also deletes every reply within it.",
                 "consumes": [
                     "application/json"
                 ],
@@ -860,20 +852,140 @@ const docTemplate = `{
                         "name": "commentId",
                         "in": "path",
                         "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/events/{eventId}/comments/{commentId}/thread": {
+            "post": {
+                "description": "Members and admins may promote a top-level comment to a thread, optionally hiding it from guests. Replies then hang off it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Tags a comment as a discussion thread",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
                     },
                     {
-                        "description": "Author identity",
+                        "type": "string",
+                        "description": "Comment ID",
+                        "name": "commentId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Whether the thread is hidden from guests",
                         "name": "payload",
                         "in": "body",
                         "required": true,
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "guest": {
+                                "membersOnly": {
                                     "type": "boolean"
-                                },
-                                "name": {
-                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            },
+            "delete": {
+                "description": "Only possible while the thread has no replies — un-tagging a thread with replies would scatter them into the top-level discussion out of context.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Un-tags a thread, returning it to an ordinary comment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comment ID",
+                        "name": "commentId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "409": {
+                        "description": "thread-has-replies",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Error"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Toggles whether a thread is members-only",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comment ID",
+                        "name": "commentId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New members-only setting",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "membersOnly": {
+                                    "type": "boolean"
                                 }
                             }
                         }
@@ -2751,6 +2863,10 @@ const docTemplate = `{
                     "description": "Denormalized author display name (guest name, or the account's \"First Last\").",
                     "type": "string"
                 },
+                "canManageThread": {
+                    "description": "CanManageThread is computed per-request for the calling user (never stored):\ntrue when the caller may untag this root or flip its members-only flag.",
+                    "type": "boolean"
+                },
                 "createdAt": {
                     "type": "integer"
                 },
@@ -2760,7 +2876,19 @@ const docTemplate = `{
                 "isGuest": {
                     "type": "boolean"
                 },
+                "isThread": {
+                    "description": "IsThread marks this top-level comment as a thread root: it collapses in the\nUI and accepts replies. Only ever true on a comment with no ThreadId.",
+                    "type": "boolean"
+                },
+                "membersOnly": {
+                    "description": "MembersOnly hides this thread and every reply in it from guests. Only\nmeaningful on a thread root; replies inherit the root's setting rather than\ncarrying their own.",
+                    "type": "boolean"
+                },
                 "text": {
+                    "type": "string"
+                },
+                "threadId": {
+                    "description": "ThreadId is the root comment this is a reply to. Nil for top-level comments.",
                     "type": "string"
                 },
                 "updatedAt": {
@@ -2768,7 +2896,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "userId": {
-                    "description": "UserId is the guest's name OR a signed-in user's id hex — it authorizes\nedit / delete-own. IsGuest disambiguates the two.",
+                    "description": "UserId is the author's user id hex. Legacy rows may instead hold a guest's\ntyped-in name, with IsGuest true — the discussion is sign-in-only now, so\nno new guest rows are written, but old ones still render.",
                     "type": "string"
                 }
             }

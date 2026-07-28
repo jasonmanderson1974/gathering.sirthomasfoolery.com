@@ -165,6 +165,9 @@
               @add-comment="onAddComment"
               @edit-comment="onEditComment"
               @delete-comment="onDeleteComment"
+              @tag-thread="onTagThread"
+              @set-thread-members-only="onSetThreadMembersOnly"
+              @untag-thread="onUntagThread"
             />
           </div>
         </div>
@@ -243,6 +246,9 @@ import {
   addComment,
   editComment,
   deleteComment,
+  tagThread,
+  setThreadMembersOnly,
+  untagThread,
   createPoll,
   deletePoll,
   votePoll,
@@ -496,13 +502,47 @@ export default {
         this.showError("Could not save your edit. Please try again.")
       }
     },
-    async onDeleteComment({ commentId, payload }) {
+    async onDeleteComment({ commentId }) {
       const id = this.event.shortId ?? this.event._id
       try {
-        await deleteComment(id, commentId, payload)
+        await deleteComment(id, commentId)
         await this.refreshEvent()
       } catch (err) {
         this.showError("Could not delete the message. Please try again.")
+      }
+    },
+
+    /** Threads within the discussion (C13): persist then refresh. */
+    async onTagThread({ commentId, payload }) {
+      const id = this.event.shortId ?? this.event._id
+      try {
+        await tagThread(id, commentId, payload)
+        await this.refreshEvent()
+      } catch (err) {
+        this.showError("Could not create the thread. Please try again.")
+      }
+    },
+    async onSetThreadMembersOnly({ commentId, payload }) {
+      const id = this.event.shortId ?? this.event._id
+      try {
+        await setThreadMembersOnly(id, commentId, payload)
+        await this.refreshEvent()
+      } catch (err) {
+        this.showError("Could not change who can see this thread. Please try again.")
+      }
+    },
+    async onUntagThread({ commentId }) {
+      const id = this.event.shortId ?? this.event._id
+      try {
+        await untagThread(id, commentId)
+        await this.refreshEvent()
+      } catch (err) {
+        // 409 means someone replied between the page load and the click.
+        this.showError(
+          err?.error === "thread-has-replies"
+            ? "This thread has replies, so it can no longer be un-tagged."
+            : "Could not un-tag the thread. Please try again."
+        )
       }
     },
 

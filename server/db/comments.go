@@ -78,3 +78,69 @@ func DeleteComment(commentId primitive.ObjectID) error {
 	}
 	return err
 }
+
+// SetCommentThread tags a top-level comment as a thread root (C13), recording
+// who tagged it and whether it's members-only.
+func SetCommentThread(commentId primitive.ObjectID, membersOnly bool, threadedBy string) error {
+	_, err := CommentsCollection.UpdateByID(
+		context.Background(),
+		commentId,
+		bson.M{"$set": bson.M{
+			"isThread":    true,
+			"membersOnly": membersOnly,
+			"threadedBy":  threadedBy,
+		}},
+	)
+	if err != nil {
+		logger.StdErr.Println(err)
+	}
+	return err
+}
+
+// SetCommentMembersOnly flips the members-only flag on an existing thread root.
+func SetCommentMembersOnly(commentId primitive.ObjectID, membersOnly bool) error {
+	_, err := CommentsCollection.UpdateByID(
+		context.Background(),
+		commentId,
+		bson.M{"$set": bson.M{"membersOnly": membersOnly}},
+	)
+	if err != nil {
+		logger.StdErr.Println(err)
+	}
+	return err
+}
+
+// ClearCommentThread un-tags a thread root, returning it to an ordinary
+// top-level comment. Callers must first confirm it has no replies
+// (CountThreadReplies) — un-tagging a thread with replies would orphan them.
+func ClearCommentThread(commentId primitive.ObjectID) error {
+	_, err := CommentsCollection.UpdateByID(
+		context.Background(),
+		commentId,
+		bson.M{"$unset": bson.M{"isThread": "", "membersOnly": "", "threadedBy": ""}},
+	)
+	if err != nil {
+		logger.StdErr.Println(err)
+	}
+	return err
+}
+
+// CountThreadReplies returns how many replies hang off a thread root.
+func CountThreadReplies(threadId primitive.ObjectID) (int64, error) {
+	count, err := CommentsCollection.CountDocuments(context.Background(), bson.M{"threadId": threadId})
+	if err != nil {
+		logger.StdErr.Println(err)
+	}
+	return count, err
+}
+
+// DeleteCommentsByThreadId removes every reply under a thread root. Paired with
+// DeleteComment when the root itself is deleted, so replies aren't left
+// unreachable in the collection.
+func DeleteCommentsByThreadId(threadId primitive.ObjectID) error {
+	_, err := CommentsCollection.DeleteMany(context.Background(), bson.M{"threadId": threadId})
+	if err != nil {
+		logger.StdErr.Println(err)
+	}
+	return err
+}

@@ -43,9 +43,14 @@ func InitEvents(router *gin.RouterGroup) {
 	eventRouter.GET("/:eventId/ics", getEventIcs)
 	eventRouter.POST("/:eventId/rsvp", rsvpToEvent)
 	eventRouter.DELETE("/:eventId/rsvp", deleteRsvp)
-	eventRouter.POST("/:eventId/comments", addComment)
-	eventRouter.PUT("/:eventId/comments/:commentId", editComment)
-	eventRouter.DELETE("/:eventId/comments/:commentId", deleteComment)
+	// The discussion is sign-in-only: anonymous callers can neither read nor
+	// write comments (getEvent withholds the list from them entirely).
+	eventRouter.POST("/:eventId/comments", middleware.AuthRequired(), addComment)
+	eventRouter.PUT("/:eventId/comments/:commentId", middleware.AuthRequired(), editComment)
+	eventRouter.DELETE("/:eventId/comments/:commentId", middleware.AuthRequired(), deleteComment)
+	eventRouter.POST("/:eventId/comments/:commentId/thread", middleware.AuthRequired(), tagCommentAsThread)
+	eventRouter.PATCH("/:eventId/comments/:commentId/thread", middleware.AuthRequired(), setThreadMembersOnly)
+	eventRouter.DELETE("/:eventId/comments/:commentId/thread", middleware.AuthRequired(), untagThread)
 	eventRouter.POST("/:eventId/polls", createPoll)
 	eventRouter.DELETE("/:eventId/polls/:pollId", deletePoll)
 	eventRouter.POST("/:eventId/polls/:pollId/vote", votePoll)
@@ -520,9 +525,18 @@ func getEvent(c *gin.Context) {
 	// Update event.ResponsesMap to match the final responsesMap
 	event.ResponsesMap = responsesMap
 
-	// Attach the discussion thread (C7). Best-effort — non-critical to the page.
-	if comments, commentsErr := db.GetComments(event.Id.Hex()); commentsErr == nil {
-		event.Comments = comments
+	// Attach the discussion (C7) + its threads (C13). Best-effort — non-critical
+	// to the page. This is the only path by which comments reach a client, so it
+	// is where discussion privacy is actually enforced:
+	//   - anonymous callers get nothing at all (the discussion is sign-in-only);
+	//   - guests get everything except members-only threads and their replies.
+	event.Comments = []models.Comment{}
+	if userSesh != "" {
+		if commenter, commenterErr := db.GetUserById(userSesh); commenterErr == nil && commenter != nil {
+			if comments, commentsErr := db.GetComments(event.Id.Hex()); commentsErr == nil {
+				event.Comments = visibleComments(comments, newCommentViewer(commenter, event))
+			}
+		}
 	}
 
 	// Apply privacy logic based on blindAvailabilityEnabled

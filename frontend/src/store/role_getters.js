@@ -21,6 +21,12 @@ export const roleGetters = {
   canManageUsers(state, getters) {
     return [roles.ADMIN, roles.SUPER_ADMIN].includes(getters.role)
   },
+  // Can read members-only discussion threads and tag a comment as a thread
+  // (member and up). Same predicate as canInvite today, but a distinct concept —
+  // kept separate so either rule can move without dragging the other with it.
+  canSeeMembersOnly(state, getters) {
+    return [roles.MEMBER, roles.ADMIN, roles.SUPER_ADMIN].includes(getters.role)
+  },
   // Everyone except guests may create events. Anonymous (not signed in) is
   // allowed too, matching the backend createEvent, which rejects only
   // signed-in guests — they'll be prompted to sign in when they try to save.
