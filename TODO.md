@@ -1254,15 +1254,22 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   - Truncation is **rune-aware** (`truncateRunes`), so a cut can't land mid-character. That's the
     same defect **A17** tracks for comments/polls — this establishes the helper A17 can reuse.
 
-- [ ] **E9 · Short event IDs: predictable generator + collision fallback returns the duplicate.**
-  `S` · **P2**
-  `db/events.go:281-309`: `math/rand` seeded with `eventId.Timestamp().Unix()` — **one-second
-  granularity**, so two events created in the same second walk identical id sequences, and ids are
-  predictable for a known creation time (an enumeration aid while `GET /:eventId` is open;
-  mitigated but not mooted by E3). On 5 failed dedup attempts it logs "Couldn't generate unique id"
-  and **returns the colliding id anyway**; both `GetEventByShortId` probe errors are swallowed, so
-  a transient DB blip reads as "no collision". Use `crypto/rand`, fail hard (error return) on
-  exhaustion, check the probe errors.
+- [x] **E9 · Short event IDs: predictable generator + collision fallback returns the duplicate.**
+  `S` · **P2 — DONE 2026-07-28** (0 lint issues, build/vet + full suite green on both an empty
+  Mongo and a restored prod replica).
+  All three parts of the finding confirmed. The same-second collision is not theoretical —
+  running the old generator twice against one Unix second returns the identical id (`8aEF4`
+  both times, `feAf6` a second later), because `rand.NewSource(eventId.Timestamp().Unix())` is
+  seeded at one-second granularity and two events created in the same second draw the same
+  sequence.
+  Now: `crypto/rand` with **rejection sampling** — `% 20` over a 256-value byte would have made
+  the first 16 letters of the alphabet measurably likelier than the last 4 — probe errors
+  propagated instead of read as "no collision", and a hard error after 10 attempts rather than
+  returning an id it knows is taken. `GenerateShortEventId` drops its `eventId` argument (it was
+  only ever the seed) and returns `(string, error)`; the three call sites 500 on failure.
+  Four tests: no repeat across 50 draws, shape and alphabet, every letter reachable across 2,000
+  drawn characters (the bias check), and that a planted id is skipped — with an assertion that the
+  planted id is findable, so the collision probe can't pass vacuously.
 
 - [ ] **E10 · Misc hardening batch.** `S` · **P3**
   - `main.go:98-110`: `CORS_ORIGINS` split on `,` without trimming — `"a.com, b.com"` silently

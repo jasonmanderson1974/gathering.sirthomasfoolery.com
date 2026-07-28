@@ -2,7 +2,8 @@ package db
 
 import (
 	"context"
-	"math/rand"
+	"crypto/rand"
+	"fmt"
 	"strings"
 	"time"
 
@@ -435,35 +436,74 @@ func GetEventsCreatedThisMonth(userId primitive.ObjectID) (int, error) {
 	return int(result), nil
 }
 
-// Returns a random unique short event id seeded by the actual event id
-func GenerateShortEventId(eventId primitive.ObjectID) string {
-	r := rand.New(rand.NewSource(eventId.Timestamp().Unix()))
+// shortIdAlphabet omits 0/1/O/I/l so a short id can be read aloud or copied off
+// a screen without ambiguity.
+const shortIdAlphabet = "23456789ABCDEFabcdef"
 
-	id := ""
+// shortIdLength gives 20^5 ≈ 3.2M ids — ample for a club, and short enough to
+// share verbally.
+const shortIdLength = 5
 
-	letters := "23456789ABCDEFabcdef"
-	for i := 0; i < 5; i++ {
-		index := r.Intn(len(letters))
-		letter := letters[index : index+1]
-		id += letter
+// shortIdAttempts is how many distinct ids to try before giving up. Collisions
+// are already vanishingly rare at this scale, so needing more than a couple
+// means something is wrong with the database rather than with our luck.
+const shortIdAttempts = 10
+
+// randomShortId draws a short id from crypto/rand.
+//
+// Rejection sampling, not `% len(alphabet)`: 256 isn't a multiple of 20, so the
+// modulo would make the first 16 letters measurably likelier than the last 4.
+func randomShortId() (string, error) {
+	max := byte(256 - (256 % len(shortIdAlphabet))) // 240
+	id := make([]byte, 0, shortIdLength)
+	buf := make([]byte, 1)
+
+	for len(id) < shortIdLength {
+		if _, err := rand.Read(buf); err != nil {
+			return "", err
+		}
+		if buf[0] >= max {
+			continue // would bias the draw — take another byte
+		}
+		id = append(id, shortIdAlphabet[int(buf[0])%len(shortIdAlphabet)])
+	}
+	return string(id), nil
+}
+
+// GenerateShortEventId returns a short id that no event is currently using.
+//
+// It used to seed math/rand with the event's ObjectID timestamp, which is only
+// second-granular: two events created in the same second drew the SAME sequence,
+// and any id was predictable from a known creation time. It also swallowed the
+// lookup errors — so a transient database blip read as "no collision" — and,
+// after five failed attempts, logged a line and returned the colliding id
+// anyway, leaving two events sharing one short id and lookups serving whichever
+// came first.
+//
+// Now: crypto/rand, propagated probe errors, and a hard failure rather than a
+// knowingly duplicate id.
+func GenerateShortEventId() (string, error) {
+	for i := 0; i < shortIdAttempts; i++ {
+		id, err := randomShortId()
+		if err != nil {
+			logger.StdErr.Println("short id generation failed:", err)
+			return "", err
+		}
+
+		existing, err := GetEventByShortId(id)
+		if err != nil {
+			// Don't treat a failed lookup as proof the id is free.
+			logger.StdErr.Println("short id collision check failed:", err)
+			return "", err
+		}
+		if existing == nil {
+			return id, nil
+		}
 	}
 
-	i := 0
-	event, _ := GetEventByShortId(id)
-	for event != nil && i < 5 {
-		// Event exists, keep on adding letters until event doesn't exist anymore, max of 5 more letters
-		index := r.Intn(len(letters))
-		letter := letters[index : index+1]
-		id += letter
-		event, _ = GetEventByShortId(id)
-		i++
-	}
-
-	if event != nil {
-		logger.StdErr.Println("Couldn't generate unique id")
-	}
-
-	return id
+	err := fmt.Errorf("could not generate a unique short event id in %d attempts", shortIdAttempts)
+	logger.StdErr.Println(err)
+	return "", err
 }
 
 // Updates the name of a guest response

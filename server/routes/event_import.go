@@ -160,7 +160,11 @@ func importEvent(c *gin.Context) {
 
 	// Create local event with new identity
 	newId := primitive.NewObjectID()
-	shortId := db.GenerateShortEventId(newId)
+	shortId, shortIdErr := db.GenerateShortEventId()
+	if shortIdErr != nil {
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
 	numResponses := 0
 
 	remoteEvent.Id = newId

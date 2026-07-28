@@ -302,7 +302,11 @@ func createEvent(c *gin.Context) {
 	}
 
 	// Generate short id
-	shortId := db.GenerateShortEventId(event.Id)
+	shortId, shortIdErr := db.GenerateShortEventId()
+	if shortIdErr != nil {
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
 	event.ShortId = &shortId
 
 	// Record the remindees. The scheduler (services/reminders) picks them up on
@@ -868,7 +872,11 @@ func duplicateEvent(c *gin.Context) {
 	}
 
 	// Generate short id
-	shortId := db.GenerateShortEventId(event.Id)
+	shortId, shortIdErr := db.GenerateShortEventId()
+	if shortIdErr != nil {
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
 	event.ShortId = &shortId
 
 	// Insert new event
