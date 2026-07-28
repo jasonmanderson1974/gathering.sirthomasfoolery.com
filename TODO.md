@@ -14,7 +14,10 @@
 > files), **E5** (`session.Save()` errors), **E6** (phone/role/RSVP-email/remindee leaks in
 > `getEvent`) — then the **deletion sweep**: **E4** (Stripe/paywall), **E7** (slackbot +
 > discord_bot), **A18** (dead code), **A19** (unused npm deps). About **2,500 lines removed**, two
-> unauthenticated surfaces gone. Next up: **E3**, now with materially less code to gate.
+> unauthenticated surfaces gone. Then **E8**+**E11** (payload validation) and **E3 — now complete,
+> all five phases**, which is the invite-only posture this fork was always meant to have.
+> **Read E3's outage note before touching the router guard**: phase 3 took the site down for
+> signed-out visitors, and the lesson (cold-load, no-cookie testing) is now a harness.
 
 Priority legend: **P0** = do first (correctness / risk / cheap-and-high-value) ·
 **P1** = high value · **P2** = moderate · **P3** = nice-to-have.
@@ -931,7 +934,7 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   Mongo delete.)
   </details>
 
-- [ ] **E3 · Require sign-in (minimum role `guest`) for ALL event access; remove the anonymous
+- [x] **E3 · Require sign-in (minimum role `guest`) for ALL event access; remove the anonymous
   guest flow.** `L` · **P0 — the 2026-07-27 product change of record.**
   **Decisions (user, 2026-07-27):** anonymous visitors see **only the landing page** (+ sign-in /
   auth / privacy). This **reverses** `ACCESS_CONTROL_PLAN.md` §1 ("Guest (no-login) event responses:
@@ -959,6 +962,27 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   `?redirect` params on sign-in (`router/index.js:98-99`); event enumeration via unauthenticated
   `GET /:eventId/ids` + predictable short ids (E9 covers the generator itself).
 
+  **DONE 2026-07-28 — all five phases.** Deployed in two units: phases 1–3 together (`3dc85e56`,
+  + hotfix `9482e489`), then phase 4 (`9dc24518`).
+
+  **⚠️ Phase 3 caused a production outage — read this before touching the router guard.**
+  Deploying phases 1–3 made the site unreachable for anyone WITHOUT a session: `/` and `/sign-in`
+  ping-ponged and neither rendered, so nobody could even log in. Cause: the guard probes
+  `GET /user/profile` to decide whether anyone is signed in; for a signed-out visitor that 401s with
+  `not-signed-in`, which is the *expected answer* — but it also matched the new central
+  session-ended handler, which pushed to `/sign-in` while `beforeEach` was still resolving,
+  cancelling the navigation and re-running the guard forever. The handler's `publicRoutes` bail-out
+  couldn't save it either: before the first navigation resolves, `router.currentRoute` is Vue
+  Router's placeholder with `name: null`, so even the landing page didn't match.
+  **Fix** (`9482e489`): the auth probe is exempt from the central handler (the guard already handles
+  that failure in its own try/catch), and the handler refuses to push before the first navigation
+  resolves. Three regression tests in `fetch_utils.test.js`.
+  **Why local testing missed it:** it only reproduces on a **cold load with no session cookie**. A
+  dev browser that is already signed in never enters that state. → **Any change touching the router
+  guard, `fetch_utils`' error path, or auth-dependent rendering needs a signed-out pass in a fresh
+  browser profile.** A headless harness for exactly this now exists (see the note under phase 4);
+  it was validated by reverting the fix and confirming all five routes fail, then restoring.
+
   **PROGRESS 2026-07-28 — phases 1–3 DONE (deployable as a unit), 4–5 remaining.**
   - **Phase 1 DONE** (`79c14890`): `InitEvents` registers `GET /:eventId/ics` bare and everything
     else in an `AuthRequired()` sub-group. The three divergent ownership checks (`editEvent`,
@@ -984,9 +1008,37 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
     *Verified against a locally-run server:* anonymous curl over all 20 event routes → 401 on every
     one, ICS 404s; `/e/<id>` and `/e/<shortId>` serve the static title with the event name absent
     from the shell (confirmed the leak was real first — the template reads `{{ or .title … }}`).
-  - **Phases 4–5 REMAINING** — cosmetic/hygiene, safe to land separately. Residue until then: guest
-    name fields that no longer render (every viewer is signed in), and rename/delete buttons still
-    shown to non-owners that now 403 correctly.
+  - **Phase 4 DONE** (`9dc24518`, frontend-only + one server fix; **-554 lines**): removed the
+    localStorage guest identity and every reader, the `?guestName=` fetch parameters, the guest name
+    fields in RSVP/polls/sign-up, the unreachable `!authUser` arms in EventHeader/EventBottomBar,
+    `eventsToLink`/`eventsCreated` + helpers, and anonymous `canCreateEvents`. **Kept on-behalf
+    entry** (GuestDialog survives, reworded, and now mirrors the server's ObjectID-shaped-name
+    rejection client-side). Unified the two no-owner sentinels behind `isOwnerlessEvent`
+    (`ownerId == guestUserId` ×3 and `ownerId == 0` ×2, the latter working only via JS coercion),
+    and corrected the NewEvent alert still claiming "anybody can edit this event".
+    **Server fix — an inconsistency introduced in phase 2:** `requireResponseManager` compared
+    `user.Id` to `event.OwnerId` directly, locking members out of legacy **ownerless** events (a nil
+    OwnerId never equals a real id) even though those same members can edit the event. It delegates
+    to `requireEventManager` + admin override now, so "who manages this event" has one definition;
+    3 tests. `canEditGuestName` in the UI mirrors it — it returned `true` unconditionally, so a
+    non-owner saw the rename pencil and got a 403 on submit.
+    **Verified in a real browser both signed-out and signed-in** (see the outage note above for why
+    that matters), including an RSVP round-trip: body is exactly `{"status":"going","guestCount":0}`
+    and it persists keyed by user id with name/email backfilled from the account. That pass caught a
+    regression before commit — removing the fields from `SignUpForSlotDialog` left a `v-form` whose
+    lazy-validation `formValid` never became true, which would have permanently disabled "Join slot".
+  - **Phase 5 DONE** (folded into phase 4): `ACCESS_CONTROL_PLAN.md` §1 records the reversal with
+    what "left open" turned out to mean in practice; `PLUGIN_API_README.md` carries a
+    breaking-change notice (the plugin acts as the signed-in user; `guestName`/`guestEmail` are
+    ignored). Grep sweep clean — the only surviving hits are the sentinel definition, an unrelated
+    monthly event counter, and the `db.GuestNameExists`/`UpdateGuestResponseName` helpers behind the
+    now-owner-gated rename.
+  - **Test harnesses** (in the session scratchpad, not committed — offered for in-repo landing;
+    needs `ws` as a devDependency since Node 20 has no global `WebSocket`):
+    `signedout_check.js` drives a cookie-less Chrome over the public/gated routes asserting both
+    where you land and that the destination actually rendered; `signedin_check.js` + a session-cookie
+    minter (gorilla/securecookie, same codec as the server) exercise the signed-in UI without SMTP or
+    Google OAuth wired locally.
 
   **Phase 1 — backend gating** (`server/routes/events.go:26-57`): register `GET /:eventId/ics`
   bare; every other event route goes in an `AuthRequired()` sub-group
