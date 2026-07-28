@@ -40,14 +40,14 @@
       <div
         class="-tw-mt-[6px] tw-flex tw-w-full tw-flex-grow tw-items-center tw-gap-2"
       >
-        <v-text-field
+        <LocationInput
           v-model="newLocation"
-          placeholder="Venue or address…"
           class="tw-flex-grow tw-p-2 tw-text-xs sm:tw-text-sm"
           autofocus
+          hide-icon
           hide-details
-          @keyup.enter="saveLocation"
-        ></v-text-field>
+          @enter="saveLocation"
+        />
         <v-btn icon :small="isPhone" @click="cancelEditing">
           <v-icon>mdi-close</v-icon>
         </v-btn>
@@ -62,6 +62,7 @@
 <script>
 import { mapActions } from "vuex"
 import { isPhone, put } from "@/utils"
+import LocationInput from "@/components/LocationInput.vue"
 
 /**
  * Inline-editable venue/address on the event page (C12). Mirrors
@@ -70,6 +71,10 @@ import { isPhone, put } from "@/utils"
  */
 export default {
   name: "EventLocation",
+
+  components: {
+    LocationInput,
+  },
 
   props: {
     event: { type: Object, required: true },

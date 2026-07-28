@@ -61,6 +61,22 @@ It boots mongo + frontend + server with dummy secrets and exposes Mongo on
 build/boot/UI smoke tests and for running the backend integration tests, not for
 full login.
 
+### Event location address lookup (optional)
+
+The event location field is plain free text by default. Setting
+`VUE_APP_GOOGLE_MAPS_API_KEY` in `frontend/.env` adds Google address
+suggestions on top; with no key the inputs behave exactly as they did before,
+so this is never required to build or run anything.
+
+The key must be a Maps Platform **browser** key with **Places API (New)** and
+**Maps JavaScript API** enabled, restricted by HTTP referrer and to those two
+APIs. Note that `google.maps.places.Autocomplete` (the old widget) has not been
+available to new Maps customers since 2025-03-01 — `utils/maps_utils.js` uses
+the current `AutocompleteSuggestion.fetchAutocompleteSuggestions` data API and
+renders predictions in our own themed input, so free-form venues like "Greg's
+back garden" stay first-class. Suggestions are billed per session, so the
+input holds one session token per pick.
+
 ## Testing
 
 Run before pushing.

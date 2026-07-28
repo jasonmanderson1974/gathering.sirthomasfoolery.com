@@ -843,6 +843,9 @@ func scheduleEvent(c *gin.Context) {
 		// Recurrence (C5): empty/"none" = a one-off gathering.
 		RecurrenceFrequency string              `json:"recurrenceFrequency"`
 		RecurrenceUntil     *primitive.DateTime `json:"recurrenceUntil"`
+		// Optional venue, settable when confirming the time as well as at
+		// creation. Absent (nil) leaves whatever the event already has.
+		Location *string `json:"location"`
 	}{}
 	if err := c.Bind(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
@@ -917,6 +920,9 @@ func scheduleEvent(c *gin.Context) {
 		set := bson.M{
 			"scheduledEvent":    scheduledEvent,
 			"gatheringReminder": reminder,
+		}
+		if payload.Location != nil {
+			set["location"] = strings.TrimSpace(*payload.Location)
 		}
 		if recurrenceFreq != models.RecurrenceNone {
 			set["gatheringRecurrence"] = models.GatheringRecurrence{

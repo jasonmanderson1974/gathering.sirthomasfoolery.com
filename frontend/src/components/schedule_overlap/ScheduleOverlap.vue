@@ -122,6 +122,7 @@
                   :reminder-enabled.sync="reminderEnabled"
                   :reminder-lead-time-hours.sync="reminderLeadTimeHours"
                   :recurrence-frequency.sync="recurrenceFrequency"
+                  :location.sync="scheduleLocation"
                 />
               </div>
             </template>
@@ -519,6 +520,7 @@
                   :reminder-enabled.sync="reminderEnabled"
                   :reminder-lead-time-hours.sync="reminderLeadTimeHours"
                   :recurrence-frequency.sync="recurrenceFrequency"
+                  :location.sync="scheduleLocation"
                 />
               </div>
 
@@ -860,6 +862,7 @@
           :reminder-enabled.sync="reminderEnabled"
           :reminder-lead-time-hours.sync="reminderLeadTimeHours"
           :recurrence-frequency.sync="recurrenceFrequency"
+          :location.sync="scheduleLocation"
         />
 
         <!-- Fixed bottom section for mobile -->
@@ -1216,6 +1219,8 @@ export default {
       reminderLeadTimeHours: 24,
       // Recurrence (C5): "none" | "weekly" | "biweekly" | "monthly"
       recurrenceFrequency: "none",
+      // Venue, editable while confirming the time (seeded from the event)
+      scheduleLocation: this.event.location ?? "",
       timeType:
         localStorage["timeType"] ??
         (userPrefers12h() ? timeTypes.HOUR12 : timeTypes.HOUR24), // Whether 12-hour or 24-hour
@@ -2472,6 +2477,7 @@ export default {
         reminderEnabled: this.reminderEnabled,
         reminderLeadTimeHours: this.reminderLeadTimeHours,
         recurrenceFrequency: this.recurrenceFrequency,
+        location: this.scheduleLocation.trim(),
       })
         .then(() => this.refreshEvent())
         .catch(() => {})

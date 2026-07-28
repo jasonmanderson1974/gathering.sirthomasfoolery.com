@@ -128,12 +128,18 @@
     label="Timezone"
     @input="$emit('timezone-input', $event)"
   />
+  <LocationInput
+    v-model="locationProxy"
+    label="Location"
+    placeholder="Where? (optional)"
+  />
 </div>
 </template>
 
 <script>
 import { mapState } from "vuex"
 import TimezoneSelector from "@/components/schedule_overlap/TimezoneSelector.vue"
+import LocationInput from "@/components/LocationInput.vue"
 
 /**
  * "Advanced options" panel content for the new/edit event form: time
@@ -154,6 +160,7 @@ export default {
     sendEmailAfterXResponsesEnabled: { type: Boolean, default: false },
     sendEmailAfterXResponses: { default: 3 },
     timezone: { type: Object, default: () => ({}) },
+    location: { type: String, default: "" },
   },
 
   emits: [
@@ -163,12 +170,14 @@ export default {
     "update:sendEmailAfterXResponsesEnabled",
     "update:sendEmailAfterXResponses",
     "update:timezone",
+    "update:location",
     "signIn",
     "timezone-input",
   ],
 
   components: {
     TimezoneSelector,
+    LocationInput,
   },
 
   computed: {
@@ -179,6 +188,14 @@ export default {
         { text: "30 min", value: 30 },
         { text: "60 min", value: 60 },
       ]
+    },
+    locationProxy: {
+      get() {
+        return this.location
+      },
+      set(v) {
+        this.$emit("update:location", v)
+      },
     },
     timeIncrementProxy: {
       get() {

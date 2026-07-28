@@ -317,6 +317,7 @@
               "
               :sendEmailAfterXResponses.sync="sendEmailAfterXResponses"
               :timezone.sync="timezone"
+              :location.sync="location"
               @signIn="$emit('signIn')"
               @timezone-input="trackTimezoneChange"
             />
@@ -465,6 +466,7 @@ export default {
     collectEmails: false,
     blindAvailabilityEnabled: false,
     timezone: {},
+    location: "",
     sendEmailAfterXResponsesEnabled: false,
     sendEmailAfterXResponses: 3,
 
@@ -493,6 +495,7 @@ export default {
       this.selectedDays = this.contactsPayload.selectedDays
       this.notificationsEnabled = this.contactsPayload.notificationsEnabled
       this.timezone = this.contactsPayload.timezone
+      this.location = this.contactsPayload.location ?? ""
 
       this.$refs.form.resetValidation()
     }
@@ -604,6 +607,7 @@ export default {
       this.sendEmailAfterXResponsesEnabled = false
       this.sendEmailAfterXResponses = 3
       this.collectEmails = false
+      this.location = ""
       this.startOnMonday = prefersStartOnMonday()
 
       this.$refs.form.resetValidation()
@@ -689,6 +693,7 @@ export default {
         collectEmails: this.collectEmails,
         startOnMonday: this.startOnMonday,
         timeIncrement: this.timeIncrement,
+        location: this.location.trim(),
       }
 
       const posthogPayload = {
@@ -710,6 +715,7 @@ export default {
         eventCollectEmails: this.collectEmails,
         eventStartOnMonday: this.startOnMonday,
         eventTimeIncrement: this.timeIncrement,
+        eventLocation: this.location.trim(),
       }
 
       if (!this.edit) {
@@ -797,6 +803,7 @@ export default {
         selectedDateOption: this.selectedDateOption,
         notificationsEnabled: this.notificationsEnabled,
         timezone: this.timezone,
+        location: this.location,
       }
       signInGoogle({
         state: {
@@ -834,6 +841,7 @@ export default {
         this.startOnMonday = this.event.startOnMonday
         this.collectEmails = this.event.collectEmails
         this.timeIncrement = this.event.timeIncrement ?? 15
+        this.location = this.event.location ?? ""
 
         if (
           this.event.sendEmailAfterXResponses !== null &&
@@ -900,6 +908,7 @@ export default {
         sendEmailAfterXResponsesEnabled: this.sendEmailAfterXResponsesEnabled,
         sendEmailAfterXResponses: this.sendEmailAfterXResponses,
         timeIncrement: this.timeIncrement,
+        location: this.location,
       }
     },
     hasEventBeenEdited() {
@@ -923,7 +932,8 @@ export default {
         this.sendEmailAfterXResponsesEnabled !==
           this.initialEventData.sendEmailAfterXResponsesEnabled ||
         this.sendEmailAfterXResponses !==
-          this.initialEventData.sendEmailAfterXResponses
+          this.initialEventData.sendEmailAfterXResponses ||
+        this.location !== this.initialEventData.location
       )
     },
     trackTimezoneChange(newTimezone) {

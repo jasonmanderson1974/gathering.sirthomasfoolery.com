@@ -190,6 +190,17 @@
                   @change="(v) => $emit('update:recurrenceFrequency', v)"
                 />
               </v-list-item>
+              <!-- Venue for the confirmed gathering (optional) -->
+              <v-list-item @click.stop>
+                <LocationInput
+                  :value="location"
+                  label="Location"
+                  placeholder="Where? (optional)"
+                  dense
+                  hide-icon
+                  @input="(v) => $emit('update:location', v)"
+                />
+              </v-list-item>
               <v-divider />
               <!-- Save the confirmed gathering to Gathering (no external calendar).
                    Members can add it to their own calendar afterwards via the
@@ -230,6 +241,7 @@ import GCalWeekSelector from "./GCalWeekSelector.vue"
 import { isPhone } from "@/utils"
 import ExpandableSection from "../ExpandableSection.vue"
 import EventOptions from "./EventOptions.vue"
+import LocationInput from "@/components/LocationInput.vue"
 import { timeTypes, guestUserId, serverURL } from "@/constants"
 import { mapState, mapGetters } from "vuex"
 
@@ -256,10 +268,12 @@ export default {
     reminderEnabled: { type: Boolean, default: true },
     reminderLeadTimeHours: { type: Number, default: 24 },
     recurrenceFrequency: { type: String, default: "none" },
+    location: { type: String, default: "" },
   },
 
   components: {
     TimezoneSelector,
+    LocationInput,
     GCalWeekSelector,
     ExpandableSection,
     EventOptions,
@@ -290,9 +304,9 @@ export default {
       try {
         (window.adsbygoogle = window.adsbygoogle || []).push({})
       } catch (e) {
-        console.error('AdSense error:', e)
+        console.error("AdSense error:", e)
       }
-    }
+    },
   },
 
   computed: {
@@ -375,7 +389,8 @@ export default {
       const parts = []
       if (this.recurrenceLabel) parts.push(this.recurrenceLabel)
       const r = this.event.gatheringReminder
-      if (r && r.enabled) parts.push(`Reminder ${r.leadTimeHours ?? 24}h before`)
+      if (r && r.enabled)
+        parts.push(`Reminder ${r.leadTimeHours ?? 24}h before`)
       else parts.push("No reminder email")
       return parts.join(" · ")
     },
