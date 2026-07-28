@@ -59,6 +59,8 @@
           required
         />
 
+        <LocationInput v-model="location" solo placeholder="Where? (optional)" />
+
         <SlideToggle
           v-if="showAvailabilityToggle"
           class="tw-w-full"
@@ -317,7 +319,6 @@
               "
               :sendEmailAfterXResponses.sync="sendEmailAfterXResponses"
               :timezone.sync="timezone"
-              :location.sync="location"
               @signIn="$emit('signIn')"
               @timezone-input="trackTimezoneChange"
             />
@@ -387,6 +388,7 @@ import HelpDialog from "./HelpDialog.vue"
 import EmailInput from "./event/EmailInput.vue"
 import DatePicker from "@/components/DatePicker.vue"
 import SlideToggle from "./SlideToggle.vue"
+import LocationInput from "@/components/LocationInput.vue"
 import {
   availabilityModes,
   getAvailabilityFields,
@@ -423,6 +425,7 @@ export default {
     EmailInput,
     DatePicker,
     SlideToggle,
+    LocationInput,
     ExpandableSection,
     AlertText,
     OverflowGradient,
