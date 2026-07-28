@@ -51,6 +51,18 @@ func InitEvents(router *gin.RouterGroup) {
 	eventRouter.POST("/:eventId/polls/:pollId/vote", votePoll)
 }
 
+// trimmedLocation normalizes a venue submitted by a client. A nil pointer means
+// the field was absent and stays nil, so callers can still tell "not provided"
+// from "cleared"; anything else is trimmed, so that " The Fox & Hound " and
+// "The Fox & Hound" are one venue however the event was created or edited.
+func trimmedLocation(location *string) *string {
+	if location == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*location)
+	return &trimmed
+}
+
 // @Summary Creates a new event
 // @Tags events
 // @Accept json
@@ -143,7 +155,7 @@ func createEvent(c *gin.Context) {
 		When2meetHref:            payload.When2meetHref,
 		CollectEmails:            payload.CollectEmails,
 		TimeIncrement:            payload.TimeIncrement,
-		Location:                 payload.Location,
+		Location:                 trimmedLocation(payload.Location),
 		Type:                     payload.Type,
 		SignUpResponses:          make(map[string]*models.SignUpResponse),
 		NumResponses:             &numResponses,
@@ -275,7 +287,7 @@ func editEvent(c *gin.Context) {
 	// Update event
 	event.Name = payload.Name
 	event.Description = payload.Description
-	event.Location = payload.Location
+	event.Location = trimmedLocation(payload.Location)
 	event.Duration = payload.Duration
 	event.Dates = payload.Dates
 	event.Times = payload.Times
@@ -921,8 +933,8 @@ func scheduleEvent(c *gin.Context) {
 			"scheduledEvent":    scheduledEvent,
 			"gatheringReminder": reminder,
 		}
-		if payload.Location != nil {
-			set["location"] = strings.TrimSpace(*payload.Location)
+		if location := trimmedLocation(payload.Location); location != nil {
+			set["location"] = *location
 		}
 		if recurrenceFreq != models.RecurrenceNone {
 			set["gatheringRecurrence"] = models.GatheringRecurrence{
