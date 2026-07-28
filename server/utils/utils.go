@@ -206,50 +206,132 @@ func Encode(b []byte) string {
 	return base64.StdEncoding.EncodeToString(b)
 }
 
-func Decode(s string) []byte {
-	data, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
-		panic(err)
-	}
-	return data
+// decodeBase64 is the inverse of Encode. It returns an error rather than
+// panicking: everything it decodes arrives from the database.
+//
+// (This replaced an exported `Decode` that panicked on malformed input — one of
+// the bare panics TODO E10 lists. Decrypt was its only caller, so it went with
+// the rewrite rather than being left behind as dead code that panics.)
+func decodeBase64(s string) ([]byte, error) {
+	return base64.StdEncoding.DecodeString(s)
 }
 
-// Encrypts the given text using the given secret
+// --- Encryption at rest (TODO B6) --------------------------------------------
+//
+// v2 is AES-256-GCM. v1 was AES-CFB, which is *unauthenticated*: anyone able to
+// write to the database could flip plaintext bits undetected, and a wrong key
+// yields plausible-looking garbage rather than an error. Go deprecated the mode
+// in 1.24.
+//
+// Both versions use ENCRYPTION_KEY's bytes directly as the AES key — unchanged
+// from v1, deliberately. The key is already a valid 32-byte AES-256 key, so
+// introducing a derivation step would buy nothing and leave two key concepts
+// coexisting mid-migration.
+//
+// Stored ciphertext therefore carries its version, so the two formats can live
+// side by side while values migrate. The marker is the textual prefix "v2:"
+// rather than a leading version byte, because a v1 blob begins with a 16-byte
+// random IV whose first byte can be *any* value — sniffing it is unreliable in
+// principle, not merely awkward. ':' is not in the base64 alphabet, so no v1
+// value can be mistaken for a tagged one.
+const encV2Prefix = "v2:"
+
+func encryptionKey() ([]byte, error) {
+	key := os.Getenv("ENCRYPTION_KEY")
+	if key == "" {
+		return nil, errors.New("ENCRYPTION_KEY is not set")
+	}
+	return []byte(key), nil
+}
+
+// Encrypt encrypts text with AES-256-GCM, returning a version-tagged,
+// base64-encoded string.
 func Encrypt(text string) (string, error) {
-	block, err := aes.NewCipher([]byte(os.Getenv("ENCRYPTION_KEY")))
+	key, err := encryptionKey()
 	if err != nil {
 		return "", err
 	}
-	plainText := []byte(text)
-	cipherText := make([]byte, aes.BlockSize+len(plainText))
-	iv := cipherText[:aes.BlockSize]
-	if _, err := rand.Read(iv); err != nil {
+	block, err := aes.NewCipher(key)
+	if err != nil {
 		return "", err
 	}
-	// AES-CFB is deprecated (unauthenticated: a tamperer can flip plaintext bits
-	// undetected). Switching to an AEAD is the right answer, but it is a data
-	// migration, not an edit — every calendar refresh token already stored is
-	// CFB, and a new cipher can't read them. Tracked as B6.
-	cfb := cipher.NewCFBEncrypter(block, iv) //nolint:staticcheck // SA1019: see B6
-	cfb.XORKeyStream(cipherText[aes.BlockSize:], plainText)
-	return Encode(cipherText), nil
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	// Seal appends the ciphertext and its authentication tag to the nonce, so
+	// the nonce travels with the value it was used for.
+	sealed := gcm.Seal(nonce, nonce, []byte(text), nil)
+	return encV2Prefix + Encode(sealed), nil
 }
 
-// Decrypts the given text using the given secret
+// Decrypt accepts either version: v2 (AES-GCM, tagged) or v1 (AES-CFB,
+// untagged) for values written before the migration.
+//
+// It never panics. The ciphertext comes from the database, so a truncated or
+// corrupt value has to surface as an error rather than take down the request.
 func Decrypt(text string) (string, error) {
-	block, err := aes.NewCipher([]byte(os.Getenv("ENCRYPTION_KEY")))
+	if strings.HasPrefix(text, encV2Prefix) {
+		return decryptV2GCM(strings.TrimPrefix(text, encV2Prefix))
+	}
+	return decryptV1CFB(text)
+}
+
+func decryptV2GCM(encoded string) (string, error) {
+	key, err := encryptionKey()
 	if err != nil {
 		return "", err
 	}
-	cipherText := Decode(text)
+	raw, err := decodeBase64(encoded)
+	if err != nil {
+		return "", fmt.Errorf("ciphertext is not valid base64: %w", err)
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	if len(raw) < gcm.NonceSize() {
+		return "", errors.New("ciphertext too short")
+	}
+	nonce, sealed := raw[:gcm.NonceSize()], raw[gcm.NonceSize():]
+	// Open fails on a tampered value or the wrong key — the property CFB lacked.
+	plain, err := gcm.Open(nil, nonce, sealed, nil)
+	if err != nil {
+		return "", fmt.Errorf("decrypt: %w", err)
+	}
+	return string(plain), nil
+}
+
+// decryptV1CFB reads ciphertext written before B6. It stays only until no v1
+// values remain; see TODO B6 for the retirement condition.
+func decryptV1CFB(text string) (string, error) {
+	key, err := encryptionKey()
+	if err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+	cipherText, err := decodeBase64(text)
+	if err != nil {
+		return "", fmt.Errorf("ciphertext is not valid base64: %w", err)
+	}
 	if len(cipherText) < aes.BlockSize {
 		return "", errors.New("ciphertext too short")
 	}
 	iv := cipherText[:aes.BlockSize]
 	cipherText = cipherText[aes.BlockSize:]
-	// Must stay CFB for as long as CFB ciphertext exists in the database. See
-	// the note in Encrypt; tracked as B6.
-	cfb := cipher.NewCFBDecrypter(block, iv) //nolint:staticcheck // SA1019: see B6
+	cfb := cipher.NewCFBDecrypter(block, iv) //nolint:staticcheck // SA1019: v1 read path, see B6
 	plainText := make([]byte, len(cipherText))
 	cfb.XORKeyStream(plainText, cipherText)
 	return string(plainText), nil
