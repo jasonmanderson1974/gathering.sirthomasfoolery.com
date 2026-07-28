@@ -78,20 +78,6 @@
       <div v-if="!isPhone && (!isSignUp || canEdit)" class="tw-flex tw-w-40">
         <template v-if="!isEditing">
           <v-btn
-            v-if="!authUser && selectedGuestRespondent"
-            min-width="10.25rem"
-            class="tw-bg-brass tw-text-wood-deep tw-transition-opacity"
-            :style="{ opacity: availabilityBtnOpacity }"
-            @click="$emit('edit-guest-availability')"
-          >
-            {{
-              event.blindAvailabilityEnabled
-                ? "Edit availability"
-                : `Edit ${selectedGuestRespondent}'s availability`
-            }}
-          </v-btn>
-          <v-btn
-            v-else
             width="10.25rem"
             class="tw-text-white tw-transition-opacity"
             :class="'tw-bg-brass'"

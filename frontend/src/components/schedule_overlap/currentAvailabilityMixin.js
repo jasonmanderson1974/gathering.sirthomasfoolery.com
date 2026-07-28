@@ -224,14 +224,15 @@ export default {
       const type = "availability"
       payload.availability = this.availabilityArray
       payload.ifNeeded = this.ifNeededArray
-      if (this.authUser && !this.addingAvailabilityAsGuest) {
-        payload.guest = false
-      } else {
+      if (this.addingAvailabilityAsGuest) {
+        // On-behalf entry: a signed-in member filling in availability for
+        // someone without an account. No localStorage identity — that existed
+        // to remember an ANONYMOUS visitor between reloads, and there are none.
         payload.guest = true
         payload.name = guestPayload.name
         payload.email = guestPayload.email
-
-        localStorage[this.guestNameKey] = guestPayload.name
+      } else {
+        payload.guest = false
       }
 
       await post(`/events/${this.event._id}/response`, payload)

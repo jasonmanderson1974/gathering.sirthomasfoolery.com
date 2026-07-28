@@ -8,7 +8,6 @@ import {
   convertUTCSlotsToLocalISO,
   validateDOWPayload,
   timezoneObservesDST,
-  validateEmail,
 } from "@/utils"
 import { eventTypes, allTimezones } from "@/constants"
 import dayjs from "dayjs"
@@ -57,96 +56,12 @@ export default {
       // Validation: Check timeIncrement exists, default to 15 if not
       const timeIncrement = this.event.timeIncrement ?? 15
 
-      // Security check: If blindAvailabilityEnabled is true and user is NOT the owner,
-      // reject any request with guestName parameter
-      const payloadGuestName = event.data?.payload?.guestName
-      const hasGuestName = payloadGuestName && payloadGuestName.length > 0
-
-      if (this.event.blindAvailabilityEnabled) {
-        // Check if user is owner: ownerId is only returned by backend if user is the owner
-        // So if ownerId exists and matches current user's ID, they are the owner
-        const isOwner =
-          this.event.ownerId && this.authUser?._id === this.event.ownerId
-        if (!isOwner && hasGuestName) {
-          sendPluginError(
-            requestId,
-            command,
-            "Non-owners cannot set guest availability when 'Hide responses from respondents' is enabled."
-          )
-          return
-        }
-      }
-
-      // Check if guestName is provided in payload - if so, force guest mode
-      const forceGuestMode = hasGuestName
-
-      // Determine if current user is guest or logged-in
-      // If guestName is provided in payload, always treat as guest (ignore login status)
-      const isGuest = forceGuestMode || !this.authUser
-
-      // For guests, handle guest name and email
-      let guestName = ""
-      let guestEmail = ""
-      if (isGuest) {
-        const guestNameKey = `${this.event._id}.guestName`
-
-        if (forceGuestMode) {
-          // guestName provided in payload - use it and store in localStorage
-          guestName = payloadGuestName
-          // Store with event._id only (canonical guestName storage key)
-          localStorage[guestNameKey] = guestName
-
-          // If event collects emails, require guestEmail in payload
-          if (this.event.collectEmails) {
-            guestEmail = event.data?.payload?.guestEmail || ""
-            if (!guestEmail || guestEmail.length === 0) {
-              sendPluginError(
-                requestId,
-                command,
-                "Guest email is required because this event collects emails. Please provide 'guestEmail' in the payload."
-              )
-              return
-            }
-
-            // Validate email format
-            if (!validateEmail(guestEmail)) {
-              sendPluginError(
-                requestId,
-                command,
-                `Invalid email format: ${guestEmail}`
-              )
-              return
-            }
-          } else {
-            // Email not required, but get from payload if provided, or from existing response
-            guestEmail =
-              event.data?.payload?.guestEmail ||
-              this.event.responses[guestName]?.email ||
-              ""
-          }
-        } else {
-          // No guestName in payload - use existing flow (check localStorage)
-          const storedGuestName = localStorage[guestNameKey]
-
-          // If no guest name in localStorage, require it from payload
-          if (!storedGuestName || storedGuestName.length === 0) {
-            sendPluginError(
-              requestId,
-              command,
-              "Guest name is required. Please provide 'guestName' in the payload or add your availability through the UI first."
-            )
-            return
-          }
-
-          // Use stored guest name
-          guestName = storedGuestName
-          // Get email from existing response or payload (if provided)
-          guestEmail =
-            event.data?.payload?.guestEmail ||
-            this.event.responses[guestName]?.email ||
-            ""
-        }
-      }
+      // E3: the plugin acts as the signed-in user. The `guestName` parameter
+      // (which forced guest mode and let the caller write availability under an
+      // arbitrary name) is gone, along with the localStorage guest identity it
+      // fell back to. The server keys the response off the session now, and the
+      // blind-availability check that used to guard this is enforced there
+      // rather than in the client. See PLUGIN_API_README.md.
 
       // Get slots from payload - new format: [{ start, end, status }]
       let slots = event.data?.payload?.slots
@@ -394,16 +309,8 @@ export default {
           ifNeeded: allIfNeededTimestamps,
         }
 
-        // Set guest flag and user identification
-        if (isGuest) {
-          // For guests: include name and email (already validated and stored above)
-          payload.guest = true
-          payload.name = guestName
-          payload.email = guestEmail
-        } else {
-          // For logged-in users: backend will use session to identify user
-          payload.guest = false
-        }
+        // The backend identifies the responder from the session.
+        payload.guest = false
 
         await post(`/events/${sanitizedId}/response`, payload)
 
@@ -475,19 +382,7 @@ export default {
       try {
         // Fetch responses between timeMin and timeMax
 
-        // Try to get guest name from localStorage using long event id only.
-        let guestName = null
-        if (typeof localStorage !== "undefined" && this.event?._id) {
-          const guestNameKey = `${this.event._id}.guestName`
-          guestName = localStorage[guestNameKey]
-        }
-
-        // Build URL with guestName if available
-        let url = `/events/${sanitizedId}/responses?timeMin=${timeMin.toISOString()}&timeMax=${timeMax.toISOString()}`
-        if (guestName && guestName.length > 0) {
-          url += `&guestName=${encodeURIComponent(guestName)}`
-        }
-
+        const url = `/events/${sanitizedId}/responses?timeMin=${timeMin.toISOString()}&timeMax=${timeMax.toISOString()}`
         const responses = await get(url)
 
         // Build response object with all users' slots

@@ -19,17 +19,18 @@ export const setScheduledEvent = (eventId, payload) => {
 }
 
 /**
- * RSVP to a confirmed gathering.
+ * RSVP to a confirmed gathering. Keyed to the session server-side — identity is
+ * never taken from the payload.
  * @param {string} eventId
- * @param {{status: "going"|"maybe"|"no", guest: boolean, name?: string, email?: string}} payload
+ * @param {{status: "going"|"maybe"|"no", guestCount?: number}} payload
  */
 export const setRsvp = (eventId, payload) => {
   return post(`/events/${eventId}/rsvp`, payload)
 }
 
-/** Remove the caller's RSVP. */
-export const clearRsvp = (eventId, payload) => {
-  return _delete(`/events/${eventId}/rsvp`, payload)
+/** Remove the caller's own RSVP. */
+export const clearRsvp = (eventId) => {
+  return _delete(`/events/${eventId}/rsvp`)
 }
 
 // --- Discussion (C7) + threads (C13) ---

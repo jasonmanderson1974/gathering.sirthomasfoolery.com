@@ -213,26 +213,6 @@ export const lightOrDark = (color) => {
   }
 }
 
-/** Adds an event ID to the 'eventsCreated' list in localStorage */
-export const addEventToCreatedList = (eventId) => {
-  let eventsCreated = getEventsCreated()
-  eventsCreated.push(eventId)
-  localStorage.setItem("eventsCreated", JSON.stringify(eventsCreated))
-}
-
-/** Returns the 'eventsCreated' list from localStorage */
-export const getEventsCreated = () => {
-  let eventsCreated = JSON.parse(localStorage.getItem("eventsCreated"))
-  if (!Array.isArray(eventsCreated)) {
-    eventsCreated = []
-  }
-  return eventsCreated
-}
-
-/** Deletes the 'eventsCreated' list from localStorage */
-export const deleteEventsCreated = () => {
-  localStorage.removeItem("eventsCreated")
-}
 
 export const prefersStartOnMonday = () => {
   let defaultStartOnMonday = false

@@ -37,8 +37,9 @@
       ref="cardText"
       class="tw-relative tw-flex-1 tw-overflow-auto tw-px-4 tw-py-1 sm:tw-px-8"
     >
-      <AlertText v-if="edit && event?.ownerId == 0" class="tw-mb-4">
-        Anybody can edit this event because it was created while not signed in
+      <AlertText v-if="edit && guestEvent" class="tw-mb-4">
+        This gathering was created before sign-in was required, so it has no
+        owner — any member of the Fellowship can edit it.
       </AlertText>
       <v-form
         ref="form"
@@ -379,7 +380,6 @@ import {
   signInGoogle,
   getDateWithTimezone,
   getTimeOptions,
-  addEventToCreatedList,
   prefersStartOnMonday,
 } from "@/utils"
 import { mapActions, mapState } from "vuex"
@@ -396,7 +396,7 @@ import {
 } from "./availabilityModes"
 import AlertText from "@/components/AlertText.vue"
 import OverflowGradient from "@/components/OverflowGradient.vue"
-import { guestUserId } from "@/constants"
+import { isOwnerlessEvent } from "@/constants"
 import dayjs from "dayjs"
 import utcPlugin from "dayjs/plugin/utc"
 import timezonePlugin from "dayjs/plugin/timezone"
@@ -585,7 +585,7 @@ export default {
       return isPhone(this.$vuetify)
     },
     guestEvent() {
-      return this.event && this.event.ownerId == guestUserId
+      return isOwnerlessEvent(this.event)
     },
   },
 
@@ -741,11 +741,6 @@ export default {
 
             posthogPayload.eventId = eventId
             this.$posthog?.capture("Event created", posthogPayload)
-
-            if (!this.authUser) {
-              // Add eventId to localStorage, so the user can claim it later
-              addEventToCreatedList(eventId)
-            }
           })
           .catch((err) => {
             this.showError(

@@ -3,7 +3,7 @@
 </template>
 
 <script>
-import { get, post, getEventsCreated, deleteEventsCreated } from "@/utils"
+import { get, post } from "@/utils"
 import { mapMutations, mapState } from "vuex"
 import { authTypes, calendarTypes } from "@/constants"
 
@@ -46,9 +46,7 @@ export default {
           scope: scope ?? state.scope,
           calendarType: state.calendarType,
           timezoneOffset: new Date().getTimezoneOffset(),
-          eventsToLink: getEventsCreated(),
         })
-        deleteEventsCreated()
 
         this.setAuthUser(user)
 

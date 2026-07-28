@@ -25,8 +25,23 @@ Companion to `REDESIGN_PLAN.md`. Memory: `project-fellowship-access-control`.
   still hits Google's test-user/verification limits — but that's opt-in and does not affect login.
 - **Email transport = plain Gmail account via SMTP + app password** (`smtp.gmail.com`). Low volume
   (login codes for ~40 people) is well within Gmail's ~500/day limit. "From" = the gmail address.
-- **Guest (no-login) event responses: LEFT OPEN.** Members share Gathering links internally; we are
-  gating *account sign-in*, not link responses.
+- ~~**Guest (no-login) event responses: LEFT OPEN.** Members share Gathering links internally; we are
+  gating *account sign-in*, not link responses.~~
+  **REVERSED 2026-07-28 (TODO E3).** Every event route now requires a session; anonymous visitors
+  see only the landing page, sign-in/auth, and the privacy policy. The reversal was driven by what
+  "left open" turned out to mean in practice: because responses are keyed by display name for
+  guests and by user-id for members *in the same map*, an unauthenticated caller could overwrite a
+  member's response, delete any response by name, rename respondents, RSVP and vote as anyone, and
+  read named availability through `?guestName=` — bypassing blind availability. Requiring sign-in
+  closed all of it at once.
+  Two things deliberately survive:
+  - **On-behalf entry**, so a member can still fill in availability for a spouse without an account
+    ("+ Add guest availability"). The server rejects ObjectID-shaped names, which is what makes it
+    safe to leave open.
+  - **The ICS feed** (`GET /api/events/:id/ics`), the one unauthenticated route: calendar apps poll
+    it without cookies, it exposes only the confirmed gathering's name/time/venue, and obtaining
+    the URL requires signing in.
+  Legacy name-keyed data still renders read-only; it can no longer be created or impersonated.
 - **Member management:**
   - **`canInvite` role** on users — designated members (the user + any they pick) can add emails to
     the allowlist ("invite"). Regular members cannot.

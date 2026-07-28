@@ -428,7 +428,7 @@ export default {
               }
             } else if (
               this.state !== this.states.EDIT_AVAILABILITY &&
-              (this.userHasResponded || this.guestAddedAvailability)
+              this.userHasResponded
             ) {
               // Persist timeslot selection if user has already responded
               this.timeslotSelected = true
@@ -441,7 +441,7 @@ export default {
             if (
               this.state === this.defaultState &&
               ((!this.isPhone &&
-                !(this.userHasResponded || this.guestAddedAvailability)) ||
+                !this.userHasResponded) ||
                 this.respondents.length == 0)
             )
               this.highlightAvailabilityBtn()

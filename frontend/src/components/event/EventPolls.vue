@@ -5,16 +5,6 @@
   >
     <div class="tw-mb-2 tw-text-base tw-font-medium">Polls</div>
 
-    <!-- Guest name (shared across polls; only when not signed in) -->
-    <v-text-field
-      v-if="!authUser && polls.length"
-      v-model="guestName"
-      label="Your name"
-      dense
-      hide-details
-      class="tw-mb-3 tw-max-w-xs"
-    />
-
     <!-- Existing polls -->
     <div v-if="polls.length" class="tw-space-y-4">
       <div
@@ -168,7 +158,6 @@ export default {
   },
 
   data: () => ({
-    guestName: "",
     showNewPoll: false,
     newTitle: "",
     newAllowMultiple: false,
@@ -190,11 +179,11 @@ export default {
         this.authUser._id === this.event.ownerId
       )
     },
-    // The map key identifying the current viewer, if we can determine one.
+    // The map key identifying the current viewer. Always their user id — the
+    // server keys votes by session, so a name can no longer stand in for one.
+    // Legacy name-keyed votes still render in the roster.
     myKey() {
-      if (this.authUser) return this.authUser._id
-      const name = this.guestName.trim()
-      return name.length > 0 ? name : null
+      return this.authUser?._id ?? null
     },
     canVote() {
       return !!this.myKey
@@ -251,12 +240,10 @@ export default {
           current.add(optionId)
         }
       }
-      const identity = this.authUser
-        ? { guest: false }
-        : { guest: true, name: this.guestName.trim() }
+      // Identity is never sent — the server takes it from the session.
       this.$emit("vote-poll", {
         pollId: poll._id,
-        payload: { optionIds: [...current], ...identity },
+        payload: { optionIds: [...current] },
       })
     },
     addOption() {

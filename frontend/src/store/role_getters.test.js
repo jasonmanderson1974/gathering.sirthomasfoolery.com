@@ -25,8 +25,9 @@ describe("store role getters", () => {
     expect(g.isSuperAdmin).toBe(false)
     expect(g.canInvite).toBe(false)
     expect(g.canManageUsers).toBe(false)
-    // anon may create (matches backend, which only blocks signed-in guests)
-    expect(g.canCreateEvents).toBe(true)
+    // E3: anonymous creation is gone — every event has a real owner, and the
+    // create route is behind AuthRequired.
+    expect(g.canCreateEvents).toBe(false)
     // ...but never sees members-only threads (the server sends them no
     // comments at all — the discussion is sign-in-only)
     expect(g.canSeeMembersOnly).toBe(false)

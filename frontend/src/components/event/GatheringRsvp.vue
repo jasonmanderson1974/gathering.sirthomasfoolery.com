@@ -11,16 +11,6 @@
       </div>
     </div>
 
-    <!-- Guest name (only when not signed in) -->
-    <v-text-field
-      v-if="!authUser"
-      v-model="guestName"
-      label="Your name"
-      dense
-      hide-details
-      class="tw-mt-2 tw-max-w-xs"
-    />
-
     <!-- RSVP buttons -->
     <div class="tw-mt-3 tw-flex tw-flex-wrap tw-gap-2">
       <v-btn
@@ -28,7 +18,6 @@
         :key="opt.value"
         small
         :outlined="myStatus !== opt.value"
-        :disabled="!authUser && !guestName.trim()"
         :class="
           myStatus === opt.value
             ? 'tw-bg-brass tw-text-wood-deep'
@@ -103,7 +92,6 @@ export default {
   },
 
   data: () => ({
-    guestName: "",
     localGuestCount: 0,
     options: [
       { value: "going", label: "Going", icon: "mdi-check" },
@@ -142,11 +130,12 @@ export default {
       }
       return r
     },
-    // The map key identifying the current viewer, if we can determine one.
+    // The map key identifying the current viewer. Always their user id — the
+    // server keys RSVPs by session, so a name can no longer stand in for one.
+    // Legacy name-keyed RSVPs still render in the roster; they just aren't
+    // matched to a viewer.
     myKey() {
-      if (this.authUser) return this.authUser._id
-      const name = this.guestName.trim()
-      return name.length > 0 ? name : null
+      return this.authUser?._id ?? null
     },
     myRsvp() {
       return this.myKey ? this.rsvps[this.myKey] : null
@@ -190,22 +179,10 @@ export default {
       if (this.canBringGuests) this.submit(this.myStatus, next)
     },
     submit(status, guestCount) {
-      if (this.authUser) {
-        this.$emit("set-rsvp", { status, guest: false, guestCount })
-      } else {
-        const name = this.guestName.trim()
-        if (!name) return
-        this.$emit("set-rsvp", { status, guest: true, name, guestCount })
-      }
+      this.$emit("set-rsvp", { status, guestCount })
     },
     clear() {
-      if (this.authUser) {
-        this.$emit("clear-rsvp", { guest: false })
-      } else {
-        const name = this.guestName.trim()
-        if (!name) return
-        this.$emit("clear-rsvp", { guest: true, name })
-      }
+      this.$emit("clear-rsvp")
     },
   },
 }

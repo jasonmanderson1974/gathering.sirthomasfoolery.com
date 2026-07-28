@@ -16,15 +16,6 @@
         >
         <v-spacer />
         <v-btn
-          v-if="!authUser && selectedGuestRespondent"
-          class="tw-bg-leather tw-text-brass tw-transition-opacity"
-          :style="{ opacity: availabilityBtnOpacity }"
-          @click="$emit('edit-guest-availability')"
-        >
-          {{ mobileGuestActionButtonText }}
-        </v-btn>
-        <v-btn
-          v-else
           class="tw-bg-leather tw-text-brass tw-transition-opacity"
           :disabled="loading && !userHasResponded"
           :style="{ opacity: availabilityBtnOpacity }"

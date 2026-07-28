@@ -818,7 +818,6 @@
                   :show-response-counts.sync="showResponseCounts"
                   :start-calendar-on-monday.sync="startCalendarOnMonday"
                   :show-event-options="showEventOptions"
-                  :guestAddedAvailability="guestAddedAvailability"
                   :addingAvailabilityAsGuest="addingAvailabilityAsGuest"
                   @toggleShowEventOptions="toggleShowEventOptions"
                   @addAvailability="$emit('addAvailability')"
@@ -944,7 +943,6 @@
                   :hide-if-needed.sync="hideIfNeeded"
                   :show-response-counts.sync="showResponseCounts"
                   :show-event-options="showEventOptions"
-                  :guestAddedAvailability="guestAddedAvailability"
                   :addingAvailabilityAsGuest="addingAvailabilityAsGuest"
                   @toggleShowEventOptions="toggleShowEventOptions"
                   @addAvailability="$emit('addAvailability')"
@@ -1054,13 +1052,13 @@ import {
   availabilityTypes,
   calendarOptionsDefaults,
   eventTypes,
-  guestUserId,
+  isOwnerlessEvent,
   timeTypes,
   timeslotDurations,
 } from "@/constants"
 import { setScheduledEvent } from "@/utils/services/EventService"
 import { nextScheduleLocation } from "./scheduleLocation"
-import { mapMutations, mapActions, mapState } from "vuex"
+import { mapMutations, mapActions, mapState, mapGetters } from "vuex"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
 import CalendarAccounts from "@/components/settings/CalendarAccounts.vue"
 import SignUpBlock from "@/components/sign_up_form/SignUpBlock.vue"
@@ -1271,6 +1269,7 @@ export default {
   },
   computed: {
     ...mapState(["authUser", "overlayAvailabilitiesEnabled"]),
+    ...mapGetters(["canInvite", "canManageUsers"]),
     /** Returns the width of the right side of the calendar */
     rightSideWidth() {
       if (this.isPhone) return "100%"
@@ -1674,7 +1673,7 @@ export default {
       return this.authUser?._id === this.event.ownerId
     },
     isGuestEvent() {
-      return this.event.ownerId === guestUserId
+      return isOwnerlessEvent(this.event)
     },
     isSpecificDates() {
       return this.event.type === eventTypes.SPECIFIC_DATES || !this.event.type
@@ -1694,16 +1693,18 @@ export default {
         .filter(Boolean)
     },
     selectedGuestRespondent() {
-      if (this.guestAddedAvailability) return this.guestName
-
       if (this.curRespondents.length !== 1) return ""
 
       const user = this.parsedResponses[this.curRespondents[0]].user
       return this.isGuest(user) ? user._id : ""
     },
+    // Mirrors the server's requireResponseManager: admins always, otherwise
+    // whoever manages the event — its owner, or member+ for a legacy ownerless
+    // one. This returned true unconditionally, so a non-owner saw the pencil
+    // and got a 403 on submit.
     canEditGuestName() {
-      return true
-      // return this.isOwner || this.isGuestEvent // || this.curGuestId === this.selectedGuestRespondent
+      if (this.canManageUsers || this.isOwner) return true
+      return this.isGuestEvent && this.canInvite
     },
     scheduledEventStyle() {
       const style = {}
@@ -1744,8 +1745,9 @@ export default {
 
       // Return only current user availability if using blind availabilities and user is not owner
       if (this.event.blindAvailabilityEnabled && !this.isOwner) {
-        const guestName = localStorage[this.guestNameKey]
-        const userId = this.authUser?._id ?? guestName
+        // Keyed off the session only — the server applies the same rule, and
+        // the ?guestName= escape hatch that bypassed it is gone.
+        const userId = this.authUser?._id
         if (userId in this.event.responses) {
           const user = {
             ...this.event.responses[userId].user,
@@ -2155,21 +2157,6 @@ export default {
       )
     },
 
-    /** Localstorage key containing the guest's name */
-    guestNameKey() {
-      return `${this.event._id}.guestName`
-    },
-    /** The guest name stored in localstorage */
-    guestName() {
-      return localStorage[this.guestNameKey]
-    },
-    /** Whether a guest has added their availability (saved in localstorage) */
-    guestAddedAvailability() {
-      return (
-        this.guestName?.length > 0 && this.guestName in this.parsedResponses
-      )
-    },
-
     /** Returns an array of time blocks representing the current user's availability
      * (used for displaying current user's availability on top of everybody else's availability)
      */
@@ -2405,8 +2392,6 @@ export default {
           oldName: this.curGuestId,
           newName,
         })
-        // Store with event._id (current format used by guestNameKey)
-        localStorage[this.guestNameKey] = newName
         this.showInfo("Guest name updated successfully")
         this.editGuestNameDialog = false
         this.$emit("setCurGuestId", newName)

@@ -219,25 +219,14 @@
       </div>
       <template v-if="!isPhone">
         <v-btn
-          v-if="
-            (authUser || guestAddedAvailability) &&
-            (!event.blindAvailabilityEnabled || isOwner)
-          "
+          v-if="!event.blindAvailabilityEnabled || isOwner"
           text
           color="primary"
           class="-tw-ml-2 tw-mb-4 tw-w-min tw-px-2"
-          @click="
-            () => {
-              if (authUser) {
-                $emit('addAvailabilityAsGuest')
-              } else {
-                $emit('addAvailability')
-              }
-            }
-          "
+          @click="$emit('addAvailabilityAsGuest')"
         >
           {{
-            authUser ? "+ Add guest availability" : "+ Add availability"
+            "+ Add guest availability"
           }}</v-btn
         >
         <v-switch
@@ -310,26 +299,13 @@
     </v-dialog>
 
     <v-btn
-      v-if="
-        !maxHeight &&
-        isPhone &&
-        (authUser || guestAddedAvailability) &&
-        (!event.blindAvailabilityEnabled || isOwner)
-      "
+      v-if="!maxHeight && isPhone && (!event.blindAvailabilityEnabled || isOwner)"
       text
       color="primary"
       class="-tw-ml-2 tw-mt-4 tw-w-min tw-px-2"
-      @click="
-        () => {
-          if (authUser) {
-            $emit('addAvailabilityAsGuest')
-          } else {
-            $emit('addAvailability')
-          }
-        }
-      "
+      @click="$emit('addAvailabilityAsGuest')"
     >
-      {{ authUser ? "+ Add guest availability" : "+ Add availability" }}</v-btn
+      + Add guest availability</v-btn
     >
   </div>
 </template>
@@ -379,7 +355,6 @@ export default {
     showResponseCounts: { type: Boolean, default: true },
     startCalendarOnMonday: { type: Boolean, default: false },
     showEventOptions: { type: Boolean, required: true },
-    guestAddedAvailability: { type: Boolean, required: true },
     addingAvailabilityAsGuest: { type: Boolean, required: true },
   },
 

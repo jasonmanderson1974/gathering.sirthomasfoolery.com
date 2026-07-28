@@ -211,7 +211,7 @@ import {
   isDstObserved,
   doesDstExist,
 } from "@/utils"
-import { mapActions, mapState, mapMutations } from "vuex"
+import { mapActions, mapState, mapMutations, mapGetters } from "vuex"
 import dayjs from "dayjs"
 import utcPlugin from "dayjs/plugin/utc"
 import timezonePlugin from "dayjs/plugin/timezone"
@@ -227,6 +227,7 @@ import {
   authTypes,
   eventTypes,
   calendarTypes,
+  isOwnerlessEvent,
 } from "@/constants"
 import isWebview from "is-ua-webview"
 import SignInNotSupportedDialog from "@/components/SignInNotSupportedDialog.vue"
@@ -323,6 +324,7 @@ export default {
 
   computed: {
     ...mapState(["authUser", "events"]),
+    ...mapGetters(["canInvite"]),
     allowScheduleEvent() {
       return this.scheduleOverlapComponent?.allowScheduleEvent
     },
@@ -338,10 +340,14 @@ export default {
     isScheduling() {
       return this.scheduleOverlapComponent?.scheduling
     },
+    isOwnerlessEvent() {
+      return isOwnerlessEvent(this.event)
+    },
     canEdit() {
-      return (
-        this.event.ownerId == 0 || this.authUser?._id === this.event.ownerId
-      )
+      if (this.authUser?._id === this.event.ownerId) return true
+      // Legacy ownerless events: manageable by member+, matching the server's
+      // requireEventManager. Anonymous callers can't reach this page at all now.
+      return this.isOwnerlessEvent && this.canInvite
     },
     isPhone() {
       return isPhone(this.$vuetify)
@@ -437,7 +443,7 @@ export default {
     async deleteAvailability() {
       if (!this.scheduleOverlapComponent) return
 
-      if (!this.authUser || this.addingAvailabilityAsGuest) {
+      if (this.addingAvailabilityAsGuest) {
         if (this.curGuestId) {
           await this.scheduleOverlapComponent.deleteAvailability(
             this.curGuestId
@@ -467,10 +473,10 @@ export default {
       }
     },
     /** Remove the caller's RSVP, then refresh (C1). */
-    async clearRsvp(payload) {
+    async clearRsvp() {
       const id = this.event.shortId ?? this.event._id
       try {
-        await clearRsvp(id, payload)
+        await clearRsvp(id)
         await this.refreshEvent()
       } catch (err) {
         this.showError("Could not update your RSVP. Please try again.")
@@ -582,22 +588,11 @@ export default {
       } catch (err) {
         // If ID resolution fails, continue with existing fallback behavior.
       }
-      // Try to get guest name from localStorage using resolved longId.
-      let guestName = null
-      if (typeof localStorage !== "undefined") {
-        if (resolvedLongId) {
-          guestName = localStorage[`${resolvedLongId}.guestName`]
-        }
-      }
-
-      // Build URL with guestName if available
-      let url = `/events/${sanitizedId}`
-      if (guestName && guestName.length > 0) {
-        url += `?guestName=${encodeURIComponent(guestName)}`
-      }
-
-      // Make single request with guestName if available
-      this.event = await get(url)
+      // The ?guestName= identity parameter is gone: the server keys the viewer
+      // off the session now, and honouring a name from the client was how blind
+      // availability could be read incognito.
+      void resolvedLongId
+      this.event = await get(`/events/${sanitizedId}`)
       processEvent(this.event)
     },
 
@@ -662,7 +657,8 @@ export default {
     },
 
     async saveChanges(ignorePagesNotVisited = false) {
-      /* Shows guest dialog if not signed in, otherwise saves auth user's availability */
+      /* Saves the viewer's availability, or — when they've deliberately started
+         an on-behalf entry — prompts for the name it belongs to. */
       if (!this.scheduleOverlapComponent) return
 
       // If user hasn't responded and they haven't gone to the next page, show pages not visited dialog
@@ -677,7 +673,7 @@ export default {
         return
       }
 
-      if (!this.authUser || this.addingAvailabilityAsGuest) {
+      if (this.addingAvailabilityAsGuest) {
         if (this.curGuestId) {
           this.saveChangesAsGuest({
             name: this.curGuestId,
@@ -706,7 +702,9 @@ export default {
       }
     },
     async saveChangesAsGuest(payload) {
-      /* After guest dialog is submitted, submit availability with the given name */
+      /* On-behalf entry: a signed-in member submitting availability under a
+         plain name, for someone without an account. The server validates the
+         name (it rejects ObjectID-shaped ones, which could overwrite a member). */
       if (!this.scheduleOverlapComponent) return
 
       if (payload.name.length > 0) {
@@ -892,20 +890,10 @@ export default {
       this.signUpForSlotDialog = true
     },
 
-    async signUpForBlock(guestPayload) {
-      let payload
-
-      if (this.authUser) {
-        payload = {
-          guest: false,
-          signUpBlockIds: [this.currSignUpBlock._id],
-        }
-      } else {
-        payload = {
-          guest: true,
-          signUpBlockIds: [this.currSignUpBlock._id],
-          ...guestPayload,
-        }
+    async signUpForBlock() {
+      const payload = {
+        guest: false,
+        signUpBlockIds: [this.currSignUpBlock._id],
       }
 
       await post(`/events/${this.event._id}/response`, payload)

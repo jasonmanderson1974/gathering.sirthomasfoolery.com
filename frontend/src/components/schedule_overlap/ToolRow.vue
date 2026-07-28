@@ -231,7 +231,7 @@ import { isPhone } from "@/utils"
 import ExpandableSection from "../ExpandableSection.vue"
 import EventOptions from "./EventOptions.vue"
 import LocationInput from "@/components/LocationInput.vue"
-import { timeTypes, guestUserId, serverURL } from "@/constants"
+import { timeTypes, isOwnerlessEvent, serverURL } from "@/constants"
 import { mapState } from "vuex"
 
 export default {
@@ -285,7 +285,7 @@ export default {
       return isPhone(this.$vuetify)
     },
     guestEvent() {
-      return this.event.ownerId == guestUserId
+      return isOwnerlessEvent(this.event)
     },
     isOwner() {
       return this.event.ownerId == this.authUser?._id

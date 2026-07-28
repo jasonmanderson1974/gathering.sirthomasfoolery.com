@@ -27,10 +27,11 @@ export const roleGetters = {
   canSeeMembersOnly(state, getters) {
     return [roles.MEMBER, roles.ADMIN, roles.SUPER_ADMIN].includes(getters.role)
   },
-  // Everyone except guests may create events. Anonymous (not signed in) is
-  // allowed too, matching the backend createEvent, which rejects only
-  // signed-in guests — they'll be prompted to sign in when they try to save.
+  // Members and up may create events. Anonymous used to be allowed here — the
+  // backend accepted ownerless events and the visitor was prompted to sign in
+  // on save — but E3 removed anonymous creation entirely, so `role` is null
+  // for anyone not signed in and they cannot create.
   canCreateEvents(state, getters) {
-    return getters.role !== roles.GUEST
+    return getters.role !== null && getters.role !== roles.GUEST
   },
 }

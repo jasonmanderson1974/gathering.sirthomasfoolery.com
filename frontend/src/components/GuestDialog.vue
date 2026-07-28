@@ -7,7 +7,7 @@
   >
     <v-card>
       <v-card-title class="tw-flex">
-        <div>Continue as guest</div>
+        <div>Add availability for a guest</div>
         <v-spacer />
         <v-btn icon @click="$emit('input', false)">
           <v-icon>mdi-close</v-icon>
@@ -25,7 +25,7 @@
             v-model="name"
             @keyup.enter="submit"
             :rules="nameRules"
-            placeholder="Enter your name..."
+            placeholder="Guest's name..."
             autofocus
             hide-details="auto"
             autocomplete="off"
@@ -36,8 +36,8 @@
             v-model="email"
             @keyup.enter="submit"
             :rules="emailRules"
-            placeholder="Enter your email..."
-            hint="The event creator has requested your email. It will only be visible to them."
+            placeholder="Guest's email..."
+            hint="The event creator has requested attendee emails. It will only be visible to them."
             persistent-hint
             solo
           ></v-text-field>
@@ -94,6 +94,11 @@ export default {
       this.nameRules = [
         (name) => !!name || "Name is required",
         (name) => !this.respondents.includes(name) || "Name already taken",
+        // The server rejects these: responses are keyed by user-id for members
+        // and by name for guests in one map, so an ObjectID-shaped name could
+        // overwrite a member's response. Mirrored here so the guest sees why
+        // rather than a generic failure.
+        (name) => !/^[0-9a-fA-F]{24}$/.test(name) || "That name isn't allowed",
       ]
       this.emailRules = [
         (email) => !!email || "Email is required",

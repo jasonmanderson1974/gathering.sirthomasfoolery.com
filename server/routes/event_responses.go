@@ -761,20 +761,25 @@ func validOnBehalfName(name string) bool {
 	return name != "" && !objectIDShaped.MatchString(name)
 }
 
-// requireResponseManager reports whether the caller may act on someone else's
-// response (delete it, rename it). Event owner or admin+ only — this branch
-// previously had no authorization at all, so any caller could delete the first
-// matching response by name.
+// requireResponseManager reports whether the caller may act on SOMEONE ELSE's
+// response — delete it, or rename it. Admins always may; otherwise it is
+// whoever manages the event, which is the question requireEventManager already
+// answers. Writes the response and returns false if not.
+//
+// Deliberately delegated rather than re-derived. The first version compared
+// user.Id to event.OwnerId directly, which quietly locked members out of legacy
+// ownerless events — a nil OwnerId never equals a real id — even though those
+// same members CAN edit the event itself. Two spellings of "manages this event"
+// drift; one does not.
 func requireResponseManager(c *gin.Context, event *models.Event) bool {
 	user, ok := authUser(c)
 	if !ok {
 		return false
 	}
-	if user.Id == event.OwnerId || user.EffectiveRole().CanManageUsers() {
+	if user.EffectiveRole().CanManageUsers() {
 		return true
 	}
-	c.JSON(http.StatusForbidden, responses.Error{Error: errs.UserNotEventOwner})
-	return false
+	return requireEventManager(c, event)
 }
 
 // maxResponderNameLength bounds a guest / on-behalf display name. These names

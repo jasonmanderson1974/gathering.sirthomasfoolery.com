@@ -190,7 +190,18 @@ export const allTimezones = Object.freeze({
   "Pacific/Tongatapu": "Nuku'alofa",
 })
 
+// The nil ObjectID the API sends for an event with no owner. Such events are
+// LEGACY only: E3 removed anonymous creation, so every event minted since has a
+// real owner. They remain manageable by member+ (matching the server's
+// requireEventManager), which is what isOwnerlessEvent gates on.
 export const guestUserId = "000000000000000000000000"
+
+// Whether an event has no owner. Callers used to spell this two ways —
+// `ownerId == guestUserId` and `ownerId == 0`, the latter working only because
+// JS coerces the all-zeros string to 0. One predicate now, so the two can't
+// drift.
+export const isOwnerlessEvent = (event) =>
+  !!event && (event.ownerId === guestUserId || !event.ownerId)
 
 export const urlRegex =
   /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)/

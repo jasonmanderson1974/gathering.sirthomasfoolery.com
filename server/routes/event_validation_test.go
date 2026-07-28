@@ -438,3 +438,92 @@ func TestRsvp_IgnoresSpoofedName(t *testing.T) {
 		t.Error("email came from the request body — it must come from the account")
 	}
 }
+
+// An admin may act on anyone's response, on any event, without owning it.
+func TestRenameUser_AdminAllowed(t *testing.T) {
+	requireDB(t)
+	adminId := insertTestUser(t, models.RoleAdmin, "rename-admin@example.test")
+
+	eventId := primitive.NewObjectID()
+	if _, err := db.EventsCollection.InsertOne(context.Background(), models.Event{
+		Id: eventId, Type: models.SPECIFIC_DATES, OwnerId: primitive.NewObjectID(),
+	}); err != nil {
+		t.Fatalf("insert event: %v", err)
+	}
+	t.Cleanup(func() { cleanupEvent(eventId) })
+
+	r := newTestRouter()
+	registerTestLogin(r)
+	r.POST("/events/:eventId/rename-user", middleware.AuthRequired(), renameUser)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/events/"+eventId.Hex()+"/rename-user",
+		strings.NewReader(`{"oldName":"Mary","newName":"Mary S"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(loginAs(t, r, adminId.Hex()))
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("admin renaming: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+// On a LEGACY ownerless event, a member manages responses just as they manage
+// the event itself. The first cut of requireResponseManager compared user.Id to
+// a nil OwnerId and locked members out of exactly these events.
+func TestRenameUser_MemberAllowedOnOwnerlessEvent(t *testing.T) {
+	requireDB(t)
+	memberId := insertTestUser(t, models.RoleMember, "rename-member@example.test")
+
+	eventId := primitive.NewObjectID()
+	if _, err := db.EventsCollection.InsertOne(context.Background(), models.Event{
+		Id: eventId, Type: models.SPECIFIC_DATES, OwnerId: primitive.NilObjectID,
+	}); err != nil {
+		t.Fatalf("insert event: %v", err)
+	}
+	t.Cleanup(func() { cleanupEvent(eventId) })
+
+	r := newTestRouter()
+	registerTestLogin(r)
+	r.POST("/events/:eventId/rename-user", middleware.AuthRequired(), renameUser)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/events/"+eventId.Hex()+"/rename-user",
+		strings.NewReader(`{"oldName":"Mary","newName":"Mary S"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(loginAs(t, r, memberId.Hex()))
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("member on ownerless event: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+// ...but a GUEST still may not, on an ownerless event or any other.
+func TestRenameUser_GuestForbiddenOnOwnerlessEvent(t *testing.T) {
+	requireDB(t)
+	guestId := insertTestUser(t, models.RoleGuest, "rename-guest@example.test")
+
+	eventId := primitive.NewObjectID()
+	if _, err := db.EventsCollection.InsertOne(context.Background(), models.Event{
+		Id: eventId, Type: models.SPECIFIC_DATES, OwnerId: primitive.NilObjectID,
+	}); err != nil {
+		t.Fatalf("insert event: %v", err)
+	}
+	t.Cleanup(func() { cleanupEvent(eventId) })
+
+	r := newTestRouter()
+	registerTestLogin(r)
+	r.POST("/events/:eventId/rename-user", middleware.AuthRequired(), renameUser)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/events/"+eventId.Hex()+"/rename-user",
+		strings.NewReader(`{"oldName":"Mary","newName":"Mary S"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(loginAs(t, r, guestId.Hex()))
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("guest on ownerless event: got %d, want 403 (body: %s)", w.Code, w.Body.String())
+	}
+}
