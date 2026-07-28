@@ -80,4 +80,4 @@ jobs:
       - name: Run tests
         env:
           MONGODB_URI: mongodb://localhost:27017
-        run: go test ./models/ ./routes/ ./utils/ ./db/ ./services/reminders/ ./services/calendar/ ./services/contacts/ ./services/microsoftgraph/
+        run: go test ./models/ ./routes/ ./utils/ ./db/ ./encryption/ ./services/reminders/ ./services/calendar/ ./services/contacts/ ./services/microsoftgraph/

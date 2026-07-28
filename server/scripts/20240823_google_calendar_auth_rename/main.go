@@ -72,8 +72,8 @@ func main() {
 
 			if oldCalendarAccount.GoogleCalendarAuth != nil {
 				newCalendarAccount.OAuth2CalendarAuth = &models.OAuth2CalendarAuth{
-					AccessToken:           oldCalendarAccount.GoogleCalendarAuth.AccessToken,
-					RefreshToken:          oldCalendarAccount.GoogleCalendarAuth.RefreshToken,
+					AccessToken:           models.EncryptedString(oldCalendarAccount.GoogleCalendarAuth.AccessToken),
+					RefreshToken:          models.EncryptedString(oldCalendarAccount.GoogleCalendarAuth.RefreshToken),
 					AccessTokenExpireDate: oldCalendarAccount.GoogleCalendarAuth.AccessTokenExpireDate,
 				}
 			}

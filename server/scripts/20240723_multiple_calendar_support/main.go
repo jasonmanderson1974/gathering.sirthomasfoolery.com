@@ -64,9 +64,9 @@ func main() {
 			newCalendarAccount := models.CalendarAccount{
 				CalendarType: models.GoogleCalendarType,
 				OAuth2CalendarAuth: &models.OAuth2CalendarAuth{
-					AccessToken:           calendarAccount.AccessToken,
+					AccessToken:           models.EncryptedString(calendarAccount.AccessToken),
 					AccessTokenExpireDate: calendarAccount.AccessTokenExpireDate,
-					RefreshToken:          calendarAccount.RefreshToken,
+					RefreshToken:          models.EncryptedString(calendarAccount.RefreshToken),
 				},
 
 				Email:        calendarAccount.Email,

@@ -154,7 +154,7 @@ func RefreshAccessToken(accountAuth *models.OAuth2CalendarAuth, calendarType mod
 	values := url.Values{
 		"client_id":     {clientId},
 		"client_secret": {clientSecret},
-		"refresh_token": {accountAuth.RefreshToken},
+		"refresh_token": {string(accountAuth.RefreshToken)},
 		"scope":         {accountAuth.Scope},
 		"grant_type":    {"refresh_token"},
 	}
@@ -241,7 +241,7 @@ func RefreshUserTokenIfNecessary(u *models.User, accounts models.Set[string]) {
 			calendarAccountKey = utils.GetCalendarAccountKey(res.Email, res.CalendarType)
 		}
 		if calendarAccount, ok := u.CalendarAccounts[calendarAccountKey]; ok {
-			calendarAccount.OAuth2CalendarAuth.AccessToken = res.TokenResponse.AccessToken
+			calendarAccount.OAuth2CalendarAuth.AccessToken = models.EncryptedString(res.TokenResponse.AccessToken)
 			calendarAccount.OAuth2CalendarAuth.AccessTokenExpireDate = primitive.NewDateTimeFromTime(accessTokenExpireDate)
 			u.CalendarAccounts[calendarAccountKey] = calendarAccount
 		}

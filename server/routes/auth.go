@@ -143,9 +143,9 @@ func signInHelper(c *gin.Context, token auth.TokenResponse, tokenOrigin models.T
 
 	// Construct calendar auth object
 	calendarAuth := models.OAuth2CalendarAuth{
-		AccessToken:           token.AccessToken,
+		AccessToken:           models.EncryptedString(token.AccessToken),
 		AccessTokenExpireDate: primitive.NewDateTimeFromTime(accessTokenExpireDate),
-		RefreshToken:          token.RefreshToken,
+		RefreshToken:          models.EncryptedString(token.RefreshToken),
 		Scope:                 token.Scope,
 	}
 

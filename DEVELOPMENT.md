@@ -108,7 +108,7 @@ npm run test:unit
 **Backend** (`cd server`) — needs a Go toolchain and a reachable Mongo for the
 `db` integration tests (`compose.dev.yaml` provides one on `localhost:27017`):
 ```bash
-MONGODB_URI=mongodb://localhost:27017 go test ./models/ ./routes/ ./utils/ ./db/ \
+MONGODB_URI=mongodb://localhost:27017 go test ./models/ ./routes/ ./utils/ ./db/ ./encryption/ \
   ./services/reminders/ ./services/calendar/ ./services/contacts/ ./services/microsoftgraph/
 ```
 > `go test ./...` fails on the stale one-off `server/scripts/` (outdated model

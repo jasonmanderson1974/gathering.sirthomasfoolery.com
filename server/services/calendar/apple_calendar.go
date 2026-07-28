@@ -10,6 +10,7 @@ import (
 	"github.com/jonyTF/go-webdav"
 	"github.com/jonyTF/go-webdav/caldav"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"sirtom/server/encryption"
 	"sirtom/server/models"
 	"sirtom/server/utils"
 )
@@ -133,7 +134,7 @@ func (calendar *AppleCalendar) GetCalendarEvents(calendarId string, timeMin time
 }
 
 func (calendar *AppleCalendar) getClients() (*webdav.Client, *caldav.Client, error) {
-	decryptedPassword, err := utils.Decrypt(calendar.Password)
+	decryptedPassword, err := encryption.Decrypt(calendar.Password)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -15,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"sirtom/server/db"
+	"sirtom/server/encryption"
 	"sirtom/server/errs"
 	"sirtom/server/logger"
 	"sirtom/server/middleware"
@@ -595,9 +596,9 @@ func addGoogleCalendarAccount(c *gin.Context) {
 	accessTokenExpireDate := utils.GetAccessTokenExpireDate(tokens.ExpiresIn)
 
 	calendarAuth := &models.OAuth2CalendarAuth{
-		AccessToken:           tokens.AccessToken,
+		AccessToken:           models.EncryptedString(tokens.AccessToken),
 		AccessTokenExpireDate: primitive.NewDateTimeFromTime(accessTokenExpireDate),
-		RefreshToken:          tokens.RefreshToken,
+		RefreshToken:          models.EncryptedString(tokens.RefreshToken),
 	}
 
 	addCalendarAccount(c, addCalendarAccountArgs{
@@ -626,7 +627,7 @@ func addAppleCalendarAccount(c *gin.Context) {
 		return
 	}
 
-	encryptedPassword, err := utils.Encrypt(payload.Password)
+	encryptedPassword, err := encryption.Encrypt(payload.Password)
 	if err != nil {
 		logger.StdErr.Println(err)
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
@@ -689,9 +690,9 @@ func addOutlookCalendarAccount(c *gin.Context) {
 
 	// Construct calendarAuth object
 	calendarAuth := &models.OAuth2CalendarAuth{
-		AccessToken:           tokens.AccessToken,
+		AccessToken:           models.EncryptedString(tokens.AccessToken),
 		AccessTokenExpireDate: primitive.NewDateTimeFromTime(accessTokenExpireDate),
-		RefreshToken:          tokens.RefreshToken,
+		RefreshToken:          models.EncryptedString(tokens.RefreshToken),
 		Scope:                 payload.Scope,
 	}
 

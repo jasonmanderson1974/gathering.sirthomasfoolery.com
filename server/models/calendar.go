@@ -15,10 +15,15 @@ const (
 )
 
 // OAuth2CalendarAuth contains necessary auth info for the user's google calendar account
+//
+// Both tokens are EncryptedString: they are stored encrypted (TODO B7). The
+// refresh token especially — it is a long-lived credential granting ongoing
+// read access to a member's calendar, so a copy of the database must not be a
+// copy of everyone's calendars. Scope and the expiry are not secrets.
 type OAuth2CalendarAuth struct {
-	AccessToken           string             `json:"-" bson:"accessToken,omitempty"`
+	AccessToken           EncryptedString    `json:"-" bson:"accessToken,omitempty"`
 	AccessTokenExpireDate primitive.DateTime `json:"-" bson:"accessTokenExpireDate,omitempty"`
-	RefreshToken          string             `json:"-" bson:"refreshToken,omitempty"`
+	RefreshToken          EncryptedString    `json:"-" bson:"refreshToken,omitempty"`
 	Scope                 string             `json:"-" bson:"scope,omitempty"`
 }
 
