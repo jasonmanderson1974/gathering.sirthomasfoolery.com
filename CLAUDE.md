@@ -72,7 +72,7 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
 - `src/components/` — organized by feature folder (`event/`, `home/`, `landing/`, `pricing/`, `settings/`, `schedule_overlap/`, `calendar_permission_dialogs/`, `sign_up_form/`, `general/`) plus top-level shared components.
 - `src/utils/` — date math (`date_utils.js`, uses `dayjs`/`moment`/`spacetime`), `fetch_utils.js` (API client), `plugin_utils.js` (handles the postMessage plugin API — see `PLUGIN_API_README.md`), `sign_in_utils.js`, `location_utils.js`, `services/` (`EventService.js`, `FolderService.js` — thin wrappers over `fetch_utils` for event and folder API calls).
 - Tailwind + Vuetify coexist; `tailwind.config.js` purges `src/**/*.{vue,js,...}`.
-- Service worker is registered via `register-service-worker`; `kill-sw.js` at the repo root is a kill switch script if needed.
+- There is **no service worker** — the PWA was deliberately removed (commit `f857320`), and `kill-sw.js` at the repo root unregisters any stale one still installed on a client. Do not reintroduce one casually; see TODO C8.
 
 ### Frontend ↔ backend contract
 - Same-origin in production: Caddy → Go on `:3002`, Go serves `/api/*` and falls through to `index.html` for SPA routes.
