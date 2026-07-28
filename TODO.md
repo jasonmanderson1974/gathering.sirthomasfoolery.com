@@ -12,8 +12,9 @@
 >
 > **2026-07-28:** cleared the cheap, E3-independent security batch — **B4** (CI was skipping 3 test
 > files), **E5** (`session.Save()` errors), **E6** (phone/role/RSVP-email/remindee leaks in
-> `getEvent`). Suggested next: the **deletion sweep** (E4 + A18 + A19, optionally E7) *before* E3,
-> since it removes an unauthenticated crash route and shrinks the surface E3 has to gate.
+> `getEvent`) — then the **deletion sweep**: **E4** (Stripe/paywall), **E7** (slackbot +
+> discord_bot), **A18** (dead code), **A19** (unused npm deps). About **2,500 lines removed**, two
+> unauthenticated surfaces gone. Next up: **E3**, now with materially less code to gate.
 
 Priority legend: **P0** = do first (correctness / risk / cheap-and-high-value) ·
 **P1** = high value · **P2** = moderate · **P3** = nice-to-have.
@@ -311,35 +312,39 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   `$set` the whole doc, and the second silently clobbers the first's response. It also makes the
   `SendEmailAfterXResponses` de-dup guard racy (`:361` sets `-1` in memory, persisted only by that
   same racy write) — the "everyone responded" email can fire twice. Fix: scope `$set` to the fields
-  actually changed (the pattern `polls.go:173` already uses). Related: `stripe.go:264` (moot if E4
-  deletes it). This is the concrete case behind A3's "unchecked-write sweep" follow-up.
+  actually changed (the pattern `polls.go:173` already uses). ~~Related: `stripe.go:264`~~ — moot,
+  **E4** deleted it. This is the concrete case behind A3's "unchecked-write sweep" follow-up.
 
 - [ ] **A17 · Rune-safe text truncation.** `S` · **P2**
   `comments.go:45` and `polls.go:36,47` truncate with byte slicing (`trimmed[:maxLen]`); a cut
   landing mid-rune (emoji, accents — likely in club comments) stores an invalid UTF-8 tail that
   renders as a replacement char. Use `utf8.RuneCountInString` + rune-aware truncation.
 
-- [ ] **A18 · Dead-code deletion batch (frontend + backend).** `S` · **P2**
-  - `views/Friends.vue` (+ `FriendItem.vue`, its only consumer) — no route, no importer;
-    `UserItem.vue` — zero references.
-  - `SignInDialog.vue` — mounted globally (`App.vue:6-10`) but unreachable: `App.vue:299`
-    (`this.signInDialog = true`) is commented out, `signIn()` always routes to `/sign-in`. It also
-    **skips the `res.invited` check** (`SignInDialog.vue:206-208`, unlike `SignIn.vue:290-293`) — a
-    live footgun if ever revived. Delete it + the orphaned `App.vue:_signIn` (:304-325).
-  - `store/index.js:125-128` `refreshAuthUser` action — never dispatched.
-  - `App.vue:283-285` scroll tracking (`handleScroll`/`scrollY`) — written, never read.
-  - `Event.vue`: empty `beforeMount()` (:318), identical if/else branches in `resetWeekOffset`
-    (:904-909), large commented blocks (:752-754, :802-818).
-  - Server: the dead Mailchimp/Mailjet path in `utils/mail_utils.go` (8 consecutive `, _ :=` sites
-    at :61-165 — the fork moved to Gmail SMTP); `discord_bot/` (`Init()` is never called from
-    `main.go` — zero references outside the package; coordinate with E7 if deleting the slackbot too).
+- [x] **A18 · Dead-code deletion batch (frontend + backend).** `S` · **P2 — DONE 2026-07-28**
+  (backend build/vet + full suite green; frontend eslint 0 errors, 80/80 tests, build OK).
+  Deleted: `Friends.vue` + `FriendItem.vue` + `UserItem.vue`; `SignInDialog.vue` and its two
+  orphaned `App.vue` handlers (`_signIn`/`_emailSignIn`) plus the imports they were the last users
+  of; `App.vue` scroll tracking (`handleScroll`/`scrollY` + two window listeners); `Event.vue`'s
+  empty `beforeMount()`, the identical-branch `resetWeekOffset`, and three commented blocks; and
+  `utils/mail_utils.go`'s `AddUserToMailchimp`/`AddUserToMailjet` (which also cleared the 8 `, _ :=`
+  sites, and their env vars left `.env.template`). `discord_bot/` went with **E7**.
+  Also collapsed `App.vue signIn()` — both branches pushed the same route, only the webview guard
+  differed.
+  **⚠️ One A18 claim was WRONG:** `store/index.js` `refreshAuthUser` is **not** "never dispatched" —
+  it is live, dispatched from six components (`ICSCredentials`, `AppleCredentials`,
+  `CalendarAccounts`, `EventItem`, `ScheduleOverlap`, `Settings`). **A4** had already deleted the
+  duplicate definition that finding was really aimed at. Left in place.
 
-- [ ] **A19 · Drop 8 unused npm dependencies.** `S` · **P2**
-  Zero references in `frontend/src`: `vue-github-button`, `vue-vimeo-player`, `html2canvas`,
-  `vue-html2canvas`, `copy-image-clipboard`, `canvas-confetti`, `@rive-app/canvas`, `ua-parser-js`.
-  Upstream-fork bloat inflating install + bundle-analysis time. Verify `vue-worker` and
-  `vuedraggable` (exactly 1 usage each) before touching those. Regenerate the lockfile with
-  `npx npm@10` (CI parity — local npm 11 diverges).
+- [x] **A19 · Drop 8 unused npm dependencies.** `S` · **P2 — DONE 2026-07-28** (clean
+  `npx npm@10 ci` from an empty `node_modules` for CI parity; 80/80 tests, eslint 0 errors, build
+  OK). Removed all 8 listed (`vue-github-button`, `vue-vimeo-player`, `html2canvas`,
+  `vue-html2canvas`, `copy-image-clipboard`, `canvas-confetti`, `@rive-app/canvas`, `ua-parser-js`)
+  **plus `register-service-worker`** — not on A19's list, but the same finding: **C8** already
+  recorded it as unused after the PWA was deliberately removed (`f857320`). The stale CLAUDE.md line
+  claiming a service worker is registered was corrected at the same time.
+  The two flagged for verification are **both real and were kept**: `vue-worker` is registered in
+  `main.js` *and* used via `this.$worker` in `availabilityMixin.js:57`; `vuedraggable` is a live
+  component in `Dashboard.vue`.
 
 - [ ] **A20 · Router guard does a network round-trip on every navigation; `/user/profile` fetched
   from 5 places.** `S` · **P2**
@@ -1031,22 +1036,25 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   **Deploy note:** land as ~5 green commits (one per phase); between Phase 1 and Phase 3 anonymous
   visitors get raw 401s instead of a redirect — keep those commits/deploys close together.
 
-- [ ] **E4 · Delete the Stripe/paywall subsystem.** `M` · **P1**
-  Dormant dead weight on this fork (no `STRIPE_API_KEY` on the VM; the only real paywall gates are
-  commented out — `ToolRow.vue:225,295`) that carries live risk: **anonymously reachable panic** in
-  `_fulfillCheckout` (`stripe.go:214` — `cs, _ := session.Get(...)` then unconditional deref; the
-  route `POST /api/stripe/fulfill-checkout` is unauthenticated at `stripe.go:34`, and with no API
-  key the Get always errors). Plus: unauthenticated `create-checkout-session` accepting a
-  caller-supplied `UserID` (`stripe.go:41,84`); fulfillment explicitly non-idempotent (stale TODOs
-  `stripe.go:204-207`); `fulfillCheckout` never writes a response body; wrong-variable error log
-  (`stripe.go:236` logs `err` instead of `userErr`); four `UpdateOne` results discarded
-  (`stripe.go:264,317,330,350` — premium up/downgrade can silently no-op). Delete:
-  `server/routes/stripe.go` + `main.go` wiring + `stripe-go/v82` dep; frontend `StripeRedirect`
-  route/view, checkout plumbing in `SignIn.vue handlePostAuthRedirect`, `isPremiumUser` getter +
-  call sites (`ScheduleOverlap.vue:1277`, `Event.vue:331`, `ToolRow.vue`), `constants.js:202
-  numFreeEvents` + `:72-77 upgradeDialogTypes` (both unreferenced). Resolves A9's deferred
-  `isPremiumUser` question. The webhook's signature verification (`stripe.go:283-296`) is the only
-  properly-secured piece — it goes too.
+- [x] **E4 · Delete the Stripe/paywall subsystem.** `M` · **P1 — DONE 2026-07-28** (backend
+  build/vet + full suite green; frontend eslint 0 errors, 80/80 tests, build OK). **-696 lines.**
+  The anonymously-reachable nil deref was confirmed exactly as described (`stripe.go:214`
+  `cs, _ := session.Get(...)` → unconditional `cs.PaymentStatus`, on an unauthenticated route, and
+  with no API key the `Get` always errors — `gin.Recovery` made it a free 500 rather than a crash).
+  - **Backend:** `routes/stripe.go`, the `main.go` wiring (`InitStripe` + `stripe.Key`), the
+    `stripe-go/v82` dep, `db.GetUserByStripeCustomerId` (only callers were in `stripe.go`), and
+    `User.StripeCustomerId` / `User.IsPremium`. Dropping those fields also retired
+    `GET /users/:userId/is-premium`, whose entire implementation was `StripeCustomerId != nil`.
+    Existing Mongo docs keep the fields; nothing reads them. **Swagger regenerated.**
+  - **Frontend:** checkout plumbing in `SignIn.vue`/`Auth.vue` (`authTypes.UPGRADE`), the
+    `isPremiumUser` util + store getter, `upgradeDialogTypes`, `numFreeEvents`, and `Event.vue`'s
+    `ownerIsPremium` — including `checkOwnerPremium()`, which fired a `/users/:id/is-premium`
+    request on **every event page load**. Every surviving `isPremiumUser` reference turned out to be
+    inert (unused import / unused `mapGetters` / inside a comment). Also removed `ToolRow.vue`'s
+    commented AdSense block and its orphaned `initializeAd()`.
+  - **TODO was stale on two points:** the `StripeRedirect` route/view and the `enablePaywall` store
+    flag were already gone from an earlier pass.
+  - Resolves **A9**'s deferred `isPremiumUser` question.
 
 - [x] **E5 · `session.Save()` errors discarded at 5 sites.** `S` · **P1 — DONE 2026-07-28**
   (build/vet clean, full suite green with DB-gated tests actually running). Handled by impact
@@ -1080,15 +1088,17 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
     change** (verified by stashing the fix); the 6th is deliberately green both ways as the guard
     against over-stripping the owner's own view.
 
-- [ ] **E7 · Slackbot endpoint: no Slack signature verification (or just delete it).** `S` · **P2**
-  `POST /api/slackbot` (`slackbot/slackbot.go:56`, `execCommand` :65-106) is unauthenticated, does
-  **no signing-secret verification**, and POSTs command output to the attacker-supplied
-  `payload.ResponseUrl` (SSRF-shaped). Exposure is limited (commands are only `/num_users` +
-  `/active_users` aggregate counts) but it's a pointless open surface on a club instance.
-  Recommend **deleting** the slackbot (its outbound `SendTextMessageWithType` is only used by
-  Stripe code E4 deletes, and the event-created message is already commented out) together with the
-  never-initialized `discord_bot/` (A18); otherwise add signing-secret verification + drop
-  `response_url` echoing.
+- [x] **E7 · Slackbot endpoint: no Slack signature verification (or just delete it).** `S` ·
+  **P2 — DONE 2026-07-28 (deleted).** Finding confirmed: `execCommand` was unauthenticated, did no
+  signing-secret verification, and handed the caller-supplied `payload.ResponseUrl` straight to
+  `command.Execute`, which POSTs to it. Took the recommended option and **deleted** rather than
+  hardened — after **E4**, the outbound `SendTextMessageWithType` had zero callers, and the two
+  remaining ones (event-created, user-joined) were already commented out.
+  `discord_bot/` went with it (the A18 half): `Init()` was never called from `main.go` and it had
+  zero references outside its own package, so it has never run on this fork. `go mod tidy` dropped
+  `discordgo`. Also removed the dangling commented call sites and their leftover scaffolding, the
+  `SLACK_*`/`DISCORD_*` entries in `.env.template` + `DEPLOYMENT.md`, and the CLAUDE.md references.
+  **Swagger regenerated.**
 
 - [ ] **E8 · Input caps on event creation.** `S` · **P2**
   `createEvent` payload (`events.go:81-84`): `Name` has no length cap, `Dates`/`Times` have no
