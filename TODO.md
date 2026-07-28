@@ -346,13 +346,15 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   `main.js` *and* used via `this.$worker` in `availabilityMixin.js:57`; `vuedraggable` is a live
   component in `Dashboard.vue`.
 
-- [ ] **A20 · Router guard does a network round-trip on every navigation; `/user/profile` fetched
-  from 5 places.** `S` · **P2**
-  `router/index.js:96` awaits `get("/auth/status")` on **every** route change, duplicating
-  `store.state.authUser`; and `/user/profile` is independently fetched by `App.vue:346-362`,
-  `Home.vue:96-103`, `Event.vue:994-1000`, `currentAvailabilityMixin.js:32-33` (plus the unused
-  store action). Consolidate on the store: guard checks `authUser`, falls back to one fetch.
-  **Coordinate with E3 phase 3** — same file/guard gets the public-routes inversion.
+- [x] **A20 · Router guard does a network round-trip on every navigation; `/user/profile` fetched
+  from 5 places.** `S` · **P2 — DONE 2026-07-28, folded into E3 phase 3** (same guard, same file —
+  doing it separately would have meant editing `router/index.js` twice and resolving a conflict).
+  The guard now reads `store.state.authUser` and only dispatches `refreshAuthUser` when it's empty
+  (cold load / after sign-out), instead of awaiting `GET /auth/status` on every navigation.
+  `refreshAuthUser` returns the user now as well as committing it. **Still open (minor):** the
+  remaining independent `/user/profile` fetches in `App.vue`, `Home.vue`, `Event.vue` and
+  `currentAvailabilityMixin.js` — the per-navigation round-trip was the expensive part and is gone;
+  consolidating those four is cheap follow-up whenever they're next touched.
 
 - [ ] **A21 · Calendar-service error-handling leftovers.** `S` · **P3**
   `services/calendar/google_calendar.go:22,79` — `req, _ := http.NewRequest` (the same latent
@@ -956,6 +958,35 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   `authRoutes`; `canEdit` granting anonymous edit of ownerless events (`Event.vue:347-351`); lost
   `?redirect` params on sign-in (`router/index.js:98-99`); event enumeration via unauthenticated
   `GET /:eventId/ids` + predictable short ids (E9 covers the generator itself).
+
+  **PROGRESS 2026-07-28 — phases 1–3 DONE (deployable as a unit), 4–5 remaining.**
+  - **Phase 1 DONE** (`79c14890`): `InitEvents` registers `GET /:eventId/ics` bare and everything
+    else in an `AuthRequired()` sub-group. The three divergent ownership checks (`editEvent`,
+    `scheduleEvent`, `polls.requireEventManager`) unified on one helper — ownerless events are now
+    member+ only, closing the takeover. `createEvent` takes its owner from the session
+    unconditionally. `AuthRequiredIfInviteOnly` retired with its two tests. Table-driven gate test
+    drives the REAL `InitEvents` and cross-checks against the router's own route list, so a route
+    added outside the authed group fails the build instead of shipping open.
+    *Two pre-existing test problems fixed en route:* `logger.StdOut/StdErr` were nil in tests (any
+    handler error path that logged would nil-deref) — `routes` `TestMain` now inits to `io.Discard`,
+    protecting the whole package; and several tests registered bare handlers that now need
+    `AuthRequired`, so they drive the real chain via `insertTestUser`.
+  - **Phase 2 DONE** (`4bb20702`): every hole listed below closed. On-behalf entry survives but
+    rejects ObjectID-shaped names; guest-branch `deleteEventResponse` + `renameUser` are owner/admin+
+    (both previously had NO authorization); RSVP and poll votes are session-keyed with identity from
+    the account, never the body; `?guestName=` gone (with it the acknowledged blind-availability
+    incognito bypass); the `/e/:id` OG-title lookup gone; `eventsToLink` gone.
+  - **Phase 3 DONE** (`65f1d6df`): router guard inverted to `publicRoutes`, so new routes are gated
+    by default (this fixes the `chronicle` gap by construction). Deep links round-trip through
+    `?redirect`, same-origin only — unit-tested against protocol-relative and `javascript:`/`data:`
+    forms. Central 401 handler in `fetch_utils` for mid-session revocation, wired as a registration
+    hook to avoid the `fetch_utils → router → store → fetch_utils` cycle. **[A20] folded in here.**
+    *Verified against a locally-run server:* anonymous curl over all 20 event routes → 401 on every
+    one, ICS 404s; `/e/<id>` and `/e/<shortId>` serve the static title with the event name absent
+    from the shell (confirmed the leak was real first — the template reads `{{ or .title … }}`).
+  - **Phases 4–5 REMAINING** — cosmetic/hygiene, safe to land separately. Residue until then: guest
+    name fields that no longer render (every viewer is signed in), and rename/delete buttons still
+    shown to non-owners that now 403 correctly.
 
   **Phase 1 — backend gating** (`server/routes/events.go:26-57`): register `GET /:eventId/ics`
   bare; every other event route goes in an `AuthRequired()` sub-group
