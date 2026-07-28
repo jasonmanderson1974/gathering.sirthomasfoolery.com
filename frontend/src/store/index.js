@@ -1,6 +1,6 @@
 import Vue from "vue"
 import Vuex from "vuex"
-import { get, isPremiumUser } from "@/utils"
+import { get } from "@/utils"
 import { roleGetters } from "./role_getters"
 import {
   createFolder,
@@ -38,9 +38,6 @@ export default new Vuex.Store({
     },
   },
   getters: {
-    isPremiumUser(state) {
-      return isPremiumUser(state.authUser)
-    },
     ...roleGetters,
   },
   mutations: {

@@ -1048,7 +1048,6 @@ import {
   getScheduleTimezoneOffset,
   getTimezoneReferenceDateForEvent,
   timeNumToTimeString,
-  isPremiumUser,
   prefersStartOnMonday,
 } from "@/utils"
 import {
@@ -1058,11 +1057,10 @@ import {
   guestUserId,
   timeTypes,
   timeslotDurations,
-  upgradeDialogTypes,
 } from "@/constants"
 import { setScheduledEvent } from "@/utils/services/EventService"
 import { nextScheduleLocation } from "./scheduleLocation"
-import { mapMutations, mapActions, mapState, mapGetters } from "vuex"
+import { mapMutations, mapActions, mapState } from "vuex"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
 import CalendarAccounts from "@/components/settings/CalendarAccounts.vue"
 import SignUpBlock from "@/components/sign_up_form/SignUpBlock.vue"
@@ -1112,7 +1110,6 @@ export default {
   ],
   props: {
     event: { type: Object, required: true },
-    ownerIsPremium: { type: Boolean, default: false },
     fromEditEvent: { type: Boolean, default: false },
 
     loadingCalendarEvents: { type: Boolean, default: false }, // Whether we are currently loading the calendar events
@@ -1274,7 +1271,6 @@ export default {
   },
   computed: {
     ...mapState(["authUser", "overlayAvailabilitiesEnabled"]),
-    ...mapGetters(["isPremiumUser"]),
     /** Returns the width of the right side of the calendar */
     rightSideWidth() {
       if (this.isPhone) return "100%"

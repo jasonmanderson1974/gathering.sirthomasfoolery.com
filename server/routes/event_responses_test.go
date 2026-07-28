@@ -92,7 +92,6 @@ func TestStripSensitiveUserFields(t *testing.T) {
 		Role:              models.RoleAdmin,
 		CalendarAccounts:  map[string]models.CalendarAccount{"k": {}},
 		CalendarOptions:   &models.CalendarOptions{},
-		StripeCustomerId:  strPtrTest("cus_123"),
 		PrimaryAccountKey: strPtrTest("primary"),
 	}
 	stripSensitiveUserFields(user)
@@ -102,9 +101,6 @@ func TestStripSensitiveUserFields(t *testing.T) {
 	}
 	if user.CalendarOptions != nil {
 		t.Error("CalendarOptions should be nil after stripping")
-	}
-	if user.StripeCustomerId != nil {
-		t.Error("StripeCustomerId should be nil after stripping")
 	}
 	if user.PrimaryAccountKey != nil {
 		t.Error("PrimaryAccountKey should be nil after stripping")

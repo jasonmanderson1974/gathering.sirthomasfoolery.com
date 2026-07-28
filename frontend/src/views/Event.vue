@@ -140,7 +140,6 @@
           <ScheduleOverlap
             ref="scheduleOverlap"
             :event="event"
-            :ownerIsPremium="ownerIsPremium"
             :fromEditEvent="fromEditEvent"
             :loadingCalendarEvents="loading"
             :calendarEventsMap="calendarEventsMap"
@@ -212,7 +211,7 @@ import {
   isDstObserved,
   doesDstExist,
 } from "@/utils"
-import { mapActions, mapState, mapMutations, mapGetters } from "vuex"
+import { mapActions, mapState, mapMutations } from "vuex"
 import dayjs from "dayjs"
 import utcPlugin from "dayjs/plugin/utc"
 import timezonePlugin from "dayjs/plugin/timezone"
@@ -228,7 +227,6 @@ import {
   authTypes,
   eventTypes,
   calendarTypes,
-  guestUserId,
 } from "@/constants"
 import isWebview from "is-ua-webview"
 import SignInNotSupportedDialog from "@/components/SignInNotSupportedDialog.vue"
@@ -300,8 +298,6 @@ export default {
     scheduleOverlapComponent: null,
     scheduleOverlapComponentLoaded: false,
 
-    ownerIsPremium: false,
-
     curGuestId: "", // Id of the current guest being edited
     calendarPermissionGranted: true,
     addingAvailabilityAsGuest: false, // Whether a signed in user is current adding availability as a guest
@@ -328,7 +324,6 @@ export default {
 
   computed: {
     ...mapState(["authUser", "events"]),
-    ...mapGetters(["isPremiumUser"]),
     allowScheduleEvent() {
       return this.scheduleOverlapComponent?.allowScheduleEvent
     },
@@ -605,18 +600,6 @@ export default {
       // Make single request with guestName if available
       this.event = await get(url)
       processEvent(this.event)
-    },
-
-    async checkOwnerPremium() {
-      const ownerId = this.event?.ownerId
-      if (ownerId && ownerId !== guestUserId) {
-        try {
-          const res = await get(`/users/${ownerId}/is-premium`)
-          this.ownerIsPremium = res.isPremium
-        } catch {
-          this.ownerIsPremium = false
-        }
-      }
     },
 
     setAvailabilityAutomatically(calendarType = calendarTypes.GOOGLE) {
@@ -965,7 +948,6 @@ export default {
     // Get event details
     try {
       await this.refreshEvent()
-      await this.checkOwnerPremium()
 
       const fromEditEvent = localStorage.getItem(
         `from-edit-event-${this.event._id}`

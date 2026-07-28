@@ -2612,39 +2612,6 @@
                     }
                 }
             }
-        },
-        "/users/{userId}/is-premium": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "users"
-                ],
-                "summary": "Returns whether the given user is a premium user",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "User ID",
-                        "name": "userId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "isPremium": {
-                                    "type": "boolean"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
@@ -3420,9 +3387,6 @@
                     "description": "Whether the user has set a custom name for themselves, i.e. don't change their name when they sign in",
                     "type": "boolean"
                 },
-                "isPremium": {
-                    "type": "boolean"
-                },
                 "lastName": {
                     "type": "string"
                 },
@@ -3446,10 +3410,6 @@
                             "$ref": "#/definitions/models.Role"
                         }
                     ]
-                },
-                "stripeCustomerId": {
-                    "description": "Stripe customer ID",
-                    "type": "string"
                 },
                 "timezoneOffset": {
                     "type": "integer"

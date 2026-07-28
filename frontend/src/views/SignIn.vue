@@ -238,12 +238,6 @@ export default {
     SirThomasFoolery,
   },
 
-  computed: {
-    upgradeRedirect() {
-      return this.$route.query.redirect === "upgrade"
-    },
-  },
-
   data() {
     return {
       isSignUp: this.initialIsSignUp,
@@ -375,7 +369,7 @@ export default {
           firstName: user.firstName,
           lastName: user.lastName,
         })
-        await this.handlePostAuthRedirect(user)
+        await this.handlePostAuthRedirect()
       } catch (err) {
         const errorCode = err?.parsed?.error
         if (errorCode === "otp-expired") {
@@ -389,22 +383,9 @@ export default {
         this.verifying = false
       }
     },
-    async handlePostAuthRedirect(user) {
-      if (this.upgradeRedirect) {
-        try {
-          const params = JSON.parse(this.$route.query.upgradeParams)
-          const res = await post("/stripe/create-checkout-session", {
-            priceId: params.priceId,
-            userId: user._id,
-            isSubscription: params.isSubscription,
-            originUrl: params.originUrl,
-          })
-          window.location.href = res.url
-          return
-        } catch (e) {
-          console.error(e)
-        }
-      }
+    // Kept as a seam even though it only does one thing today — E3 will extend
+    // it to honor a same-origin ?redirect so shared event links survive login.
+    async handlePostAuthRedirect() {
       this.$router.replace({ name: "home" })
     },
     startResendCooldown() {

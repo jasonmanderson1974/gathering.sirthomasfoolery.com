@@ -37,28 +37,6 @@ func GetUserById(userId string) (*models.User, error) {
 	return &user, nil
 }
 
-func GetUserByStripeCustomerId(stripeCustomerId string) (*models.User, error) {
-	result := UsersCollection.FindOne(context.Background(), bson.M{
-		"stripeCustomerId": stripeCustomerId,
-	})
-
-	if result.Err() == mongo.ErrNoDocuments {
-		// User does not exist!
-		return nil, nil
-	}
-
-	// Decode result
-	var user models.User
-	if err := result.Decode(&user); err != nil {
-		logger.StdErr.Println(err)
-		return nil, err
-	}
-
-	return &user, nil
-}
-
-// SetUserRole sets the role on the user with the given email (case-insensitive).
-// Returns the number of users matched (0 if no account exists for that email yet).
 func SetUserRole(email string, role models.Role) (int64, error) {
 	e := strings.ToLower(strings.TrimSpace(email))
 	if e == "" {

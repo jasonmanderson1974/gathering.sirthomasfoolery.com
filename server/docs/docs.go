@@ -2620,39 +2620,6 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "/users/{userId}/is-premium": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "users"
-                ],
-                "summary": "Returns whether the given user is a premium user",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "User ID",
-                        "name": "userId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "isPremium": {
-                                    "type": "boolean"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
@@ -3428,9 +3395,6 @@ const docTemplate = `{
                     "description": "Whether the user has set a custom name for themselves, i.e. don't change their name when they sign in",
                     "type": "boolean"
                 },
-                "isPremium": {
-                    "type": "boolean"
-                },
                 "lastName": {
                     "type": "string"
                 },
@@ -3454,10 +3418,6 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.Role"
                         }
                     ]
-                },
-                "stripeCustomerId": {
-                    "description": "Stripe customer ID",
-                    "type": "string"
                 },
                 "timezoneOffset": {
                     "type": "integer"

@@ -572,8 +572,6 @@ definitions:
         description: Whether the user has set a custom name for themselves, i.e. don't
           change their name when they sign in
         type: boolean
-      isPremium:
-        type: boolean
       lastName:
         type: string
       numEventsCreated:
@@ -592,9 +590,6 @@ definitions:
         description: |-
           Role is the user's access level in the invite-only Fellowship
           (superAdmin/admin/member/guest). Empty ⇒ treated as member. See roles.go.
-      stripeCustomerId:
-        description: Stripe customer ID
-        type: string
       timezoneOffset:
         type: integer
     type: object
@@ -2366,27 +2361,6 @@ paths:
           schema:
             $ref: '#/definitions/models.User'
       summary: Returns a minimal public user profile (safe for unauthenticated clients)
-      tags:
-      - users
-  /users/{userId}/is-premium:
-    get:
-      parameters:
-      - description: User ID
-        in: path
-        name: userId
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            properties:
-              isPremium:
-                type: boolean
-            type: object
-      summary: Returns whether the given user is a premium user
       tags:
       - users
 swagger: "2.0"

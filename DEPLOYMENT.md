@@ -106,14 +106,6 @@ Create `server/.env` from the template (`server/.env.template`).
 | `ENCRYPTION_KEY` | Key for encrypting sensitive data (generate with `openssl rand -base64 32`) |
 | `SESSION_SECRET` | Session cookie encryption key (generate with `openssl rand -base64 32`)     |
 
-#### Optional — Payments
-
-| Variable                | Description                        |
-| ----------------------- | ---------------------------------- |
-| `STRIPE_API_KEY`        | Stripe API key                     |
-| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret      |
-| `STRIPE_*_PRICE_ID`     | Stripe price IDs for various plans |
-
 #### Optional — Additional Calendars
 
 | Variable                  | Description                             |

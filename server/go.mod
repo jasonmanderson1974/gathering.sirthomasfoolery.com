@@ -19,7 +19,6 @@ require (
 
 require (
 	github.com/google/go-cmp v0.6.0 // indirect
-	github.com/stripe/stripe-go/v82 v82.0.0
 	google.golang.org/protobuf v1.33.0 // indirect
 )
 
