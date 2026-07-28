@@ -1475,6 +1475,22 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
     were undeletable and unarchivable by *anyone*, always 500. `requireEventManager` gives them the
     member-or-above rule the edit and schedule routes already use. Tested from both sides: a member
     can now delete one, a guest still gets 403, so the ownerless path didn't become a hole.
+
+    **Prod data follow-up, 2026-07-28 — the last ownerless event now has an owner.** Prod held
+    exactly one: **The Inaugural Gathering** (`_id 6a36a3c9f875bc934af9c62f`, shortId `FE2dd`), 1 of
+    16, and its `ownerId` field was *missing* rather than `NilObjectID` — Go unmarshals both to the
+    zero value, so it took the ownerless branch either way. The effect after this fix was backwards:
+    the one event nobody would want casually deleted was the only one any member could delete, and
+    the frontend agreed — `canEdit` (`frontend/src/views/Event.vue:346`) mirrors the server rule, so
+    members actually *saw* the edit/delete controls on it. Set `ownerId` to the superAdmin
+    (`6a360308f1c73bc282cced51`) with a one-document `updateOne`; the collection is now 16/16
+    `objectId` and the event still resolves by both `_id` and short id (`GET /api/events/FE2dd` →
+    401 unauthenticated, the expected **E3** gate, not a 500). Rollback is `$unset: {ownerId: ""}`,
+    which restores the exact prior shape.
+
+    No code changed, and deliberately so: the ownerless branch of `requireEventManager` now matches
+    no document in prod, but it stays as correct handling for a shape that could reappear (a
+    restored old backup, a migration). Deleting it would reintroduce the always-500 bug above.
   - **`utils/ratelimit.go` janitor had no stop.** Added `Stop()` (a stop channel closed under
     `sync.Once`, so it's idempotent) and `defer ticker.Stop()`; the janitor now selects on both.
     Not hypothetical — `ratelimit_test.go` already built five limiters, each leaking a goroutine
