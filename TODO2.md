@@ -460,17 +460,34 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
   `RecurrenceLabel` (its comment claims email/log use; the callers went with Listmonk).
   Also unexport `IsRelease`/`GetDateString` (internal-only). A18-style batch.
 
-- [ ] **H4 · Clear the frontend lint warnings; flip eslint to fully blocking.** `S–M` · **P2**
-  **The count is wrong because the command is wrong.** `npx eslint src` under eslint 8 lints
-  only `.js` — every `.vue` file is skipped. The real figure is what CI runs, `npm run lint`
-  (`eslint . --ext .js,.vue`): **55 warnings / 0 errors**, not 9. (`frontend-ci.yml:37`'s
-  "~67 remain" is stale in the other direction.) Re-inventory with `npm run lint` before
-  starting; the effort is bigger than `S`. The original 9-warning `.js` list still stands as
-  the subset below:
-  `npx eslint src` → 9 warnings / 0 errors across 5 files (`pluginMessagesMixin.js:166-171,237`
-  — see H6; `availabilityMixin.js:40` swallowed `err`; `respondentSelectionMixin.js:21`;
-  `store/index.js:131`; `sign_in_utils.js:53` — see H7). Clear them and remove the
-  warnings-tolerance, mirroring what B5 did for golangci.
+- [x] **H4 · Clear the frontend lint warnings; flip eslint to fully blocking.** `S–M` · **P2**
+  **DONE 2026-07-29.** The re-inventory confirmed the note below: `npm run lint` reported **54
+  warnings / 0 errors** (not the 9 that `npx eslint src` shows, since eslint 8 skips `.vue`
+  without `--ext`). All cleared, plus **H6 and H7 folded in** — both were literally items on
+  the warning list. Notes:
+  - **Rules are back at `error`** (inherited from `eslint:recommended` / `plugin:vue/essential`
+    — the overrides are simply deleted, not restated), **and** `--max-warnings 0` is on the
+    lint script so a *new* warning fails too. Verified with a canary: a stray unused const
+    exits 1. `frontend-ci.yml`'s stale "~67 remain" comment is corrected.
+  - **Three `vue/no-mutating-props` sites survive behind targeted `eslint-disable` comments
+    that state why** — they are load-bearing, not sloppy. `OverflowGradient.vue` writes
+    `scrollTop` on a raw `HTMLElement` prop (a false positive: DOM API, not Vue state).
+    `CalendarAccount.vue:12` (`v-model="account.enabled"`) and `ScheduleOverlap.vue`'s
+    `saveTempTimes` write through a shared object because **nothing refetches or emits** — the
+    calendar toggle POSTs without refreshing `authUser`, so the write-through is what keeps the
+    checkbox and the parent in sync. Fixing them properly is **G1** and **G2** respectively,
+    not a lint pass. If either is picked up, delete the disable comment with it.
+  - **A template `eslint-disable-next-line` disables the next *line*, not the next *element*.**
+    In `CalendarAccount.vue` the violation is reported on the `v-model` attribute line, so a
+    comment above `<v-checkbox>` silenced the wrong line and the warning survived. Use a
+    `<!-- eslint-disable X -->` / `<!-- eslint-enable X -->` pair around the element instead.
+  - `NewSignUp.vue`'s `EmailInput` import + registration were live only inside a commented-out
+    "Email reminders" block; the block went with them rather than leave a comment referencing a
+    deleted import. (`showEmailReminders`, `addedEmails` and `requestContactsAccess` are now
+    orphaned Vue options — eslint can't see those, left for a G1-style sweep.)
+  - Removing unused component registrations is safe here because the codebase has **no
+    `<component :is>` anywhere** — checked before deleting. That's the one thing that would
+    make a "registered but not used" warning a lie.
 
 - [ ] **H5 · `CallApi` can't see a failed token refresh.** `S–M` · **P2**
   `services/services.go:19` calls `auth.RefreshUserTokenIfNecessary(user, nil)` which returns
@@ -479,14 +496,18 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
   blind). Second blind caller: `services/calendar/calendar.go:57`. Also `services.go:25`
   `json.Marshal` swallow — the function already returns `error`, propagating is a one-liner.
 
-- [ ] **H6 · `pluginMessagesMixin.js:165-171`: lying comment + abandoned validation.** `S` · **P3**
-  Four dead locals under a comment announcing a date-range check that was never written; a
-  later `isBrokenBounds` (:222+) may subsume it. Confirm subsumption, then delete the block
-  (also clears 5 of H4's warnings).
+- [x] **H6 · `pluginMessagesMixin.js:165-171`: lying comment + abandoned validation.** `S` · **P3**
+  **DONE 2026-07-29, with H4.** Subsumption confirmed: the range check really does happen
+  downstream, but not the way the comment implied — it's the `coveredWidth < intWidth` test
+  against the actual grid (`timeSlotToRowCol`), which is strictly better than the
+  `eventDates`/`eventStartTime`/`eventDuration` approach the dead locals were reaching for.
+  Deleted the four locals (incl. the never-pushed-to `convertedSlots`) and rewrote the comment
+  to say what the loop does — parse + ordering checks — and where the range check lives.
 
-- [ ] **H7 · Unused `tenant` const trap.** `S` · **P3**
-  `sign_in_utils.js:53` declares `const tenant = "common"` but `:69` hardcodes `/common/` in
-  the Outlook OAuth URL — changing the variable does nothing. Delete or interpolate.
+- [x] **H7 · Unused `tenant` const trap.** `S` · **P3**
+  **DONE 2026-07-29, with H4.** Interpolated rather than deleted: `${tenant}` now builds the
+  URL it was always meant to build. Identical string today (`"common"`), but changing the
+  const now takes effect instead of silently doing nothing, which is what made it a trap.
 
 - [ ] **H8 · Verify `guestEvent` template arms against a real legacy ownerless event.** `S` ·
   **P3 — verify, don't delete.** The `guestEvent` prop threads through `NewEvent.vue`,
