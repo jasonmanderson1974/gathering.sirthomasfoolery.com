@@ -17,10 +17,12 @@
 > track at the user's request. **F7 and F8 landed 2026-07-29** — F7 and F8 are both
 > deployed-safe on their own: tokens render as literal text until F9, and mention emails already
 > fire for anyone who hand-writes a token.
-> **F15/F16 (Lists of Lists v2) were added 2026-07-29 and take priority over F9** at the user's
-> request — lists are expected to carry real weight (5–7 people on one event's lists at once),
-> so the side panel becomes a tabbed full-width band, items nest, a checklist kind arrives and
-> refreshes stop paying for a whole-event refetch. **F15 is next**; F9 follows.
+> **F15/F16 (Lists of Lists v2) were added and built 2026-07-29** (`090a42ea`, `165756b3`,
+> `fa0615ee`, `f698432b`), taken ahead of F9 at the user's request — lists are expected to carry
+> real weight (5–7 people on one event's lists at once), so the side panel became a tabbed
+> full-width band, items nest three deep, a checklist kind arrived and refreshes stopped paying
+> for a whole-event refetch. **F9 (the mention composer + rendering) is next**, and is the last
+> of the feature track before F10's close-out.
 > The feature designs in Part F
 > were reviewed against the codebase on 2026-07-28 and the product decisions in the two
 > "Confirmed decisions" blocks were made by the user.
@@ -547,10 +549,27 @@ close-out. Cheap Part-H items slot between deploys.
     Lists tab of a full-width tabbed band. Everything else here still stands; the collapse idiom
     above is what F16's per-item nesting copies.
 
-- [ ] **F15 · Lists v2 backend: nesting, checklists, cascade delete, a cheap lists GET.** `M` ·
-  **P1** — no F-deps (extends F13). **Deployable alone and inert**: every new field is
-  `omitempty`, the two new routes are additive, and an old client never sends `parentId` or
-  `checked`.
+- [x] **F15 · Lists v2 backend: nesting, checklists, cascade delete, a cheap lists GET.** `M` ·
+  **P1** — no F-deps (extends F13). **DONE 2026-07-29** (`090a42ea`). Built as planned. Notes:
+  - **`SetEventListItemChecked` reports `MatchedCount`, not `ModifiedCount`** — the plan said so
+    and it turned out to be load-bearing twice over: re-ticking an already-ticked box modifies
+    nothing, and so does an uncheck that repeats the previous state. Either would have 404'd on
+    a row that is plainly there.
+  - **`collectDescendantIds` needed a `seen` set to terminate, not just to dedupe.** The
+    first draft walked the frontier without one; a two-item cycle grows the id list forever
+    rather than merely repeating. Same class of bug as the depth walk's bound, and the cycle
+    tests are what forced both.
+  - The depth-cycle test initially asserted the wrong invariant (that a cycle reports a depth
+    *over* the cap). A cycle in an n-item list reports exactly n, and n ≥ 2 for any cycle, so
+    what actually holds — and what the caller relies on — is `depth+1 >= maxListItemDepth`,
+    i.e. the add is refused. The code was right; the assertion wasn't.
+  - `deleteEventListItem` keeps its own permission check on the *root* item only. Deleting an
+    item is deleting its subtree, so a guest removing their own entry takes a member's reply
+    with it — the thread-root precedent, stated in the Swagger description because it is the
+    one rule here someone would otherwise be surprised by.
+  - Verified live against the dev stack before the UI existed: nested add stores `parentId`, a
+    4th level 400s, a guest ticks and is credited, the owner's uncheck re-credits to the owner,
+    and a cascade takes the grandchild while sparing the sibling.
   - **Nesting is stored flat**: `ParentId *primitive.ObjectID` on `EventListItem`
     (`models/event.go:262-268`), nil/absent = top-level, so **existing items need no migration**.
     A pointer, not a bare ObjectID — `omitempty` cannot omit a `[12]byte` array, and a zero id
@@ -609,9 +628,28 @@ close-out. Cheap Part-H items slot between deploys.
     list, nickname resolving at read time without writing back; the GET (401 anonymous, resolved
     names signed in, `[]` not `null` when empty). Swagger regen.
 
-- [ ] **F16 · Lists v2 frontend: the tabbed band, the tree, the checkboxes.** `L` · **P1** —
-  needs F15. Split into three deployable commits (plumbing → tabs → tree/checklist) so trunk
-  stays green and the endpoint is proven live before any UI leans on it.
+- [x] **F16 · Lists v2 frontend: the tabbed band, the tree, the checkboxes.** `L` · **P1** —
+  needs F15. **DONE 2026-07-29** (`165756b3` plumbing, `fa0615ee` tabs, `f698432b` tree +
+  checklists). Built as planned, in the three commits the plan called for. Notes:
+  - **Nothing was wrong in the browser this time** — the first list feature where that is true.
+    The checks below all passed first try, which is worth recording precisely because F5, F6
+    and F14 each needed a second pass.
+  - **The leading-icon block was restructured mid-build.** The first draft branched
+    chevron → checkbox → bullet with a *second* checkbox rendered afterwards for the
+    checklist-entry-with-children case, which is two ways to draw one control. Replaced with a
+    fixed-width chevron slot (empty when there are no children, so text still lines up down the
+    column) followed by exactly one marker.
+  - **A stray `npx vitest` from the repo root** silently created a root `node_modules/` and ran
+    the tests under vitest 4 instead of the project's 3.2.4. They passed either way, but the
+    run proved nothing about the project's config. Run vitest from `frontend/`.
+  - Live-verified with a throwaway CDP script (the `browser-check-lib.js` driver, not committed):
+    tab select and list expansion each fire exactly one `GET /lists` and no whole-event fetch;
+    three levels indent 8/24/48px with no "+" on the third; a guest's tick renders
+    "Checked by …" and an uncheck re-credits; a place still takes free text with the Google key
+    unset; the sub-entry composer round-trips and lands nested; expanded state survives a tab
+    switch (the `v-show` decision, confirmed rather than assumed); and a guest on an event with
+    no lists gets "No lists yet." rather than the blank band the old root `v-if` would have
+    left. Both standing harnesses green, fixtures removed.
   - **Plumbing first, UI unchanged.** `EventService.js` gains `getLists(eventId)` (needs the
     `get` import — the lists section has only ever used post/patch/put/delete) and
     `setListItemChecked(...)`. `Event.vue` gains `refreshLists()` — `getLists` then
@@ -965,10 +1003,11 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
 5. ~~**F13 → F14** (Lists of Lists: backend → panel).~~ **Done 2026-07-29**, taken ahead of the
    mention track at the user's request. The two were independent, so nothing was rewritten.
 6. **F7 → F8** (mentions: backend → emails). **Both done 2026-07-29.**
-7. **F15 → F16** (Lists v2: backend → tabbed band, tree, checklists). **← next**, taken ahead of
-   F9 at the user's request 2026-07-29 for the same reason F13/F14 were: the two tracks share no
-   code, so the order costs nothing. F16 lands as three commits (plumbing → tabs → tree).
-8. **F9** (the mention composer + rendering), after which the feature track is complete.
+7. ~~**F15 → F16** (Lists v2: backend → tabbed band, tree, checklists).~~ **Done 2026-07-29**,
+   taken ahead of F9 at the user's request for the same reason F13/F14 were: the two tracks share
+   no code, so the order cost nothing. F16 landed as the three planned commits.
+8. **F9** (the mention composer + rendering) **← next**, after which the feature track is
+   complete.
 9. **F10** close-out. Part G items remain background/P3, same as before; **H5** whenever
    calendar code is next touched; **H6–H9** opportunistic (**H9** is cheapest folded into the
    next change that touches `AvatarEditorDialog.vue`).
