@@ -1,6 +1,6 @@
 <template>
   <v-avatar v-if="user" :size="size">
-    <img v-if="user.picture" :src="user.picture" referrerpolicy="no-referrer" />
+    <img v-if="src" :src="src" referrerpolicy="no-referrer" />
     <v-icon
       class="-tw-mt-1"
       :size="size"
@@ -16,16 +16,16 @@
     </v-icon>
     <div
       v-else
-      :class="`tw-flex tw-size-full tw-items-center tw-justify-center tw-bg-[linear-gradient(-25deg,#2b6cb0,#63b3ed,#2b6cb0)] tw-text-${textSize} tw-text-white`"
+      :class="`tw-flex tw-size-full tw-items-center tw-justify-center tw-border tw-border-brass-dim tw-bg-wood tw-font-medium tw-text-${textSize} tw-text-brass`"
     >
-      {{ monogram }}
+      {{ initials }}
     </div>
   </v-avatar>
 </template>
 
 <script>
 import { calendarTypes } from "@/constants"
-import { displayName } from "@/utils"
+import { avatarUrl, monogram } from "@/utils"
 
 export default {
   name: "UserAvatarContent",
@@ -38,18 +38,24 @@ export default {
     calendarTypes() {
       return calendarTypes
     },
+    /**
+     * An uploaded photo when there is one, otherwise the Google picture — see
+     * avatarUrl. Empty means neither, and the monogram shows instead.
+     */
+    src() {
+      return avatarUrl(this.user)
+    },
     textSize() {
       return this.size <= 24 ? "xs" : "lg"
     },
     /**
-     * First character of the name as shown, so a nicknamed user's monogram
-     * matches the name beside it. Falls back to the email for accounts with no
-     * name at all.
+     * Two initials at a readable size, one when the avatar is too small to fit
+     * them — CalendarAccount renders at 24 and SignUpBlock at 16, where "AL"
+     * is a smudge.
      */
-    monogram() {
-      return (
-        displayName(this.user).charAt(0) || this.user.email?.charAt(0) || ""
-      )
+    initials() {
+      const full = monogram(this.user)
+      return this.size < 32 ? full.charAt(0) : full
     },
   },
 }

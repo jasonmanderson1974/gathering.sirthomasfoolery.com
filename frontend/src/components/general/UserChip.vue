@@ -4,15 +4,9 @@
     size="x-small"
     class="tw-flex tw-w-fit tw-items-center tw-bg-leather tw-text-parchment-dim"
   >
-    <v-avatar class="bg-accent text-uppercase tw-mr-2" start
-      ><img
-        v-if="user.picture"
-        :src="user.picture"
-        referrerpolicy="no-referrer"
-        width="10px"
-      />
-      <v-icon v-else>mdi-account</v-icon></v-avatar
-    >
+    <span class="tw-mr-2 tw-flex-none">
+      <UserAvatarContent :user="user" :size="20" />
+    </span>
     {{ user.email }}
 
     <v-icon
@@ -26,6 +20,8 @@
 </template>
 
 <script>
+import UserAvatarContent from "@/components/UserAvatarContent.vue"
+
 export default {
   name: "UserChip",
 
@@ -35,7 +31,7 @@ export default {
     removeEmail: { type: Function, default: () => {} },
   },
 
-  components: {},
+  components: { UserAvatarContent },
 
   data: () => ({}),
 

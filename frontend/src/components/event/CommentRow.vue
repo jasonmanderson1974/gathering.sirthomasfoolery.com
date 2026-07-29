@@ -1,8 +1,8 @@
 <template>
   <div class="tw-flex tw-gap-2">
-    <v-avatar :size="22" class="tw-mt-0.5 tw-flex-none">
-      <v-icon small>mdi-account</v-icon>
-    </v-avatar>
+    <div class="tw-mt-0.5 tw-flex-none">
+      <UserAvatarContent :user="author" :size="22" />
+    </div>
     <div class="tw-min-w-0 tw-flex-grow">
       <div class="tw-flex tw-items-baseline tw-gap-2">
         <span class="tw-text-sm tw-font-medium">{{ comment.authorName }}</span>
@@ -56,6 +56,7 @@
 
 <script>
 import dayjs from "dayjs"
+import UserAvatarContent from "@/components/UserAvatarContent.vue"
 
 /**
  * A single comment in the event discussion — used both for top-level messages
@@ -64,6 +65,8 @@ import dayjs from "dayjs"
  */
 export default {
   name: "CommentRow",
+
+  components: { UserAvatarContent },
 
   props: {
     comment: { type: Object, required: true },
@@ -78,6 +81,23 @@ export default {
   emits: ["start-edit", "cancel-edit", "save-edit", "remove", "tag-thread", "update:editText"],
 
   computed: {
+    /**
+     * The account behind this comment, for the avatar. The server attaches
+     * `author` for comments whose account still resolves; guests and deleted
+     * accounts have none, so the stored name snapshot stands in and yields a
+     * monogram.
+     */
+    author() {
+      if (this.comment.author) return this.comment.author
+      // A snapshot is a finished display name, not structured fields. Split it
+      // so a two-word name still yields two initials, the same monogram the
+      // account would have produced had it resolved.
+      const parts = (this.comment.authorName ?? "").trim().split(/\s+/)
+      return {
+        firstName: parts[0] ?? "",
+        lastName: parts.length > 1 ? parts[parts.length - 1] : "",
+      }
+    },
     // Proxies the parent's shared edit buffer via .sync, so only one row is ever
     // in edit mode and the parent keeps ownership of the draft text.
     text: {

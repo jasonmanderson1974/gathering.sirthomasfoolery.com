@@ -26,12 +26,7 @@
       </template>
       <template v-slot:item="{ item }">
         <v-list-item-avatar>
-          <img
-            v-if="item.picture.length > 0"
-            :src="item.picture"
-            referrerpolicy="no-referrer"
-          />
-          <v-icon v-else>mdi-account</v-icon>
+          <UserAvatarContent :user="item" :size="40" />
         </v-list-item-avatar>
         <v-list-item-content>
           <v-list-item-title>

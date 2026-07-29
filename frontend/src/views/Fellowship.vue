@@ -95,11 +95,9 @@
             :key="member.email"
             class="tw-flex tw-gap-3 tw-rounded-xl tw-border tw-border-brass-dim tw-bg-leather/40 tw-p-4"
           >
-            <!-- Monogram -->
-            <div
-              class="tw-flex tw-h-10 tw-w-10 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-brass-dim tw-bg-wood tw-text-sm tw-font-medium tw-text-brass"
-            >
-              {{ initials(member) }}
+            <!-- Photo, or the monogram this card used to draw itself -->
+            <div class="tw-shrink-0">
+              <UserAvatarContent :user="member" :size="40" />
             </div>
 
             <div class="tw-min-w-0 tw-flex-1">
@@ -154,9 +152,12 @@
 import { mapGetters } from "vuex"
 import { get, formatPhone, isPhone, rollDisplayName } from "@/utils"
 import { roles, roleLabels } from "@/constants"
+import UserAvatarContent from "@/components/UserAvatarContent.vue"
 
 export default {
   name: "Fellowship",
+
+  components: { UserAvatarContent },
 
   metaInfo() {
     return { title: "The Fellowship · Directory" }
@@ -219,18 +220,6 @@ export default {
       if (role === roles.GUEST)
         return "tw-border-brass-dim tw-text-parchment-dim"
       return "tw-border-brass-dim tw-text-parchment"
-    },
-    initials(member) {
-      // A nickname is one word, so it gets one initial; a real name still
-      // gets two. Either way the monogram starts with what the card shows.
-      const nickname = (member.nickname || "").trim()
-      if (nickname) return nickname.charAt(0).toUpperCase()
-      const f = (member.firstName || "").trim()
-      const l = (member.lastName || "").trim()
-      if (f || l) {
-        return `${f.charAt(0)}${l.charAt(0)}`.toUpperCase() || "?"
-      }
-      return (member.email || "?").charAt(0).toUpperCase()
     },
     // Display name for exports (matches the card: pending entries show a
     // placeholder rather than a blank).

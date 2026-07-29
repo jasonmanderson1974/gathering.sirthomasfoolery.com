@@ -15,6 +15,7 @@
     "bson-objectid": "^2.0.4",
     "color": "^4.2.3",
     "core-js": "^3.35.1",
+    "cropperjs": "^1.6.2",
     "dayjs": "^1.11.10",
     "is-ua-webview": "^1.1.2",
     "vue": "^2.7.16",

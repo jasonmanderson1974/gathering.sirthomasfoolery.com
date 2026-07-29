@@ -2,7 +2,7 @@
   General utils
 */
 
-import { eventTypes } from "@/constants"
+import { eventTypes, serverURL } from "@/constants"
 import { dateToDowDate, dateToTimeNum } from "./date_utils"
 import Color from "color"
 
@@ -247,6 +247,63 @@ export const rollDisplayName = (member) => {
   if (!nickname) return realName
   if (!realName) return nickname
   return `${nickname} (${realName})`
+}
+
+/**
+ * Where to fetch a user's photo from, or "" when they have none and the caller
+ * should fall back to a monogram.
+ *
+ * An uploaded avatar wins over the Google `picture` URL: it is the one the
+ * member chose, and `picture` is whatever their Google account happened to have
+ * when they last signed in.
+ *
+ * `avatarUpdatedAt` doubles as the has-a-photo flag and the cache-buster. The
+ * server serves the image with `Cache-Control: immutable`, so a re-upload is
+ * only ever seen because this value — and therefore the URL — changes. It is an
+ * RFC 3339 string, not a number (that is how the API serializes every
+ * timestamp), which is why it needs encoding.
+ */
+export const avatarUrl = (user) => {
+  if (!user) return ""
+  // `userId` wins over `_id`, and the order matters. The roll and the
+  // directory render allowlist entries, whose `_id` is the invitation row —
+  // not the person. Taking `_id` first there asks for the avatar of an id that
+  // has no account and gets a 404 and a broken image. Wherever both appear,
+  // `userId` is the one that means "the account this belongs to". A plain user
+  // document has no `userId` and falls through to `_id`, and a Google contact
+  // has neither, so the id is checked rather than assumed.
+  const id = user.userId ?? user._id
+  if (user.avatarUpdatedAt && id) {
+    return `${serverURL}/users/${id}/avatar?v=${encodeURIComponent(
+      user.avatarUpdatedAt
+    )}`
+  }
+  return user.picture ?? ""
+}
+
+/**
+ * The initials to show when there is no photo.
+ *
+ * A nickname is one word, so it gets one initial; a real name still gets two.
+ * Either way the monogram starts with the same letter as the name displayed
+ * beside it, which is the point — see displayName.
+ *
+ * Falls back to the email for accounts with no name at all, and to "?" for a
+ * user with nothing to go on.
+ */
+export const monogram = (user) => {
+  if (!user) return ""
+  const nickname = (user.nickname ?? "").trim()
+  if (nickname) return nickname.charAt(0).toUpperCase()
+
+  const first = (user.firstName ?? "").trim()
+  const last = (user.lastName ?? "").trim()
+  if (first || last) {
+    return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase()
+  }
+
+  const email = (user.email ?? "").trim()
+  return email ? email.charAt(0).toUpperCase() : "?"
 }
 
 export const prefersStartOnMonday = () => {

@@ -9,8 +9,9 @@
 > small-club utility over scale. All event access requires sign-in (E3); roles are
 > superAdmin > admin > member > guest.
 >
-> **Status: IN PROGRESS.** F1, H1, F2, F3 and F4 landed 2026-07-28 (`0b5f2272`, `80a20905`,
-> `719cb4b8`, `0a9f450d`, F4 this commit) — see their entries for what differed from the plan. Everything else is still planned-not-started. The
+> **Status: IN PROGRESS.** F1, H1, F2, F3, F4 and F5 landed 2026-07-28 (`0b5f2272`, `80a20905`,
+> `719cb4b8`, `0a9f450d`, `6c281faf`, F5 this commit) — see their entries for what differed from
+> the plan. F11 and F12 were opened out of F5. Everything else is still planned-not-started. The
 > feature designs in Part F were reviewed against the codebase on 2026-07-28 (file:line
 > references verified that day) and the three product decisions in "Confirmed decisions" were
 > made by the user. **Line numbers below shift as items land — re-verify before starting one.**
@@ -185,8 +186,34 @@ F4 can run in parallel with F2/F3. Cheap Part-H items slot between deploys.
     `image` package; junk + oversized rejection); DB-gated PUT→GET→304→DELETE round-trip.
     Swagger regen. Deployable alone — endpoints are inert without UI.
 
-- [ ] **F5 · Avatar frontend: cropper dialog + `UserAvatarContent` rollout.** `M/L` — needs F4
+- [x] **F5 · Avatar frontend: cropper dialog + `UserAvatarContent` rollout.** `M/L` — needs F4
   (+F3 for comment avatars).
+  **DONE 2026-07-28.** Built as planned, with two decisions taken with the user first (rosters
+  skipped — see F11; monogram unified on the Fellowship palette) and these notes for F6:
+  - **`avatarUrl()` prefers `userId` over `_id`, and the order is load-bearing.** An
+    `allowlistMember` embeds `AllowlistEntry.Id` as `_id` — the *invitation* row, not the person —
+    so reading `_id` first built `/users/<invitationId>/avatar` and the roll and directory showed a
+    broken image for every member with a photo. Caught by the browser pass, not by lint, tests or
+    the build. Regression test in `src/utils/avatar.test.js`.
+  - **Two pure helpers in `general_utils.js`, not component logic** (`avatarUrl`, `monogram`): the
+    vitest env is `node` with no jsdom and no `@vue/test-utils`, so anything inside a `.vue` file
+    is untestable without new dev deps. Same shape F2 used for `displayName`. `monogram` absorbed
+    `Fellowship.vue`'s local `initials()`, which is now deleted.
+  - **`cropperjs@^1.6` is loaded with a dynamic `import()`**, so it lands in its own 40KB chunk
+    (verified: `dist/js/643.*`) rather than in `app.js`. v2 is a rewrite with a custom-element API
+    that does not fit `new Cropper(img, …)`. It adds no transitive deps and no new audit findings.
+  - `AvatarEditorDialog` **does not know the endpoint** — it emits a data URL, and the caller PUTs
+    it. F6 reuses it as-is: `$refs.avatarEditor.pickFile()`, then PUT to the admin route.
+    Teardown hangs off a `value` watcher, not the Cancel button, so it also fires when the caller
+    closes the dialog after a successful save.
+  - **The anonymize gate now hides the photo AND the monogram**, not just the name — both identify
+    a person as surely as the name does. Extracted as `isVisible(response)` in `SignUpBlock.vue`
+    and verified live in both directions.
+  - `UserAvatarContent` shows one initial below 32px and two at or above it (`CalendarAccount`
+    renders at 24, `SignUpBlock` at 16, where "AL" is a smudge).
+  - Verified live: upload → crop → rotate → save → the photo appears on settings, the roll, the
+    directory and the event page; `?v=` changes on re-upload; removal restores the monogram and
+    the serving route 404s. Both standing browser checks stay green.
   - Dep: `cropperjs@^1.6` (framework-agnostic, Vue-2-safe under webpack 5; avoids wrapper-
     version risk). Verify the lockfile with **npm 10** (CI parity — see memory/feedback).
   - New `components/settings/AvatarEditorDialog.vue`: hidden `<input type="file"
@@ -302,6 +329,26 @@ F4 can run in parallel with F2/F3. Cheap Part-H items slot between deploys.
   --parseInternal`, full backend suite (`go test $(go list ./... | grep -v '/scripts')` with
   `MONGODB_URI`), `npm run test:unit` + build + lint, both headless harnesses
   (`check-signed-out.js` / `check-signed-in.js`), tick items off here.
+
+- [ ] **F11 · Avatars on the RSVP and poll-voter rosters.** `M` · **P3** — deliberately left out
+  of F5 (user's call, 2026-07-28), not an oversight. Both rosters are comma-joined text
+  (`"Going: Bart, Ada (+1)"` — `GatheringRsvp.vue:65-75`, `EventPolls.vue:61-67`), so this is a
+  presentation change, not a component swap:
+  - RSVPs are the cheap half: attach `slimUserForDisplay(user)` to each `Rsvp` in
+    `resolveEventDisplayNames` (`routes/display_names.go` already batches exactly this lookup),
+    then rewrite the roster into avatar+name rows per status group.
+  - Poll votes are the expensive half: `Votes map[string]string` stores a bare display name per
+    voter key, so voters can only be rendered with an avatar after a stored-shape change
+    (`{name, user}`), which drags in the write path and legacy rows. Probably not worth it.
+
+- [ ] **F12 · `getEvent` nil-derefs on an event response with no `response` field.** `S` · **P3** —
+  `routes/events.go:534` does `response.User = user` without checking `response != nil`, and
+  `getResponsesMap` happily yields a nil for a row whose `response` is absent. **Not reachable
+  through the app** — every write path sets `Response: &response`
+  (`routes/event_responses.go:271,283`) — so this is a guard against legacy or hand-edited rows,
+  found while seeding fixtures for F5. One `if response == nil { continue }` alongside the
+  existing deleted-user branch, plus a DB-gated test. Currently a 500 on the app's hottest
+  endpoint for the whole event, not just the bad row.
 
 ---
 

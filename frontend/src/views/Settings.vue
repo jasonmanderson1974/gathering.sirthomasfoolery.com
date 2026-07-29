@@ -8,6 +8,42 @@
         >
           Profile
         </div>
+        <!-- Photo -->
+        <div>
+          <div class="tw-mb-1 tw-font-medium">Photo</div>
+          <div class="tw-mb-3 tw-max-w-lg tw-text-sm tw-text-parchment-dim">
+            Shown beside your name throughout the Fellowship. Without one, your
+            initials stand in.
+          </div>
+          <div class="tw-flex tw-items-center tw-gap-4">
+            <UserAvatarContent :user="authUser" :size="96" />
+            <div class="tw-flex tw-flex-col tw-items-start tw-gap-1">
+              <v-btn
+                text
+                class="tw-text-brass"
+                :loading="savingAvatar"
+                @click="$refs.avatarEditor.pickFile()"
+              >
+                {{ hasAvatar ? "Change photo" : "Add photo" }}
+              </v-btn>
+              <v-btn
+                v-if="hasAvatar"
+                text
+                :loading="removingAvatar"
+                @click="removeAvatar"
+              >
+                Remove photo
+              </v-btn>
+            </div>
+          </div>
+          <AvatarEditorDialog
+            ref="avatarEditor"
+            v-model="avatarDialog"
+            :saving="savingAvatar"
+            @save="saveAvatar"
+          />
+        </div>
+
         <div>
           <div class="tw-mb-1 tw-font-medium">Name</div>
           <div class="tw-flex tw-max-w-lg tw-items-center tw-gap-2">
@@ -303,8 +339,10 @@
 
 <script>
 import { mapState, mapActions, mapMutations } from "vuex"
-import { _delete, patch, post, isPhone, get, formatPhone } from "@/utils"
+import { _delete, patch, post, put, isPhone, get, formatPhone } from "@/utils"
 import CalendarAccounts from "@/components/settings/CalendarAccounts.vue"
+import AvatarEditorDialog from "@/components/settings/AvatarEditorDialog.vue"
+import UserAvatarContent from "@/components/UserAvatarContent.vue"
 
 export default {
   name: "Settings",
@@ -313,7 +351,7 @@ export default {
     title: "Settings · The Fellowship",
   },
 
-  components: { CalendarAccounts },
+  components: { CalendarAccounts, AvatarEditorDialog, UserAvatarContent },
 
   data: () => ({
     dialog: false,
@@ -334,6 +372,9 @@ export default {
     ],
 
     // Profile settings
+    avatarDialog: false,
+    savingAvatar: false,
+    removingAvatar: false,
     firstName: "",
     lastName: "",
     nickname: "",
@@ -356,6 +397,11 @@ export default {
 
   computed: {
     ...mapState(["authUser"]),
+    // avatarUpdatedAt is set on upload and unset on removal, so its presence is
+    // the whole answer to "does this member have a photo".
+    hasAvatar() {
+      return !!this.authUser?.avatarUpdatedAt
+    },
     nameUnsavedChanges() {
       return (
         this.firstName !== this.authUser.firstName ||
@@ -385,6 +431,38 @@ export default {
     formatPhone,
     beautifyPhone() {
       this.phone = this.formatPhone(this.phone)
+    },
+    // Same shape as saveNickname below: PUT → refresh → toast. The refresh is
+    // what makes the new photo appear everywhere at once, since every avatar on
+    // screen is keyed off authUser.avatarUpdatedAt.
+    saveAvatar(image) {
+      this.savingAvatar = true
+      put(`/user/avatar`, { image })
+        .then(async () => {
+          await this.refreshAuthUser()
+          this.avatarDialog = false
+          this.showInfo("Photo updated.")
+        })
+        .catch(() => {
+          this.showError("There was a problem saving your photo.")
+        })
+        .finally(() => {
+          this.savingAvatar = false
+        })
+    },
+    removeAvatar() {
+      this.removingAvatar = true
+      _delete(`/user/avatar`)
+        .then(async () => {
+          await this.refreshAuthUser()
+          this.showInfo("Photo removed.")
+        })
+        .catch(() => {
+          this.showError("There was a problem removing your photo.")
+        })
+        .finally(() => {
+          this.removingAvatar = false
+        })
     },
     resetNickname() {
       this.nickname = this.authUser.nickname || ""

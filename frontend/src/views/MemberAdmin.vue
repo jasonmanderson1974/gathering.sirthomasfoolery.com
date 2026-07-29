@@ -84,6 +84,10 @@
           :key="member.email"
           class="tw-flex tw-items-center tw-gap-3 tw-rounded-xl tw-border tw-border-brass-dim tw-bg-leather/40 tw-p-3"
         >
+          <div class="tw-shrink-0">
+            <UserAvatarContent :user="member" :size="36" />
+          </div>
+
           <div class="tw-min-w-0 tw-flex-1">
             <div class="tw-truncate tw-font-medium tw-text-parchment">
               <span v-if="member.hasAccount">
@@ -211,9 +215,12 @@
 import { mapState, mapGetters, mapActions } from "vuex"
 import { get, post, _delete, rollDisplayName } from "@/utils"
 import { roles, roleLabels } from "@/constants"
+import UserAvatarContent from "@/components/UserAvatarContent.vue"
 
 export default {
   name: "MemberAdmin",
+
+  components: { UserAvatarContent },
 
   metaInfo() {
     return { title: "The Roll · The Fellowship" }

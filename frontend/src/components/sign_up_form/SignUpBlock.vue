@@ -71,18 +71,21 @@
         class="tw-relative tw-flex tw-items-center"
       >
         <div class="tw-ml-1 tw-mr-2">
-          <v-avatar v-if="response.user.picture != '' && (!anonymize || response.user._id == authUser._id)" :size="16">
-            <img
-              v-if="response.user.picture"
-              :src="response.user.picture"
-              referrerpolicy="no-referrer"
-            />
-          </v-avatar>
+          <!--
+            An anonymized response must not show a face or a monogram either —
+            both identify the person as surely as the name does. Only the
+            viewer's own row is exempt.
+          -->
+          <UserAvatarContent
+            v-if="isVisible(response)"
+            :user="response.user"
+            :size="16"
+          />
           <v-avatar v-else :size="16">
             <v-icon small>mdi-account</v-icon>
           </v-avatar>
         </div>
-        <div v-if="!anonymize || response.user._id == authUser._id" class="tw-transition-all tw-text-sm">
+        <div v-if="isVisible(response)" class="tw-transition-all tw-text-sm">
           {{ displayName(response.user) }}
         </div>
         <div v-else class="tw-transition-all tw-text-sm tw-italic">Attendee</div>
@@ -102,10 +105,7 @@
         <div class="tw-ml-1 tw-mr-2">
           <v-avatar :size="16"><v-icon small>mdi-account-clock</v-icon></v-avatar>
         </div>
-        <div
-          v-if="!anonymize || response.user._id == authUser._id"
-          class="tw-text-sm tw-italic"
-        >
+        <div v-if="isVisible(response)" class="tw-text-sm tw-italic">
           {{ displayName(response.user) }}
         </div>
         <div v-else class="tw-text-sm tw-italic">Attendee</div>
@@ -132,9 +132,12 @@
 <script>
 import { getStartEndDateString, displayName } from "@/utils"
 import { mapState } from "vuex"
+import UserAvatarContent from "@/components/UserAvatarContent.vue"
 
 export default {
   name: "SignUpBlock",
+
+  components: { UserAvatarContent },
 
   props: {
     signUpBlock: { type: Object, required: true },
@@ -178,6 +181,13 @@ export default {
 
   methods: {
     displayName,
+    /**
+     * Whether this respondent may be identified — by name, photo or monogram.
+     * On an anonymized sign-up only the viewer's own row shows who it is.
+     */
+    isVisible(response) {
+      return !this.anonymize || response.user._id == this.authUser._id
+    },
     saveName() {
       this.$emit("update:signUpBlock", {
         ...this.signUpBlock,
