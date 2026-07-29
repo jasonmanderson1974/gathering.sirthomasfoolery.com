@@ -38,11 +38,12 @@ func objectIdOrNil(hex string) (primitive.ObjectID, bool) {
 // one, so there is no reason to serialize it.
 func slimUserForDisplay(user models.User) *models.User {
 	slim := &models.User{
-		Id:        user.Id,
-		FirstName: user.FirstName,
-		LastName:  user.LastName,
-		Nickname:  user.Nickname,
-		Picture:   user.Picture,
+		Id:              user.Id,
+		FirstName:       user.FirstName,
+		LastName:        user.LastName,
+		Nickname:        user.Nickname,
+		Picture:         user.Picture,
+		AvatarUpdatedAt: user.AvatarUpdatedAt,
 	}
 	stripSensitiveUserFields(slim)
 	slim.Email = ""

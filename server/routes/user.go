@@ -36,6 +36,8 @@ func InitUser(router *gin.RouterGroup) {
 	userRouter.PATCH("/name", updateName)
 	userRouter.PATCH("/phone", updatePhone)
 	userRouter.PATCH("/nickname", updateNickname)
+	userRouter.PUT("/avatar", updateAvatar)
+	userRouter.DELETE("/avatar", deleteAvatar)
 	userRouter.POST("/email/request-change", requestEmailChange)
 	userRouter.POST("/email/verify-change", verifyEmailChange)
 	userRouter.PATCH("/calendar-options", updateCalendarOptions)
@@ -1071,6 +1073,14 @@ func deleteUser(c *gin.Context) {
 		logger.StdErr.Println(err)
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 		return
+	}
+
+	// The photo lives in its own collection, so deleting the account doesn't
+	// take it with it. Best-effort: the account is already gone and the bytes
+	// are unreachable without it, but leaving a member's face in the database
+	// after they've asked to be removed is not something to shrug at.
+	if err := db.DeleteAvatar(user.Id); err != nil {
+		logger.StdErr.Println("failed to delete the avatar of a deleted account:", err)
 	}
 
 	// Delete session. The account row is already gone, so a failed Save is not

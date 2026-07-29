@@ -1817,6 +1817,77 @@
                 }
             }
         },
+        "/user/avatar": {
+            "put": {
+                "description": "Accepts a base64 data URL (JPEG or PNG). The image is centre-cropped,\ndownscaled to 256x256 and re-encoded as JPEG before storage, so EXIF\nmetadata on the original is discarded.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Sets the signed-in user's profile photo",
+                "parameters": [
+                    {
+                        "description": "Data URL of the image to store",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "image": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "avatarUpdatedAt": {
+                                    "type": "integer"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "invalid-image",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Error"
+                        }
+                    },
+                    "413": {
+                        "description": "image-too-large",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Error"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Idempotent — removing a photo that isn't there succeeds.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Removes the signed-in user's profile photo",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
         "/user/calendar-options": {
             "patch": {
                 "consumes": [
@@ -2596,6 +2667,41 @@
                     }
                 }
             }
+        },
+        "/users/{userId}/avatar": {
+            "get": {
+                "description": "Cached immutably: the URL is expected to carry the account's\navatarUpdatedAt as a `?v=` parameter, so a new upload is a new URL.\nAn ETag is sent as well, for clients that revalidate anyway.",
+                "produces": [
+                    "image/jpeg"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Serves a user's uploaded profile photo",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The user's avatar",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "The user has no uploaded avatar",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Error"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -3332,6 +3438,10 @@
                     "description": "Profile info",
                     "type": "string"
                 },
+                "avatarUpdatedAt": {
+                    "description": "AvatarUpdatedAt is set when the user uploads a profile photo and unset\nwhen they remove it, so it serves as both the has-an-avatar flag and the\ncache-buster on the (immutably cached) /users/:userId/avatar URL. The\nbytes themselves live in the avatars collection — see models/avatar.go.\n\nA pointer because absent must be distinguishable from the zero time: the\nUI shows the uploaded photo only when this is non-nil, otherwise it falls\nback to the Google `picture` URL and then to a monogram.",
+                    "type": "integer"
+                },
                 "calendarAccounts": {
                     "description": "CalendarAccounts is a mapping from {`email_CALENDARTYPE` =\u003e CalendarAccount} that contains all the\nadditional accounts the user wants to see google calendar events for",
                     "type": "object",
@@ -3443,6 +3553,10 @@
                 },
                 "addedBy": {
                     "type": "string"
+                },
+                "avatarUpdatedAt": {
+                    "description": "AvatarUpdatedAt lets the roll render uploaded photos the same way every\nother surface does — present means \"has one\", and its value is the\ncache-buster for the serving URL.",
+                    "type": "integer"
                 },
                 "email": {
                     "type": "string"

@@ -24,6 +24,16 @@ type User struct {
 	// both.
 	Nickname string `json:"nickname" bson:"nickname,omitempty"`
 
+	// AvatarUpdatedAt is set when the user uploads a profile photo and unset
+	// when they remove it, so it serves as both the has-an-avatar flag and the
+	// cache-buster on the (immutably cached) /users/:userId/avatar URL. The
+	// bytes themselves live in the avatars collection — see models/avatar.go.
+	//
+	// A pointer because absent must be distinguishable from the zero time: the
+	// UI shows the uploaded photo only when this is non-nil, otherwise it falls
+	// back to the Google `picture` URL and then to a monogram.
+	AvatarUpdatedAt *primitive.DateTime `json:"avatarUpdatedAt" bson:"avatarUpdatedAt,omitempty"`
+
 	// Whether the user has set a custom name for themselves, i.e. don't change their name when they sign in
 	HasCustomName *bool `json:"hasCustomName" bson:"hasCustomName,omitempty"`
 

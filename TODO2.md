@@ -9,8 +9,8 @@
 > small-club utility over scale. All event access requires sign-in (E3); roles are
 > superAdmin > admin > member > guest.
 >
-> **Status: IN PROGRESS.** F1, H1, F2 and F3 landed 2026-07-28 (`0b5f2272`, `80a20905`,
-> `719cb4b8`, `0a9f450d`) — see their entries for what differed from the plan. Everything else is still planned-not-started. The
+> **Status: IN PROGRESS.** F1, H1, F2, F3 and F4 landed 2026-07-28 (`0b5f2272`, `80a20905`,
+> `719cb4b8`, `0a9f450d`, F4 this commit) — see their entries for what differed from the plan. Everything else is still planned-not-started. The
 > feature designs in Part F were reviewed against the codebase on 2026-07-28 (file:line
 > references verified that day) and the three product decisions in "Confirmed decisions" were
 > made by the user. **Line numbers below shift as items land — re-verify before starting one.**
@@ -135,7 +135,35 @@ F4 can run in parallel with F2/F3. Cheap Part-H items slot between deploys.
     comment/RSVP/vote render the nickname); PII assertion that `Author` carries no
     email/phone/role (extend the `events_pii_db_test.go` matrix).
 
-- [ ] **F4 · Avatar backend: storage, upload, serving.** `M` — parallelizable with F2/F3.
+- [x] **F4 · Avatar backend: storage, upload, serving.** `M` — parallelizable with F2/F3.
+  **DONE 2026-07-28.** Built as planned. Notes for F5/F6:
+  - **`avatarUpdatedAt` serializes as an RFC 3339 string, not milliseconds** —
+    `primitive.DateTime.MarshalJSON` emits a time string, same as every other timestamp this
+    API returns. So F5's cache-buster is
+    `"?v=" + encodeURIComponent(user.avatarUpdatedAt)`, not a number. The `ETag` is
+    milliseconds, deliberately: it is opaque and only ever echoed back, so the two never need
+    to agree.
+  - **Downscaling is a hand-written box filter** (`boxDownscale`, `routes/avatars.go`) — the
+    stdlib has no resampler and `golang.org/x/image` isn't a dependency. It only ever shrinks;
+    an upload smaller than 256px is stored at its own size, not upscaled. If a future item
+    needs real resampling, that's the place to swap in `x/image/draw`.
+  - **Three guards, not one.** `http.MaxBytesReader` on the body (512KB) → encoded/decoded byte
+    caps (300KB/200KB) → a `DecodeConfig` pixel cap (16MP) *before* `image.Decode`. The last one
+    is the only thing bounding memory: Go's decoders allocate from the declared bounds, so a
+    2KB PNG announcing 30000×30000 would otherwise allocate gigabytes.
+  - Transparency is flattened onto **white** (JPEG has no alpha; unflattened comes out black).
+    Rectangles are centre-cropped. Re-encoding strips EXIF — including orientation, which is
+    why F5's rotate buttons must bake rotation into the pixels before sending.
+  - **The 304 path uses `c.AbortWithStatus`, not `c.Status`** — gin's `Status` only records the
+    code on its writer and waits for a later write to flush it, which a bodyless 304 never
+    makes. (`c.Status` there returns a silent 200.)
+  - `deleteUser` now also drops the avatar (best-effort) — the bytes are in their own
+    collection and don't go with the account otherwise.
+  - `avatarUpdatedAt` is exposed on `getPublicUserProfile`, `allowlistMember` (so F6's roll can
+    render photos) and `slimUserForDisplay` (so F5's comment avatars have it), plus every
+    event-response `*models.User` for free.
+  - F6 reuses `saveAvatarForUser(userId, dataURL)` / `db.DeleteAvatar(userId)` verbatim; both
+    take a user id and know nothing about who is asking.
   - New `avatars` collection — deliberately NOT on the User doc: `GetUserById` runs on every
     authed request and `getEvent` embeds a full `*models.User` per respondent, so a 200KB
     Binary there would be fetched constantly. `models/avatar.go`:

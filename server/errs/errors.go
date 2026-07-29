@@ -47,6 +47,10 @@ const (
 	InvalidEventType string = "invalid-event-type"
 	// PayloadTooLarge: a create/edit payload exceeded a cardinality cap
 	PayloadTooLarge string = "payload-too-large"
+	// InvalidImage: the uploaded avatar was not a decodable JPEG or PNG
+	InvalidImage string = "invalid-image"
+	// ImageTooLarge: the uploaded avatar exceeded the upload size cap
+	ImageTooLarge string = "image-too-large"
 )
 
 // Sentinel error returned by signInHelper when an email is not allowlisted, so

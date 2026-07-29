@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"sirtom/server/db"
 	"sirtom/server/errs"
 	"sirtom/server/logger"
@@ -52,12 +53,16 @@ type allowlistMember struct {
 	// A hex string, not an ObjectID: `omitempty` cannot omit an ObjectID (it is
 	// a [12]byte array, which encoding/json never considers empty), so an
 	// unclaimed invitation would ship a zero id that reads as real.
-	UserId    string      `json:"userId,omitempty"`
-	FirstName string      `json:"firstName,omitempty"`
-	LastName  string      `json:"lastName,omitempty"`
-	Nickname  string      `json:"nickname,omitempty"`
-	Phone     string      `json:"phone,omitempty"`
-	Role      models.Role `json:"role"`
+	UserId    string `json:"userId,omitempty"`
+	FirstName string `json:"firstName,omitempty"`
+	LastName  string `json:"lastName,omitempty"`
+	Nickname  string `json:"nickname,omitempty"`
+	Phone     string `json:"phone,omitempty"`
+	// AvatarUpdatedAt lets the roll render uploaded photos the same way every
+	// other surface does — present means "has one", and its value is the
+	// cache-buster for the serving URL.
+	AvatarUpdatedAt *primitive.DateTime `json:"avatarUpdatedAt,omitempty"`
+	Role            models.Role         `json:"role"`
 }
 
 func authUserFromContext(c *gin.Context) *models.User {
@@ -107,6 +112,7 @@ func getAllowlist(c *gin.Context) {
 			m.LastName = user.LastName
 			m.Nickname = user.Nickname
 			m.Phone = user.Phone
+			m.AvatarUpdatedAt = user.AvatarUpdatedAt
 			m.Role = user.EffectiveRole()
 		}
 		members = append(members, m)

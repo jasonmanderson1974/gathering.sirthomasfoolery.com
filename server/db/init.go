@@ -24,6 +24,7 @@ var OtpCodesCollection *mongo.Collection
 var AllowlistCollection *mongo.Collection
 var CommentsCollection *mongo.Collection
 var ChronicleCollection *mongo.Collection
+var AvatarsCollection *mongo.Collection
 
 func Init() func() {
 	// Establish mongodb connection
@@ -53,6 +54,7 @@ func Init() func() {
 	AllowlistCollection = Db.Collection("allowlist")
 	CommentsCollection = Db.Collection("comments")
 	ChronicleCollection = Db.Collection("chronicle")
+	AvatarsCollection = Db.Collection("avatars")
 
 	// Unique per (eventId, startDate) so a gathering occurrence is captured into
 	// the Chronicle at most once (belt-and-suspenders against racing scheduler

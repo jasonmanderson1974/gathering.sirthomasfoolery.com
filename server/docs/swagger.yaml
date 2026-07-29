@@ -552,6 +552,17 @@ definitions:
       _id:
         description: Profile info
         type: string
+      avatarUpdatedAt:
+        description: |-
+          AvatarUpdatedAt is set when the user uploads a profile photo and unset
+          when they remove it, so it serves as both the has-an-avatar flag and the
+          cache-buster on the (immutably cached) /users/:userId/avatar URL. The
+          bytes themselves live in the avatars collection — see models/avatar.go.
+
+          A pointer because absent must be distinguishable from the zero time: the
+          UI shows the uploaded photo only when this is non-nil, otherwise it falls
+          back to the Google `picture` URL and then to a monogram.
+        type: integer
       calendarAccounts:
         additionalProperties:
           $ref: '#/definitions/models.CalendarAccount'
@@ -634,6 +645,12 @@ definitions:
         type: integer
       addedBy:
         type: string
+      avatarUpdatedAt:
+        description: |-
+          AvatarUpdatedAt lets the roll render uploaded photos the same way every
+          other surface does — present means "has one", and its value is the
+          cache-buster for the serving URL.
+        type: integer
       email:
         type: string
       firstName:
@@ -1854,6 +1871,55 @@ paths:
       summary: Adds a new outlook calendar account
       tags:
       - user
+  /user/avatar:
+    delete:
+      description: Idempotent — removing a photo that isn't there succeeds.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Removes the signed-in user's profile photo
+      tags:
+      - user
+    put:
+      consumes:
+      - application/json
+      description: |-
+        Accepts a base64 data URL (JPEG or PNG). The image is centre-cropped,
+        downscaled to 256x256 and re-encoded as JPEG before storage, so EXIF
+        metadata on the original is discarded.
+      parameters:
+      - description: Data URL of the image to store
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            image:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              avatarUpdatedAt:
+                type: integer
+            type: object
+        "400":
+          description: invalid-image
+          schema:
+            $ref: '#/definitions/responses.Error'
+        "413":
+          description: image-too-large
+          schema:
+            $ref: '#/definitions/responses.Error'
+      summary: Sets the signed-in user's profile photo
+      tags:
+      - user
   /user/calendar-options:
     patch:
       consumes:
@@ -2366,6 +2432,32 @@ paths:
           schema:
             $ref: '#/definitions/models.User'
       summary: Returns a minimal public user profile (safe for unauthenticated clients)
+      tags:
+      - users
+  /users/{userId}/avatar:
+    get:
+      description: |-
+        Cached immutably: the URL is expected to carry the account's
+        avatarUpdatedAt as a `?v=` parameter, so a new upload is a new URL.
+        An ETag is sent as well, for clients that revalidate anyway.
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: The user's avatar
+          schema:
+            type: file
+        "404":
+          description: The user has no uploaded avatar
+          schema:
+            $ref: '#/definitions/responses.Error'
+      summary: Serves a user's uploaded profile photo
       tags:
       - users
 swagger: "2.0"
