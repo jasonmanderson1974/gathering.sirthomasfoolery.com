@@ -282,6 +282,23 @@ export const avatarUrl = (user) => {
 }
 
 /**
+ * Whether a URL from avatarUrl points at our own (authenticated) avatar route
+ * rather than at the Google `picture` fallback.
+ *
+ * The serving route requires a session, so its <img> has to send the cookie. In
+ * production that is automatic — `serverURL` is the relative "/api", making the
+ * request same-origin. Under `npm run serve` the SPA is on :8080 and the API on
+ * :3002, where a plain <img> sends no credentials and the image 401s; those
+ * need `crossorigin="use-credentials"`.
+ *
+ * The attribute cannot simply go on every avatar: Google's CDN answers no
+ * credentialed CORS request, so putting it on a `picture` URL would break the
+ * fallback for every member who has not uploaded a photo.
+ */
+export const isOwnAvatarUrl = (url) =>
+  typeof url === "string" && url.startsWith(`${serverURL}/users/`)
+
+/**
  * The initials to show when there is no photo.
  *
  * A nickname is one word, so it gets one initial; a real name still gets two.

@@ -2437,6 +2437,7 @@ paths:
   /users/{userId}/avatar:
     get:
       description: |-
+        Requires a signed-in session — member photos are club data, not public.
         Cached immutably: the URL is expected to carry the account's
         avatarUpdatedAt as a `?v=` parameter, so a new upload is a new URL.
         An ETag is sent as well, for clients that revalidate anyway.
@@ -2453,6 +2454,10 @@ paths:
           description: The user's avatar
           schema:
             type: file
+        "401":
+          description: Not signed in
+          schema:
+            $ref: '#/definitions/responses.Error'
         "404":
           description: The user has no uploaded avatar
           schema:

@@ -1,6 +1,18 @@
 <template>
   <v-avatar v-if="user" :size="size">
-    <img v-if="src" :src="src" referrerpolicy="no-referrer" />
+    <!--
+      crossorigin is set only for our own avatar route, and only matters under
+      `npm run serve`, where the API is a different origin and a plain <img>
+      would send no session cookie to a route that now requires one. Binding
+      null omits the attribute, which is what the Google `picture` fallback
+      needs — see isOwnAvatarUrl.
+    -->
+    <img
+      v-if="src"
+      :src="src"
+      :crossorigin="needsCredentials ? 'use-credentials' : null"
+      referrerpolicy="no-referrer"
+    />
     <v-icon
       class="-tw-mt-1"
       :size="size"
@@ -25,7 +37,7 @@
 
 <script>
 import { calendarTypes } from "@/constants"
-import { avatarUrl, monogram } from "@/utils"
+import { avatarUrl, isOwnAvatarUrl, monogram } from "@/utils"
 
 export default {
   name: "UserAvatarContent",
@@ -44,6 +56,9 @@ export default {
      */
     src() {
       return avatarUrl(this.user)
+    },
+    needsCredentials() {
+      return isOwnAvatarUrl(this.src)
     },
     textSize() {
       return this.size <= 24 ? "xs" : "lg"

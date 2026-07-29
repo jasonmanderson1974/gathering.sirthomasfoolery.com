@@ -2678,7 +2678,7 @@ const docTemplate = `{
         },
         "/users/{userId}/avatar": {
             "get": {
-                "description": "Cached immutably: the URL is expected to carry the account's\navatarUpdatedAt as a ` + "`" + `?v=` + "`" + ` parameter, so a new upload is a new URL.\nAn ETag is sent as well, for clients that revalidate anyway.",
+                "description": "Requires a signed-in session — member photos are club data, not public.\nCached immutably: the URL is expected to carry the account's\navatarUpdatedAt as a ` + "`" + `?v=` + "`" + ` parameter, so a new upload is a new URL.\nAn ETag is sent as well, for clients that revalidate anyway.",
                 "produces": [
                     "image/jpeg"
                 ],
@@ -2700,6 +2700,12 @@ const docTemplate = `{
                         "description": "The user's avatar",
                         "schema": {
                             "type": "file"
+                        }
+                    },
+                    "401": {
+                        "description": "Not signed in",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Error"
                         }
                     },
                     "404": {

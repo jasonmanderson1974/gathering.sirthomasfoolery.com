@@ -121,6 +121,12 @@ func TestAvatarRoundTrip(t *testing.T) {
 	if got := w.Header().Get("Cache-Control"); !strings.Contains(got, "immutable") {
 		t.Errorf("Cache-Control = %q, want an immutable directive", got)
 	}
+	// The route requires a session, so the response must never be storable by a
+	// shared cache — Cloudflare would otherwise serve one member's photo to the
+	// next caller of the same URL, session or not.
+	if got := w.Header().Get("Cache-Control"); !strings.Contains(got, "private") || strings.Contains(got, "public") {
+		t.Errorf("Cache-Control = %q, want `private` on an authenticated response", got)
+	}
 	etag := w.Header().Get("ETag")
 	if etag == "" {
 		t.Fatal("no ETag on the avatar response")

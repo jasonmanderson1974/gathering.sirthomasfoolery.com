@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { serverURL } from "@/constants"
-import { avatarUrl, monogram } from "./general_utils"
+import { avatarUrl, isOwnAvatarUrl, monogram } from "./general_utils"
 
 // The photo a member uploads is served immutably, so the URL is the only thing
 // that tells a browser to fetch a new one. These cases are about that: which
@@ -127,5 +127,42 @@ describe("monogram", () => {
   it("has something to show for a user with nothing to go on", () => {
     expect(monogram({})).toBe("?")
     expect(monogram(null)).toBe("")
+  })
+})
+
+// The serving route requires a session. Only our own avatar URLs may carry the
+// credentialed-CORS attribute that makes an <img> send one — Google's CDN
+// refuses credentialed requests, so marking a `picture` URL would break the
+// fallback for every member without an uploaded photo.
+describe("isOwnAvatarUrl", () => {
+  it("recognises the avatar serving route", () => {
+    expect(
+      isOwnAvatarUrl(
+        avatarUrl({
+          _id: "6570a1b2c3d4e5f601020304",
+          avatarUpdatedAt: "2026-07-28T19:41:32.792Z",
+        })
+      )
+    ).toBe(true)
+  })
+
+  it("rejects the Google picture fallback", () => {
+    expect(
+      isOwnAvatarUrl(
+        avatarUrl({ picture: "https://lh3.googleusercontent.com/a/whatever" })
+      )
+    ).toBe(false)
+  })
+
+  it("rejects a lookalike host", () => {
+    // Guards the check against being loosened to a bare "/users/" contains.
+    expect(isOwnAvatarUrl("https://evil.test/users/123/avatar")).toBe(false)
+  })
+
+  it("handles a user with no avatar at all", () => {
+    expect(isOwnAvatarUrl(avatarUrl({}))).toBe(false)
+    expect(isOwnAvatarUrl("")).toBe(false)
+    expect(isOwnAvatarUrl(null)).toBe(false)
+    expect(isOwnAvatarUrl(undefined)).toBe(false)
   })
 })
