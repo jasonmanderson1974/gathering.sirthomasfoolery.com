@@ -1,9 +1,23 @@
 <template>
+  <!-- No v-if on the panel: as a side panel it was right to stay out of the
+       way when there was nothing to show, but this is a tab now, and selecting
+       it must never land on an empty band. -->
   <div
-    v-if="lists.length || canManage"
     class="tw-mt-3 tw-rounded-md tw-border tw-border-brass-dim tw-bg-leather tw-p-3 tw-text-parchment sm:tw-p-4"
   >
-    <div class="tw-mb-2 tw-text-base tw-font-medium">Lists</div>
+    <div class="tw-mb-2 tw-flex tw-items-center tw-justify-between">
+      <div class="tw-text-base tw-font-medium">Lists</div>
+      <v-btn
+        icon
+        x-small
+        class="tw-text-parchment-dim"
+        title="Refresh lists"
+        :disabled="refreshing"
+        @click="$emit('refresh')"
+      >
+        <v-icon small>mdi-refresh</v-icon>
+      </v-btn>
+    </div>
 
     <!-- Existing lists -->
     <div v-if="lists.length" class="tw-space-y-4">
@@ -290,6 +304,9 @@ export default {
 
   props: {
     event: { type: Object, required: true },
+    // True while the parent is refetching, so the refresh button can't be
+    // hammered into a queue of overlapping requests.
+    refreshing: { type: Boolean, default: false },
   },
 
   data: () => ({
@@ -316,6 +333,7 @@ export default {
   }),
 
   emits: [
+    "refresh",
     "create-list",
     "rename-list",
     "delete-list",
@@ -380,6 +398,9 @@ export default {
       const i = this.expandedLists.indexOf(listId)
       if (i === -1) {
         this.expandedLists.push(listId)
+        // Opening a list is a request to read it, so fetch it fresh — this is
+        // the moment someone else's entries are most likely to be missing.
+        this.$emit("refresh")
       } else {
         this.expandedLists.splice(i, 1)
         // A draft edit belongs to the open list; leaving it armed would reopen

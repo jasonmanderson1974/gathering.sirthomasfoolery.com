@@ -157,14 +157,30 @@
             @signUpForBlock="initiateSignUpFlow"
           />
 
-          <!-- Discussion thread (C7) alongside the shared lists (F14). Two
-               columns from lg up; below that the lists stack under the
-               discussion. -->
-          <div
-            v-if="!isSettingSpecificTimes"
-            class="tw-mx-4 lg:tw-flex lg:tw-items-start lg:tw-gap-6"
-          >
-            <div class="tw-min-w-0 lg:tw-w-2/3">
+          <!-- The discussion (C7) and the shared lists (F14) as two tabs over
+               one full-width band (F16). They were side by side at 2/3 + 1/3,
+               which left both cramped and put the lists below the entire
+               discussion on a phone. Panels use v-show, not v-if, so drafts and
+               what you had expanded survive a switch back and forth. -->
+          <div v-if="!isSettingSpecificTimes" class="tw-mx-4">
+            <div class="tw-flex tw-gap-1">
+              <v-btn
+                v-for="t in bandTabs"
+                :key="t.value"
+                text
+                small
+                :class="`tw-text-xs tw-transition-all ${
+                  t.value === bandTab
+                    ? 'tw-bg-brass/10 tw-text-brass'
+                    : 'tw-text-parchment-dim'
+                }`"
+                @click="bandTab = t.value"
+              >
+                {{ t.title }}
+              </v-btn>
+            </div>
+
+            <div v-show="bandTab === 'discussion'">
               <EventComments
                 :event="event"
                 @add-comment="onAddComment"
@@ -175,9 +191,11 @@
                 @untag-thread="onUntagThread"
               />
             </div>
-            <div class="tw-min-w-0 lg:tw-w-1/3">
+            <div v-show="bandTab === 'lists'">
               <EventLists
                 :event="event"
+                :refreshing="refreshingLists"
+                @refresh="refreshLists"
                 @create-list="onCreateList"
                 @rename-list="onRenameList"
                 @delete-list="onDeleteList"
@@ -338,7 +356,9 @@ export default {
     // Sign Up Forms
     currSignUpBlock: null,
 
-    // Shared lists (F15): guards refreshLists against overlapping calls.
+    // Shared lists (F15/F16): the band's active tab, and a guard that keeps
+    // refreshLists from overlapping itself.
+    bandTab: "discussion",
     refreshingLists: false,
   }),
 
@@ -355,6 +375,24 @@ export default {
   computed: {
     ...mapState(["authUser", "events"]),
     ...mapGetters(["canInvite"]),
+    /**
+     * The discussion/lists tabs (F16). Counts are the only sign that there is
+     * anything behind the tab you aren't looking at, so they matter more here
+     * than they would beside an always-visible panel. Omitted at zero.
+     */
+    bandTabs() {
+      const count = (n) => (n ? ` (${n})` : "")
+      return [
+        {
+          value: "discussion",
+          title: `Discussion${count((this.event?.comments ?? []).length)}`,
+        },
+        {
+          value: "lists",
+          title: `Lists${count((this.event?.lists ?? []).length)}`,
+        },
+      ]
+    },
     allowScheduleEvent() {
       return this.scheduleOverlapComponent?.allowScheduleEvent
     },
@@ -1066,6 +1104,14 @@ export default {
   },
 
   watch: {
+    // Selecting the Lists tab refetches them. The panels are kept alive with
+    // v-show, so there is no created() hook to hang this off — and someone
+    // opening the tab is exactly when the data most wants to be current.
+    bandTab(tab) {
+      if (tab === "lists") {
+        this.refreshLists()
+      }
+    },
     event() {
       if (this.event) {
         this.resetWeekOffset()
