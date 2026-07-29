@@ -9,8 +9,8 @@
 > small-club utility over scale. All event access requires sign-in (E3); roles are
 > superAdmin > admin > member > guest.
 >
-> **Status: IN PROGRESS.** F1, H1 and F2 landed 2026-07-28 (`0b5f2272`, `80a20905`,
-> `719cb4b8`) — see their entries for what differed from the plan. Everything else is still planned-not-started. The
+> **Status: IN PROGRESS.** F1, H1, F2 and F3 landed 2026-07-28 (`0b5f2272`, `80a20905`,
+> `719cb4b8`, `0a9f450d`) — see their entries for what differed from the plan. Everything else is still planned-not-started. The
 > feature designs in Part F were reviewed against the codebase on 2026-07-28 (file:line
 > references verified that day) and the three product decisions in "Confirmed decisions" were
 > made by the user. **Line numbers below shift as items land — re-verify before starting one.**
@@ -101,7 +101,19 @@ F4 can run in parallel with F2/F3. Cheap Part-H items slot between deploys.
   - Tests: Go pure `DisplayName` + DB-gated PATCH set/clear; vitest for both helpers.
     Swagger regen.
 
-- [ ] **F3 · Nickname read-time resolution for the four name snapshots.** `M` — needs F2.
+- [x] **F3 · Nickname read-time resolution for the four name snapshots.** `M` — needs F2.
+  **DONE 2026-07-28** (`0a9f450d`). Built as planned; helpers live in new `routes/display_names.go`
+  (`resolveEventDisplayNames` is the one entry point). Notes:
+  - **No frontend change was needed.** The server overwrites the *serialized* `authorName`, and
+    `addComment` — the only handler returning a comment directly — snapshots `DisplayName()`,
+    so `comment.authorName` is always current. The planned
+    `comment.author ? displayName(comment.author) : comment.authorName` branch would imply the
+    two can diverge. `comment.author` is still attached and is what **F5** should use for the
+    avatar (it has no `avatarUpdatedAt` yet — F4 adds the field, then add it to
+    `slimUserForDisplay`).
+  - **Chronicle needed no change**: `captureAttendees` (`services/reminders/reminders.go:205`)
+    copies `rsvp.Name`, which is now a `DisplayName()` snapshot — history freezes correctly.
+  - Resolution runs *after* `visibleComments`, so a hidden thread's authors are never looked up.
   Names are snapshotted at write time in `Comment.AuthorName` (`routes/comments.go:224`),
   `Rsvp.Name` (`event_responses.go:927`), poll `Votes` values (`polls.go:244-250`), and
   `ChronicleAttendee.Name` — a nickname change would not propagate without this.
