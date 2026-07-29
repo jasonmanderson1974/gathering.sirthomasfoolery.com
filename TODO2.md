@@ -9,7 +9,13 @@
 > small-club utility over scale. All event access requires sign-in (E3); roles are
 > superAdmin > admin > member > guest.
 >
-> **Status: IN PROGRESS.** F1, H1, F2, F3, F4 and F5 landed 2026-07-28 (`0b5f2272`, `80a20905`,
+> **Status: FEATURE TRACK COMPLETE (2026-07-29).** F1–F16 have all landed and F10's close-out
+> sweep is done — swag regenerated (no drift), the full backend suite, `go vet` and
+> golangci-lint green, frontend lint + 167 unit tests + build green, and both headless
+> harnesses passing. What remains in this file is deliberately-deferred P3 work: **F11** and
+> **F12**, Part G, and the opportunistic **H5–H9**. History below.
+>
+> F1, H1, F2, F3, F4 and F5 landed 2026-07-28 (`0b5f2272`, `80a20905`,
 > `719cb4b8`, `0a9f450d`, `6c281faf`, F5 this commit); F6, H4, H6 and H7 landed 2026-07-29 — see
 > their entries for what differed from the plan. F11 and F12 were opened out of F5, H9 out of F6.
 > **F13/F14 (Lists of Lists) were added and built 2026-07-29** (`c7ad40b4`, `647a07bc`, plus
@@ -21,8 +27,8 @@
 > `fa0615ee`, `f698432b`), taken ahead of F9 at the user's request — lists are expected to carry
 > real weight (5–7 people on one event's lists at once), so the side panel became a tabbed
 > full-width band, items nest three deep, a checklist kind arrived and refreshes stopped paying
-> for a whole-event refetch. **F9 (the mention composer + rendering) is next**, and is the last
-> of the feature track before F10's close-out.
+> for a whole-event refetch. **F9 landed 2026-07-29** (`b9633400`), closing the mention track:
+> tokens are now written by a picker and rendered as names rather than markup.
 > The feature designs in Part F
 > were reviewed against the codebase on 2026-07-28 and the product decisions in the two
 > "Confirmed decisions" blocks were made by the user.
@@ -83,9 +89,8 @@ far too few to justify a realtime layer this app has never had.
 ## PART F — Feature track (P1 unless noted)
 
 Each item is independently green-deployable to trunk (new fields `omitempty`, endpoints additive,
-UI reads defensively). See "Suggested sequencing" at the bottom for the current order — with F7
-and F8 landed, **F9 (the composer) is next**, and it is the last of the feature track before F10's
-close-out. Cheap Part-H items slot between deploys.
+UI reads defensively). **Everything here is done except F11 and F12**, both P3 and both left
+open deliberately — see their entries. The sequencing that got there is at the bottom.
 
 - [x] **F1 · OTP code visible/copyable from the Android email notification.** `S`
   **DONE 2026-07-28** (`0b5f2272`). Built as planned, with one correction: `buildOtpEmailBody`
@@ -499,11 +504,23 @@ close-out. Cheap Part-H items slot between deploys.
     `server/tools/mintsession`) sees only event-visible candidates; email lands with thread
     context; a members-only-thread mention of a guest sends nothing.
 
-- [ ] **F10 · Close-out sweep.** `S` — after the feature track (F1–F9 + F13/F14): final
+- [x] **F10 · Close-out sweep.** `S` — after the feature track (F1–F9 + F13/F14): final
   `swag init --parseDependency --parseInternal`, full backend suite
   (`go test $(go list ./... | grep -v '/scripts')` with `MONGODB_URI`),
   `npm run test:unit` + build + lint, both headless harnesses
   (`check-signed-out.js` / `check-signed-in.js`), tick items off here.
+  **DONE 2026-07-29.** Everything green, nothing to fix:
+  - `swag init --parseDependency --parseInternal` regenerated `docs/` with **no diff** — the
+    route comments and the committed spec were already in step (F9 added no endpoint).
+  - Backend against the dev stack's Mongo: `go build`, `go vet`, `golangci-lint` (**0 issues**)
+    and `go test -count=1`, all over `go list ./... | grep -v '/scripts'`. `-count=1` on
+    purpose: a cached "ok" from a run without `MONGODB_URI` means the DB-gated tests *skipped*,
+    which is not what a close-out wants to record.
+  - Frontend: `npm run lint` (`--max-warnings 0`), 167 unit tests across 16 files, production
+    build.
+  - Both harnesses: `check:signed-out` 5/5, `check:signed-in` 5/5 against `localhost:3002`.
+  - Seeded harness documents (3 users, 3 allowlist rows, the event and its comments) deleted
+    afterwards, per DEVELOPMENT.md.
 
 - [ ] **F11 · Avatars on the RSVP and poll-voter rosters.** `M` · **P3** — deliberately left out
   of F5 (user's call, 2026-07-28), not an oversight. Both rosters are comma-joined text
@@ -1032,11 +1049,15 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
 7. ~~**F15 → F16** (Lists v2: backend → tabbed band, tree, checklists).~~ **Done 2026-07-29**,
    taken ahead of F9 at the user's request for the same reason F13/F14 were: the two tracks share
    no code, so the order cost nothing. F16 landed as the three planned commits.
-8. **F9** (the mention composer + rendering) **← next**, after which the feature track is
-   complete.
-9. **F10** close-out. Part G items remain background/P3, same as before; **H5** whenever
-   calendar code is next touched; **H6–H9** opportunistic (**H9** is cheapest folded into the
-   next change that touches `AvatarEditorDialog.vue`).
+8. ~~**F9** (the mention composer + rendering).~~ **Done 2026-07-29** (`b9633400`) — the
+   feature track is complete.
+9. ~~**F10** close-out.~~ **Done 2026-07-29.**
+
+**What's left, and nothing here is urgent:** **F11** and **F12** (both P3, both deferred on
+purpose); Part G items remain background/P3, same as before; **H5** whenever calendar code is
+next touched; **H6–H9** opportunistic (**H9** is cheapest folded into the next change that
+touches `AvatarEditorDialog.vue`). Deploy is the human's call from the VM-adjacent box —
+`origin/main` is ahead of what's live until then.
 
 Workflow rules unchanged from `TODO.md`/`CLAUDE.md`: sync before changes, green commits to
 trunk, deploys are human-run from the VM, cold-load signed-out testing after any router/auth
