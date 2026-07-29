@@ -233,6 +233,10 @@ func addComment(c *gin.Context) {
 		return
 	}
 
+	// After the write, never before: a mention email must only ever describe a
+	// comment that exists (F8). Nothing this does can fail the request.
+	notifyMentions(event, comment, user, nil)
+
 	c.JSON(http.StatusOK, comment)
 }
 
@@ -285,6 +289,13 @@ func editComment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 		return
 	}
+
+	// Only the newly added are mailed: comment.Mentions is still what was stored
+	// before this edit, so fixing a typo re-notifies nobody (F8).
+	updated := *comment
+	updated.Text = text
+	updated.Mentions = mentions
+	notifyMentions(event, updated, user, comment.Mentions)
 
 	c.Status(http.StatusOK)
 }

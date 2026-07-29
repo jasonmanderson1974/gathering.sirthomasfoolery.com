@@ -80,6 +80,17 @@ func parseMentions(text string) []primitive.ObjectID {
 	return mentions
 }
 
+// flattenMentions rewrites the persisted tokens back to what the author typed:
+// `@[Tom Foolery](66f…)` becomes `@Tom Foolery`.
+//
+// Lives here beside the pattern rather than with its caller (the mention emails,
+// F8) because it is the inverse of the token format, and the two must change
+// together. Anywhere a mention has to appear as plain text — an email body, a
+// notification, a thread-title preview — goes through this.
+func flattenMentions(text string) string {
+	return mentionPattern.ReplaceAllString(text, "@$1")
+}
+
 // mentionableUserIds is the set of accounts visible to a guest on one event:
 // everyone who has marked availability, signed up, RSVP'd, voted in a poll, or
 // written a comment the caller can see.

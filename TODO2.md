@@ -14,9 +14,10 @@
 > their entries for what differed from the plan. F11 and F12 were opened out of F5, H9 out of F6.
 > **F13/F14 (Lists of Lists) were added and built 2026-07-29** (`c7ad40b4`, `647a07bc`, plus
 > `c6493dc3` making the lists collapsible on a direct request), taking priority over the mention
-> track at the user's request. **F7 landed 2026-07-29** — everything else is still
-> planned-not-started, and **F8 → F9 (mention emails, then the composer) is next**. F7 is
-> deployable on its own: tokens render as literal text until F9 and send no email until F8.
+> track at the user's request. **F7 and F8 landed 2026-07-29** — everything else is still
+> planned-not-started, and **F9 (the mention composer + rendering) is next**. F7 and F8 are both
+> deployed-safe on their own: tokens render as literal text until F9, and mention emails already
+> fire for anyone who hand-writes a token.
 > The feature designs in Part F
 > were reviewed against the codebase on 2026-07-28 and the product decisions in the two
 > "Confirmed decisions" blocks were made by the user.
@@ -56,8 +57,8 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 
 Each item is independently green-deployable to trunk (new fields `omitempty`, endpoints additive,
 UI reads defensively). See "Suggested sequencing" at the bottom for the current order — with F7
-landed, **F8 → F9 (mention emails, then the composer) is next**. Cheap Part-H items slot between
-deploys.
+and F8 landed, **F9 (the composer) is next**, and it is the last of the feature track before F10's
+close-out. Cheap Part-H items slot between deploys.
 
 - [x] **F1 · OTP code visible/copyable from the Android email notification.** `S`
   **DONE 2026-07-28** (`0b5f2272`). Built as planned, with one correction: `buildOtpEmailBody`
@@ -377,7 +378,32 @@ deploys.
     F9, no emails until F8.
   </details>
 
-- [ ] **F8 · Mention notification emails.** `M` — needs F7.
+- [x] **F8 · Mention notification emails.** `M` — needs F7.
+  **DONE 2026-07-29.** Built as planned, in a new `routes/mention_emails.go`. Notes for F9:
+  - **`flattenMentions` lives in `mentions.go`, not here** — it is the inverse of the token
+    pattern and has to change with it. F9's JS `splitMentions` is the frontend twin; if the token
+    shape is ever revised, all three move together.
+  - **`mentionThreadIsMembersOnly` fails CLOSED.** A reply carries no flag of its own, so the root
+    is read back; if it cannot be resolved the comment is treated as members-only and nothing is
+    sent. Withholding an email is recoverable, mailing a hidden thread's contents to a guest is
+    not. DB-gated test covers all five shapes incl. the unresolvable root.
+  - **Thread context is resolved PER RECIPIENT**, not once per comment: two people named in the
+    same reply may see different amounts of the thread above it. A recipient who cannot see the
+    root gets no context block at all rather than replies stripped of the question they answer.
+  - **The rate limit is counted per EMAIL, not per comment** (30/hr per author), so one comment
+    naming ten people spends ten. Matches the "30 mention emails/hr" the plan specified, and is
+    what actually bounds inbox damage.
+  - **`emailTextBlock` escapes THEN inserts `<br>`.** A comment is the most attacker-controlled
+    string the app mails anywhere; doing it the other way round would neuter the breaks and, worse,
+    normalise inserting markup before escaping in this file. Test asserts both halves.
+  - Rendered a sample against the dev stack and read the output as text to check the copy actually
+    scans — quoted context, flattened tokens, preserved line breaks, CTA and fallback URL.
+  - Tests: 23 pure (flatten incl. a `$` in a display name, which Go's replacement templates eat if
+    done naively; the recipients matrix — self/dedupe/edit-diff/members-only×roles/no-address; the
+    context matrix — cap, other threads, hidden root; body assertions incl. escaping of all five
+    user-controlled fields) + 3 DB-gated/env.
+  <details><summary>Original F8 design (as planned 2026-07-28)</summary>
+
   - `notifyMentions(event, comment, author, newMentionIds, allComments)` called from
     `addComment` (all mentions) and `editComment` (**diff vs stored `Mentions` — newly-added
     only**). Per recipient: skip self; skip dupes (parse-dedupe + diff); **skip when the
@@ -398,6 +424,7 @@ deploys.
   - Tests: extract pure `mentionRecipients(...)` — self / guest-in-members-only / dedupe /
     edit-diff matrix; body assertions incl. HTML-escaping of comment text (the layout helpers
     escape, verify end-to-end); DB-gated persistence of `Mentions`.
+  </details>
 
 - [ ] **F9 · Mention composer UI + rendering.** `L` — needs F7 (F8 independent of this).
   - Rendering: new `components/event/mentionText.js` — pure `splitMentions(text)` →
@@ -796,9 +823,9 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
    H6/H7) ahead of it.
 5. ~~**F13 → F14** (Lists of Lists: backend → panel).~~ **Done 2026-07-29**, taken ahead of the
    mention track at the user's request. The two were independent, so nothing was rewritten.
-6. **F7 → F8 → F9** (mentions: backend → emails → composer). **F7 done 2026-07-29**;
-   **F8 → F9 ← next**. F8 and F9 both depend on F7 but not on each other, so either may go
-   first — F8 is the smaller and makes mentions do something without any UI work.
+6. **F7 → F8 → F9** (mentions: backend → emails → composer). **F7 and F8 done 2026-07-29**;
+   **F9 ← next** — the composer and the mention rendering, after which the feature track is
+   complete and only F10's close-out sweep remains.
 7. **F10** close-out. Part G items remain background/P3, same as before; **H5** whenever
    calendar code is next touched; **H6–H9** opportunistic (**H9** is cheapest folded into the
    next change that touches `AvatarEditorDialog.vue`).
