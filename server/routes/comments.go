@@ -224,6 +224,9 @@ func addComment(c *gin.Context) {
 		Text:       text,
 		CreatedAt:  primitive.NewDateTimeFromTime(time.Now()),
 		ThreadId:   threadId,
+		// Parsed from the sanitized text, so truncation can't leave a half token
+		// counting as a mention (F7).
+		Mentions: validateMentions(parseMentions(text), event, user),
 	}
 	if err := db.InsertComment(comment); err != nil {
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
@@ -257,7 +260,7 @@ func editComment(c *gin.Context) {
 		return
 	}
 
-	event, _, viewer, ctxOk := loadCommentContext(c)
+	event, user, viewer, ctxOk := loadCommentContext(c)
 	if !ctxOk {
 		return
 	}
@@ -274,7 +277,11 @@ func editComment(c *gin.Context) {
 		return
 	}
 
-	if err := db.UpdateCommentText(comment.Id, text, primitive.NewDateTimeFromTime(time.Now())); err != nil {
+	// Re-parsed from the new text rather than merged with what was stored: a
+	// mention removed by the edit must stop being a mention (F7).
+	mentions := validateMentions(parseMentions(text), event, user)
+
+	if err := db.UpdateCommentText(comment.Id, text, mentions, primitive.NewDateTimeFromTime(time.Now())); err != nil {
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 		return
 	}

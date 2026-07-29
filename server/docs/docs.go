@@ -1572,6 +1572,38 @@ const docTemplate = `{
                 }
             }
         },
+        "/events/{eventId}/mentionables": {
+            "get": {
+                "description": "Members and above get everyone on the roll; guests get only the people already visible to them on this event (respondents, RSVPs, poll voters, and the authors of comments they can read).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Lists the accounts the caller may @mention in this event's discussion",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.User"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/events/{eventId}/polls": {
             "post": {
                 "consumes": [
@@ -3396,6 +3428,13 @@ const docTemplate = `{
                 "membersOnly": {
                     "description": "MembersOnly hides this thread and every reply in it from guests. Only\nmeaningful on a thread root; replies inherit the root's setting rather than\ncarrying their own.",
                     "type": "boolean"
+                },
+                "mentions": {
+                    "description": "Mentions are the accounts @mentioned in Text (F7), validated at write\ntime: ids that don't resolve to an account, or that a guest author may\nnot see on this event, are dropped here while the literal text stays.\n\nThe tokens in Text are the source of truth for RENDERING; this field\nexists so the server can answer \"who was notified\" without re-parsing —\nspecifically so an edit can diff against it and notify only the newly\nadded (F8), and so mentions are queryable later.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "text": {
                     "type": "string"

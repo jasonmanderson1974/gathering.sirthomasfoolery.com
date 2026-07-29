@@ -62,6 +62,7 @@ func InitEvents(router *gin.RouterGroup) {
 	authed.POST("/:eventId/comments/:commentId/thread", tagCommentAsThread)
 	authed.PATCH("/:eventId/comments/:commentId/thread", setThreadMembersOnly)
 	authed.DELETE("/:eventId/comments/:commentId/thread", untagThread)
+	authed.GET("/:eventId/mentionables", getMentionables)
 	authed.POST("/:eventId/polls", createPoll)
 	authed.DELETE("/:eventId/polls/:pollId", deletePoll)
 	authed.POST("/:eventId/polls/:pollId/vote", votePoll)

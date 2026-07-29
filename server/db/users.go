@@ -233,6 +233,38 @@ func GetUsersByIds(ids []primitive.ObjectID) map[string]models.User {
 	return result
 }
 
+// GetAllUsers returns every account on the roll, projected down to the identity
+// fields needed to render a person in a picker (F7's mentionables endpoint).
+//
+// Fetching the whole collection is only defensible because this is a ~30–40
+// person club and the projection keeps each row tiny; the fields deliberately
+// left out are the ones a mention picker has no business carrying — email,
+// phone, role, and the calendar-account blobs. If the roll ever grows past a
+// few hundred, this wants a server-side search parameter instead.
+func GetAllUsers() []models.User {
+	projection := bson.M{
+		"_id": 1, "firstName": 1, "lastName": 1, "nickname": 1,
+		"picture": 1, "avatarUpdatedAt": 1,
+	}
+
+	cursor, err := UsersCollection.Find(
+		context.Background(),
+		bson.M{},
+		options.Find().SetProjection(projection),
+	)
+	if err != nil {
+		logger.StdErr.Println(err)
+		return []models.User{}
+	}
+
+	var users []models.User
+	if err := cursor.All(context.Background(), &users); err != nil {
+		logger.StdErr.Println(err)
+		return []models.User{}
+	}
+	return users
+}
+
 func GetUserByEmail(email string) (*models.User, error) {
 	emailQuery := strings.TrimSpace(email)
 	if emailQuery == "" {

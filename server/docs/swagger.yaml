@@ -162,6 +162,19 @@ definitions:
           meaningful on a thread root; replies inherit the root's setting rather than
           carrying their own.
         type: boolean
+      mentions:
+        description: |-
+          Mentions are the accounts @mentioned in Text (F7), validated at write
+          time: ids that don't resolve to an account, or that a guest author may
+          not see on this event, are dropped here while the literal text stays.
+
+          The tokens in Text are the source of truth for RENDERING; this field
+          exists so the server can answer "who was notified" without re-parsing —
+          specifically so an edit can diff against it and notify only the newly
+          added (F8), and so mentions are queryable later.
+        items:
+          type: string
+        type: array
       text:
         type: string
       threadId:
@@ -1714,6 +1727,29 @@ paths:
         "200":
           description: OK
       summary: Edits one of the caller's own list items
+      tags:
+      - events
+  /events/{eventId}/mentionables:
+    get:
+      description: Members and above get everyone on the roll; guests get only the
+        people already visible to them on this event (respondents, RSVPs, poll voters,
+        and the authors of comments they can read).
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.User'
+            type: array
+      summary: Lists the accounts the caller may @mention in this event's discussion
       tags:
       - events
   /events/{eventId}/polls:

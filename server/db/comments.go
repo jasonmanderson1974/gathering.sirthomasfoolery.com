@@ -59,12 +59,22 @@ func InsertComment(comment models.Comment) error {
 	return err
 }
 
-func UpdateCommentText(commentId primitive.ObjectID, text string, updatedAt primitive.DateTime) error {
-	_, err := CommentsCollection.UpdateByID(
-		context.Background(),
-		commentId,
-		bson.M{"$set": bson.M{"text": text, "updatedAt": updatedAt}},
-	)
+// UpdateCommentText rewrites a comment's text and the mentions parsed out of it
+// (F7).
+//
+// An edit that removes every mention must clear the field rather than leave the
+// old ids behind — they would then be stale for the edit-diff that decides who
+// gets notified, and would outlive the tokens that justified them. Hence the
+// $unset arm, which also keeps the stored document matching the `omitempty` tag.
+func UpdateCommentText(commentId primitive.ObjectID, text string, mentions []primitive.ObjectID, updatedAt primitive.DateTime) error {
+	update := bson.M{"$set": bson.M{"text": text, "updatedAt": updatedAt}}
+	if len(mentions) > 0 {
+		update["$set"].(bson.M)["mentions"] = mentions
+	} else {
+		update["$unset"] = bson.M{"mentions": ""}
+	}
+
+	_, err := CommentsCollection.UpdateByID(context.Background(), commentId, update)
 	if err != nil {
 		logger.StdErr.Println(err)
 	}

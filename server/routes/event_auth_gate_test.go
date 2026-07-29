@@ -50,6 +50,7 @@ var eventRoutes = []struct {
 	{http.MethodPost, "/api/events/abc/comments/c1/thread", false},
 	{http.MethodPatch, "/api/events/abc/comments/c1/thread", false},
 	{http.MethodDelete, "/api/events/abc/comments/c1/thread", false},
+	{http.MethodGet, "/api/events/abc/mentionables", false},
 	{http.MethodPost, "/api/events/abc/polls", false},
 	{http.MethodDelete, "/api/events/abc/polls/p1", false},
 	{http.MethodPost, "/api/events/abc/polls/p1/vote", false},

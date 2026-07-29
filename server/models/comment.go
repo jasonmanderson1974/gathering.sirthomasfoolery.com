@@ -39,6 +39,16 @@ type Comment struct {
 	CreatedAt primitive.DateTime  `json:"createdAt" bson:"createdAt"`
 	UpdatedAt *primitive.DateTime `json:"updatedAt" bson:"updatedAt,omitempty"` // set when edited
 
+	// Mentions are the accounts @mentioned in Text (F7), validated at write
+	// time: ids that don't resolve to an account, or that a guest author may
+	// not see on this event, are dropped here while the literal text stays.
+	//
+	// The tokens in Text are the source of truth for RENDERING; this field
+	// exists so the server can answer "who was notified" without re-parsing —
+	// specifically so an edit can diff against it and notify only the newly
+	// added (F8), and so mentions are queryable later.
+	Mentions []primitive.ObjectID `json:"mentions,omitempty" bson:"mentions,omitempty"`
+
 	// IsThread marks this top-level comment as a thread root: it collapses in the
 	// UI and accepts replies. Only ever true on a comment with no ThreadId.
 	IsThread bool `json:"isThread" bson:"isThread,omitempty"`

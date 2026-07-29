@@ -12,9 +12,12 @@
 > **Status: IN PROGRESS.** F1, H1, F2, F3, F4 and F5 landed 2026-07-28 (`0b5f2272`, `80a20905`,
 > `719cb4b8`, `0a9f450d`, `6c281faf`, F5 this commit); F6, H4, H6 and H7 landed 2026-07-29 — see
 > their entries for what differed from the plan. F11 and F12 were opened out of F5, H9 out of F6.
-> **F13/F14 (Lists of Lists) were added and built 2026-07-29** (`c7ad40b4`, `647a07bc`), taking
-> priority over the mention track at the user's request. Everything else is still
-> planned-not-started — **the mention track F7 → F8 → F9 is next**. The feature designs in Part F
+> **F13/F14 (Lists of Lists) were added and built 2026-07-29** (`c7ad40b4`, `647a07bc`, plus
+> `c6493dc3` making the lists collapsible on a direct request), taking priority over the mention
+> track at the user's request. **F7 landed 2026-07-29** — everything else is still
+> planned-not-started, and **F8 → F9 (mention emails, then the composer) is next**. F7 is
+> deployable on its own: tokens render as literal text until F9 and send no email until F8.
+> The feature designs in Part F
 > were reviewed against the codebase on 2026-07-28 and the product decisions in the two
 > "Confirmed decisions" blocks were made by the user.
 > **Line numbers below shift as items land — re-verify before starting one.**
@@ -52,9 +55,9 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 ## PART F — Feature track (P1 unless noted)
 
 Each item is independently green-deployable to trunk (new fields `omitempty`, endpoints additive,
-UI reads defensively). See "Suggested sequencing" at the bottom for the current order — the
-mention track **F7 → F8 → F9 is next** now that Lists of Lists (F13/F14) has landed. Cheap Part-H
-items slot between deploys.
+UI reads defensively). See "Suggested sequencing" at the bottom for the current order — with F7
+landed, **F8 → F9 (mention emails, then the composer) is next**. Cheap Part-H items slot between
+deploys.
 
 - [x] **F1 · OTP code visible/copyable from the Android email notification.** `S`
   **DONE 2026-07-28** (`0b5f2272`). Built as planned, with one correction: `buildOtpEmailBody`
@@ -325,7 +328,32 @@ items slot between deploys.
   - Tests: DB-gated matrix — admin edits member/guest OK; member 403; superAdmin target 403;
     no-account 400; nickname clear via `""`; avatar-for-other round-trip. Swagger regen.
 
-- [ ] **F7 · @Mentions backend: parsing, storage, mentionables endpoint.** `M` — needs F2.
+- [x] **F7 · @Mentions backend: parsing, storage, mentionables endpoint.** `M` — needs F2.
+  **DONE 2026-07-29.** Built as planned. Notes for F8/F9:
+  - **The mentions field is written on BOTH paths and an edit re-parses rather than merges**, so
+    `db.UpdateCommentText` `$unset`s it when an edit removes the last mention. Leaving stale ids
+    behind would have poisoned F8's edit-diff — they would read as already-notified.
+  - **`mentionableUserIds` takes its inputs rather than fetching them**, and the comments handed
+    to it must already be through `visibleComments` for that caller. That pairing is what keeps a
+    members-only thread's author out of a guest's picker; there is a test asserting exactly this,
+    because the filter and the set are otherwise easy to wire up independently and get wrong.
+  - **A guest's own event is not in the visible set unless someone is on it.** The event OWNER is
+    deliberately NOT mentionable by a guest: `ownerId` is serialized but the owner's NAME is never
+    rendered from it, so adding them would have been a new disclosure rather than a mention of
+    someone already on the page. Revisit if F9's picker feels short for guests.
+  - **Extra DB work is confined to guest authors** — validating a member's mentions is one
+    `GetUsersByIds`; a guest's additionally loads the event's responses and comments. Fine at club
+    scale, and the alternative (trusting the client's picker) is the thing being defended against.
+  - `sortMentionables` orders by display name so the picker is stable between requests (Mongo's
+    natural order is not) — F9 can render the list as it arrives.
+  - Route added to the `eventRoutes` auth-gate table in `event_auth_gate_test.go`, which is what
+    caught it being registered without an entry. Swagger regenerated.
+  - Tests: 12 pure (parse matrix incl. 9 malformed-token shapes, the cap, dedupe across differing
+    display names, the visible-set matrix, sort) + 9 DB-gated (roll vs event-only, members-only
+    author never offered, payload carries no email/phone/role, strip-on-write for a guest, the
+    same token kept for a member, unknown account dropped, edit swap + `$unset`).
+  <details><summary>Original F7 design (as planned 2026-07-28)</summary>
+
   - Token format persisted inside comment text: `@[Display Name](24-hex-userId)` —
     self-contained, survives edits, regexable (`@\[([^\]\n]{1,60})\]\(([0-9a-f]{24})\)`);
     counts against the existing 2000-rune cap (acceptable).
@@ -347,6 +375,7 @@ items slot between deploys.
   - Tests: pure parse/visible-set matrices; DB-gated endpoint test (member sees all, guest sees
     event-only) + guest strip-on-write. Deployable alone — tokens render as literal text until
     F9, no emails until F8.
+  </details>
 
 - [ ] **F8 · Mention notification emails.** `M` — needs F7.
   - `notifyMentions(event, comment, author, newMentionIds, allComments)` called from
@@ -455,6 +484,13 @@ items slot between deploys.
   - `mapsSearchUrl` extracted to `general_utils.js` and adopted by `EventLocation.vue`, with
     vitest covering `&`-escaping (the one that would otherwise split the query string) and the
     empty/nil case the event's own location still hits before a venue is set.
+  - **Follow-up, direct request (`c6493dc3`): the lists collapse like discussion threads.** Each
+    list is a clickable header (chevron, name, entry count) with its entries and add-entry field
+    inside, mirroring `EventComments`' `expandedThreads`. Lists start collapsed, so the panel
+    reads as an index rather than a wall — which matters most on a phone, where it sits below the
+    whole discussion. Two details the pattern needed: the rename/delete buttons live in the header
+    so their clicks are `.stop`ped, and a just-created list opens itself (the create path only
+    knows the name it sent, so the watcher matches the refetched list by name, from the end).
 
 <details>
 <summary>Original F13/F14 design (as planned 2026-07-29)</summary>
@@ -760,7 +796,9 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
    H6/H7) ahead of it.
 5. ~~**F13 → F14** (Lists of Lists: backend → panel).~~ **Done 2026-07-29**, taken ahead of the
    mention track at the user's request. The two were independent, so nothing was rewritten.
-6. **F7 → F8 → F9** (mentions: backend → emails → composer). ← **next**
+6. **F7 → F8 → F9** (mentions: backend → emails → composer). **F7 done 2026-07-29**;
+   **F8 → F9 ← next**. F8 and F9 both depend on F7 but not on each other, so either may go
+   first — F8 is the smaller and makes mentions do something without any UI work.
 7. **F10** close-out. Part G items remain background/P3, same as before; **H5** whenever
    calendar code is next touched; **H6–H9** opportunistic (**H9** is cheapest folded into the
    next change that touches `AvatarEditorDialog.vue`).
