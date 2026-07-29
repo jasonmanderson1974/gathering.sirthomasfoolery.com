@@ -10,11 +10,13 @@
 > superAdmin > admin > member > guest.
 >
 > **Status: IN PROGRESS.** F1, H1, F2, F3, F4 and F5 landed 2026-07-28 (`0b5f2272`, `80a20905`,
-> `719cb4b8`, `0a9f450d`, `6c281faf`, F5 this commit) — see their entries for what differed from
-> the plan. F11 and F12 were opened out of F5. Everything else is still planned-not-started. The
-> feature designs in Part F were reviewed against the codebase on 2026-07-28 (file:line
-> references verified that day) and the three product decisions in "Confirmed decisions" were
-> made by the user. **Line numbers below shift as items land — re-verify before starting one.**
+> `719cb4b8`, `0a9f450d`, `6c281faf`, F5 this commit); F6, H4, H6 and H7 landed 2026-07-29 — see
+> their entries for what differed from the plan. F11 and F12 were opened out of F5, H9 out of F6.
+> **F13/F14 (Lists of Lists) were added 2026-07-29 and take priority over the mention track** —
+> their file:line references were verified against the tree that day. Everything else is still
+> planned-not-started. The feature designs in Part F were reviewed against the codebase on
+> 2026-07-28 and the product decisions in the two "Confirmed decisions" blocks were made by the
+> user. **Line numbers below shift as items land — re-verify before starting one.**
 
 Priority legend: **P0** = do first · **P1** = high value · **P2** = moderate · **P3** = nice-to-have.
 Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
@@ -32,13 +34,26 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   (`MemberAdmin.vue`) and The Fellowship directory (`Fellowship.vue`) show
   **"Nickname (Real Name)"** so identities stay legible to admins and the directory.
 
+## Confirmed decisions (user, 2026-07-29) — Lists of Lists (F13/F14)
+
+- **Priority: ahead of mentions.** F13/F14 are next; F7–F9 follow. They share no code, so the
+  order costs nothing either way.
+- **List kind is fixed at creation** — the planner picks "text" or "locations" when making the
+  list, rather than every item choosing. A locations list uses the Google address lookup for new
+  items and renders each entry as a maps link.
+- **Whole-list create/rename/delete: planner + admins.** Members and guests cannot remove a list
+  someone else set up, even though they can remove individual items in it.
+- **Items: anyone signed in adds; you may edit and delete your own; members+ may delete
+  anyone's.** Editing is own-only — there is no edit-anyone right at any role.
+
 ---
 
 ## PART F — Feature track (P1 unless noted)
 
-Ten work items, each independently green-deployable to trunk (new fields `omitempty`, endpoints
-additive, UI reads defensively). Suggested order: F1 first (quick win), then F2→F9 in order;
-F4 can run in parallel with F2/F3. Cheap Part-H items slot between deploys.
+Each item is independently green-deployable to trunk (new fields `omitempty`, endpoints additive,
+UI reads defensively). See "Suggested sequencing" at the bottom for the current order —
+**F13 → F14 (Lists of Lists) is next**, then the mention track F7 → F8 → F9. Cheap Part-H items
+slot between deploys.
 
 - [x] **F1 · OTP code visible/copyable from the Android email notification.** `S`
   **DONE 2026-07-28** (`0b5f2272`). Built as planned, with one correction: `buildOtpEmailBody`
@@ -374,9 +389,10 @@ F4 can run in parallel with F2/F3. Cheap Part-H items slot between deploys.
     `server/tools/mintsession`) sees only event-visible candidates; email lands with thread
     context; a members-only-thread mention of a guest sends nothing.
 
-- [ ] **F10 · Close-out sweep.** `S` — after F1–F9: final `swag init --parseDependency
-  --parseInternal`, full backend suite (`go test $(go list ./... | grep -v '/scripts')` with
-  `MONGODB_URI`), `npm run test:unit` + build + lint, both headless harnesses
+- [ ] **F10 · Close-out sweep.** `S` — after the feature track (F1–F9 + F13/F14): final
+  `swag init --parseDependency --parseInternal`, full backend suite
+  (`go test $(go list ./... | grep -v '/scripts')` with `MONGODB_URI`),
+  `npm run test:unit` + build + lint, both headless harnesses
   (`check-signed-out.js` / `check-signed-in.js`), tick items off here.
 
 - [ ] **F11 · Avatars on the RSVP and poll-voter rosters.** `M` · **P3** — deliberately left out
@@ -398,6 +414,129 @@ F4 can run in parallel with F2/F3. Cheap Part-H items slot between deploys.
   found while seeding fixtures for F5. One `if response == nil { continue }` alongside the
   existing deleted-user branch, plus a DB-gated test. Currently a 500 on the app's hottest
   endpoint for the whole event, not just the bad row.
+
+- [ ] **F13 · Lists of Lists backend: model, routes, permissions.** `M` · **P1** — no F-deps;
+  independent of the mention track, and **scheduled ahead of it** (user's call, 2026-07-29).
+  The planner creates a named list on an event ("Menu", "Bars to Visit"); anyone signed in adds
+  items to it. Closest existing analogue is polls — a planner-created structure everyone else
+  interacts with — so the shapes below are lifted from `routes/polls.go` and `routes/comments.go`
+  rather than invented.
+  - **Stored embedded on the Event doc, but written with targeted array operators — NOT the polls
+    whole-array `$set`.** `routes/polls.go:143,186,255` each rewrite the entire `polls` array from
+    a value read earlier in the request; two concurrent votes lose one. Polls get away with it
+    because a handful of people vote occasionally. Lists invite *everyone* to append at once
+    ("add your dish"), so every mutation here must be a single atomic update:
+    `$push {"lists.$[l].items": item}`, `$pull {"lists.$[l].items": {"_id": itemId}}`,
+    `$set {"lists.$[l].items.$[i].text": …}` with `arrayFilters`. A separate collection
+    (comments' shape) is the alternative, rejected because lists are few and capped, and embedding
+    means they ride `getEvent` with no attach step and no extra query.
+  - `models/event.go` (next to `Polls []Poll` :325, structs by `Poll` :217-231):
+    ```go
+    type EventList struct {
+        Id    primitive.ObjectID `json:"_id" bson:"_id"`
+        Name  string             `json:"name" bson:"name"`
+        Kind  string             `json:"kind" bson:"kind"` // "text" | "location"
+        Items []EventListItem    `json:"items" bson:"items"`
+    }
+    type EventListItem struct {
+        Id         primitive.ObjectID `json:"_id" bson:"_id"`
+        Text       string             `json:"text" bson:"text"`
+        UserId     primitive.ObjectID `json:"userId" bson:"userId"`
+        AuthorName string             `json:"authorName" bson:"authorName"` // DisplayName() snapshot
+        CreatedAt  primitive.DateTime `json:"createdAt" bson:"createdAt"`
+    }
+    ```
+    plus `Lists []EventList` (`json:"lists" bson:"lists,omitempty"`). **Location items store the
+    text string only** — no `placeId`, no lat/lng. That matches the event-location precedent
+    exactly: `LocationInput.vue:103` already discards the `placeId` that `maps_utils.js` returns,
+    and `EventLocation.vue:98-102` rebuilds the maps link from the text. Storing more would mean
+    a new Place Details call and a second billing surface for no user-visible gain.
+  - New `db/event_lists.go` (Mongo access stays in `db/`, per CLAUDE.md): one function per
+    mutation, each a single `UpdateByID`.
+  - New `routes/event_lists.go`, registered in the `authed` group of `InitEvents`
+    (`routes/events.go:39-67`, alongside the polls routes at :65-67), Swag comment per handler:
+    | Route | Who |
+    |---|---|
+    | `POST /:eventId/lists` `{name, kind}` | planner (`requireEventManager`, `routes/events.go:176`) or admin |
+    | `PATCH /:eventId/lists/:listId` `{name}` | planner or admin (rename) |
+    | `DELETE /:eventId/lists/:listId` | planner or admin; idempotent 200 if already gone |
+    | `POST /:eventId/lists/:listId/items` `{text}` | **any signed-in user, guests included** |
+    | `PUT /:eventId/lists/:listId/items/:itemId` `{text}` | **own item only** |
+    | `DELETE /:eventId/lists/:listId/items/:itemId` | **own item, or member+**; idempotent 200 |
+  - **`requireEventManager` alone is not the whole rule for lists.** It grants the event owner and
+    (on legacy ownerless events) member+, but deliberately does *not* grant admins access to
+    someone else's event. The confirmed decision is planner **+ admins**, so the list-level gate is
+    `requireEventManager(...) || viewer.IsAdmin` — the same override `deleteComment` bolts on at
+    `routes/comments.go:311-315`. Don't widen `requireEventManager` itself; polls and scheduling
+    depend on its current meaning.
+  - Permission logic goes in a pure, DB-free `listViewer` struct + `newListViewer(user, event)`
+    (copy `commentViewer` / `newCommentViewer`, `routes/comments.go:50-80`) with
+    `canManageList(viewer)` and `canDeleteItem(viewer, item)` as plain functions, so the whole
+    matrix is unit-testable without a request. `loadListContext(c)` copies `loadCommentContext`
+    (`comments.go:129-147`) — resolve authUser + event + viewer, write its own error response.
+  - Identity comes from the session only: `UserId = user.Id`, `AuthorName = user.DisplayName()`
+    snapshotted at write time, never read from the payload (`polls.go:245-248` is the precedent;
+    E3 removed payload-supplied names).
+  - Sanitize + caps as feature-local consts (polls precedent `polls.go:21-25`), all via
+    `trimAndTruncate` (`routes/text.go:37`, rune-safe): list name ≤ 100 runes, item text ≤ 300
+    (addresses run long), ≤ 20 lists per event, ≤ 100 items per list. Reject an unknown `kind`
+    with 400 rather than defaulting — a typo'd kind would silently render as plain text.
+  - Read path: lists ride the Event doc, so nothing to attach. Extend `eventDisplayNameIds`
+    (`routes/display_names.go:55`) to collect item `UserId`s and add a `resolveListItemNames`
+    alongside `resolveRsvpNames` (:114) / `resolvePollVoteNames` (:132), called from
+    `resolveEventDisplayNames` (:152) — so a nickname change propagates to items the way F3 did
+    for comments/RSVPs/votes. Stored `AuthorName` stays the fallback for deleted users.
+  - Tests: pure matrices for the permission helpers (guest deletes another's item → deny; member →
+    allow; owner renames → allow; member renames → deny; admin deletes another's list → allow) and
+    for sanitize/caps/kind validation. DB-gated round-trip: create list → guest adds item → guest
+    edits own → guest edits another's → 403 → member deletes guest's item → admin deletes the list
+    → re-delete is still 200. Extend the `events_pii_db_test.go` matrix: an item exposes only
+    `userId`/`authorName`, never email/phone/role. Swagger regen.
+  - **Deployable alone** — endpoints are inert until F14 ships the UI.
+
+- [ ] **F14 · Lists of Lists frontend: the panel beside the discussion.** `M` · **P1** — needs F13.
+  - **Layout.** The user's ask is discussion ≈ 2/3 with lists ≈ 1/3 to its right. `Event.vue:85`
+    already opens a `lg:tw-flex` row for the whole page, but it has a single child and the split
+    wanted here is *within* the discussion band, so wrap the `EventComments` block (~:161-171) in a
+    new `lg:tw-flex lg:tw-items-start lg:tw-gap-6` row: comments `lg:tw-w-2/3`, new `EventLists`
+    `lg:tw-w-1/3`. Below `lg` (1024px, `tailwind.config.js:60-71`) they stack, lists after the
+    discussion. Nothing above the discussion moves.
+  - **New `components/event/EventLists.vue`**, modeled on `EventPolls.vue`: props `{event}` only,
+    `...mapState(["authUser"])`, `...mapGetters(["canInvite"])` (member+ = the delete-anyone
+    right), `isEventOwner` computed (`EventPolls.vue:174-181`), and **emit-only** — `create-list`,
+    `rename-list`, `delete-list`, `add-item`, `edit-item`, `delete-item`; the parent owns
+    persistence. Panel idiom copied verbatim from `EventPolls.vue:2-4`:
+    `tw-mt-3 tw-rounded-md tw-border tw-border-brass-dim tw-bg-leather tw-p-3 tw-text-parchment
+    sm:tw-p-4` with a `tw-mb-2 tw-text-base tw-font-medium` heading. Whole panel hidden when there
+    are no lists and the viewer can't create one (`EventPolls.vue:3` pattern), so guests don't see
+    an empty box.
+  - **Add-list composer** (planner/admin only): name field + a text/location toggle, since the kind
+    is fixed at creation.
+  - **Add-item input**: dense `v-text-field` for `kind: "text"`; **`LocationInput.vue`** for
+    `kind: "location"` — it's a `v-combobox`, so free text stays valid when there's no Google key
+    (`isPlacesEnabled()` is just `!!VUE_APP_GOOGLE_MAPS_API_KEY`, `maps_utils.js:18`) and the
+    feature must stay usable in that state. Props to pass: `dense`, `hide-details`,
+    `placeholder`, `v-model`. It holds one Places session token per pick, so N instances on the
+    page are fine, but only render the input for the list being added to — not one per list.
+  - **Rendering**: location items render as `<a target="_blank" rel="noopener">` to a maps search
+    URL. Extract `mapsSearchUrl(text)` into `utils/general_utils.js` and have
+    `EventLocation.vue:98-102` use it too, rather than duplicating the template literal — pure
+    helper, vitest-able in the node env (F5's `avatarUrl`/`monogram` precedent).
+  - **Per-item controls**: pencil on own items (`item.userId === authUser._id`) opening the same
+    input kind inline; trash on own items always, and on every item when `canInvite`. Show
+    `authorName` per item so it's clear who added what.
+  - **Wiring**: new `// --- Lists (F13/F14) ---` section in `EventService.js` (thin wrappers, polls
+    section :70-88 is the shape); handlers in `Event.vue` follow the universal
+    `await serviceFn(...); await this.refreshEvent()` + `showError` pattern (:550-576). The
+    whole-event refetch picks up embedded lists for free — there is no realtime layer anywhere in
+    this app, so two people adding items concurrently only see each other's on their next refetch.
+    That's the same deal comments already have; don't add polling for it.
+  - Tests: vitest for `mapsSearchUrl` plus any list logic worth extracting into a plain `.js`
+    module (the vitest env is node — no jsdom, so nothing inside a `.vue` is testable). Verify
+    live: planner creates a text list and a location list; a guest session
+    (`server/tools/mintsession`) adds an item, edits and deletes its own, is refused on another's;
+    a member deletes anyone's; maps links open; the location input still accepts free text with
+    the Google key unset; both standing browser harnesses green.
 
 ---
 
@@ -573,8 +712,11 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
    frontend code is in (so the lint flip covers it).
 4. ~~**F6** (admin editing — reuses everything above).~~ **Done 2026-07-29**, with H4 (and
    H6/H7) ahead of it.
-5. **F7 → F8 → F9** (mentions: backend → emails → composer). ← **next**
-6. **F10** close-out. Part G items remain background/P3, same as before; **H5** whenever
+5. **F13 → F14** (Lists of Lists: backend → panel). ← **next** — moved ahead of the mention
+   track on 2026-07-29 at the user's request. The two are independent, so nothing is rewritten
+   by taking lists first.
+6. **F7 → F8 → F9** (mentions: backend → emails → composer).
+7. **F10** close-out. Part G items remain background/P3, same as before; **H5** whenever
    calendar code is next touched; **H6–H9** opportunistic (**H9** is cheapest folded into the
    next change that touches `AvatarEditorDialog.vue`).
 
