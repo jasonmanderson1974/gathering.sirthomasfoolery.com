@@ -202,6 +202,17 @@ F4 can run in parallel with F2/F3. Cheap Part-H items slot between deploys.
   - **`cropperjs@^1.6` is loaded with a dynamic `import()`**, so it lands in its own 40KB chunk
     (verified: `dist/js/643.*`) rather than in `app.js`. v2 is a rewrite with a custom-element API
     that does not fit `new Cropper(img, …)`. It adds no transitive deps and no new audit findings.
+  - **Follow-up fixed on the deploy pass (2026-07-28): no Tailwind display utility on an element
+    a library hides for you.** `tw-block` on the source `<img>` made the dialog render the photo
+    twice — once full-size above the cropper — because `tailwind.config.js` sets
+    `important: true`, so `.tw-block` emits `display: block !important`, which ties with
+    cropperjs's `.cropper-hidden { display: none !important }` on specificity and wins on order.
+    Invisible to lint, tests and the build; only a screenshot showed it. Same trap applies to any
+    vendor CSS that hides an element it adopts.
+  - **A missing dynamically-imported dep is a webpack *warning*, not an error** — `npm run build`
+    printed `Module not found: Can't resolve 'cropperjs'` and still exited 0 with "Build
+    complete". A local build is therefore not proof the dep is installed: run `npm install` after
+    pulling a commit that adds one, and grep the build output for `Module not found`.
   - `AvatarEditorDialog` **does not know the endpoint** — it emits a data URL, and the caller PUTs
     it. F6 reuses it as-is: `$refs.avatarEditor.pickFile()`, then PUT to the admin route.
     Teardown hangs off a `value` watcher, not the Cancel button, so it also fires when the caller

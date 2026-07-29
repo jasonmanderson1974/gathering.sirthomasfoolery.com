@@ -38,12 +38,16 @@
             openWith().
           -->
           <div v-show="!loading" class="tw-max-h-[60vh]">
-            <img
-              ref="image"
-              :src="imageSrc"
-              alt=""
-              class="tw-block tw-max-w-full"
-            />
+            <!--
+              No `tw-block` here, deliberately. Tailwind runs with
+              `important: true` (tailwind.config.js), so `.tw-block` emits
+              `display: block !important` — which ties with cropperjs's
+              `.cropper-hidden { display: none !important }` on specificity and
+              wins on order. The source image then stays visible above the
+              cropper and the dialog shows the photo twice. `display: block` is
+              what the cropper container ends up with anyway.
+            -->
+            <img ref="image" :src="imageSrc" alt="" class="tw-max-w-full" />
           </div>
         </v-card-text>
 
