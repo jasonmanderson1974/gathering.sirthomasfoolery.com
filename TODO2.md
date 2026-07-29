@@ -262,7 +262,33 @@ F4 can run in parallel with F2/F3. Cheap Part-H items slot between deploys.
     avatar shows in header/respondents/comments; `?v=` changes on re-upload;
     `check-signed-in.js` green.
 
-- [ ] **F6 · Admin+ edits a Member/Guest's name, nickname, photo.** `M` — needs F2, F4/F5.
+- [x] **F6 · Admin+ edits a Member/Guest's name, nickname, photo.** `M` — needs F2, F4/F5.
+  **DONE 2026-07-29.** Built as planned. Notes:
+  - **Names may be edited but not erased** — a sent-but-blank name is a new 400
+    `invalid-name`, because `DisplayName` falls back to the name when there is no
+    nickname, so an empty pair would leave the person nameless on every surface. Nickname
+    keeps the opposite rule (empty = clear), matching self-serve.
+  - **All-pointer `db.UserProfileUpdate`**, so "omitted" is distinguishable from "sent
+    empty". `hasCustomName` is set only when a *name* field is present — a nickname-only
+    PATCH must not pin a name nobody chose.
+  - **`UpdateUserProfileByEmail` handles the empty-update case explicitly**: Mongo rejects
+    an empty update document, but "change nothing" is a legitimate submit from an untouched
+    form. It confirms the account exists and reports a match without writing, so the
+    caller's 400-on-no-account still fires.
+  - The dialog binds to `editEmail` and resolves `editingMember` out of `members` each
+    render rather than editing a copied row — that is what refreshes the photo preview in
+    place after an upload, with no extra plumbing.
+  - **Two defects only the browser pass caught** (lint, tests and the build were all green):
+    Vuetify `solo` fields drop their `label` once they hold a value, so a pre-filled form
+    showed unlabelled boxes — use captions above the field, as Settings does. And
+    **`UserAvatarContent`'s monogram border drew four tick marks instead of a ring** since
+    F5: `v-avatar` clips to a circle, so a square border survives only where the square
+    touches the circle. Fixed with `tw-rounded-full`; it was visible on every roll row.
+  - `AvatarEditorDialog` reused unchanged apart from an optional `title` prop. One instance
+    outside the `v-for` — a per-row copy would mean a hidden file input per member.
+  - Verified live end-to-end: admin edits another member's name/nickname, uploads and
+    removes their photo through the cropper, member gets 403 on all three writes while
+    keeping read access to the roll. Both standing harnesses green.
   - `PATCH /admin/member/profile` `{email (required), firstName, lastName, nickname *string}`.
     Guards in order (reuse the patterns at `admin.go:213-226, 262-278`): actor
     `CanManageUsers()` (admin+); superAdmin target → 403 (immutability precedent); target must
@@ -523,8 +549,9 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
 2. **F2 → F3** (nickname end-to-end), slotting **H1/H2/H3** between deploys as cheap wins.
 3. **F4 → F5** (avatars end-to-end; F4 can start parallel to F3), then **H4** once the new
    frontend code is in (so the lint flip covers it).
-4. **F6** (admin editing — reuses everything above).
-5. **F7 → F8 → F9** (mentions: backend → emails → composer).
+4. ~~**F6** (admin editing — reuses everything above).~~ **Done 2026-07-29**, with H4 (and
+   H6/H7) ahead of it.
+5. **F7 → F8 → F9** (mentions: backend → emails → composer). ← **next**
 6. **F10** close-out. Part G items remain background/P3, same as before; **H5** whenever
    calendar code is next touched; **H6–H8** opportunistic.
 
