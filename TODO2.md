@@ -541,6 +541,28 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
   always have owners, so it should only be reachable editing a **legacy** ownerless event — a
   documented keeper. Runtime-check before anyone assumes those arms are dead.
 
+- [ ] **H9 · The cropper refuses a too-small photo without saying so.** `S` · **P3**
+  *Found 2026-07-29 during the post-deploy browser pass on F6, not by lint/tests/build.*
+  With a source image only a little larger than the 256x256 export (a 100x75 fixture
+  reproduces it), cropperjs lays out a degenerate crop box, `getCroppedCanvas`
+  (`AvatarEditorDialog.vue:209`) returns nothing, and the member gets **"That crop could not
+  be saved. Try adjusting it."** (`:215`) — advice that cannot work, since no amount of
+  dragging makes the source bigger. The refusal itself is right (better than uploading a
+  smeared 256x256 upscale); only the diagnosis is wrong.
+  Fix shape: measure the source **before** opening the dialog and reject with a message naming
+  the real cause and the minimum, alongside the `image/*` and 10MB guards already in
+  `onFileChosen` (`:158-165`). Note there is no cropper yet at that point — `getImageData()`
+  is not available — so measure by loading the `FileReader` data URL into an `Image` and
+  reading `naturalWidth/naturalHeight` before calling `openWith` (`:168` already hands it the
+  data URL). A guard at pick time beats one at save time: it fails before the
+  member has spent effort positioning a crop.
+  Low priority because real photos are nowhere near the threshold — phone cameras start
+  around 3000px. It costs someone scanning a small logo or a cropped screenshot, and the
+  current wording sends them in circles.
+  Note for whoever picks this up: `viewMode: 1` + `autoCropArea: 1` (`:191`,`:194`) are what
+  make the box degenerate rather than merely small, so re-check the threshold empirically
+  against those settings instead of assuming exactly 256.
+
 ---
 
 ## Suggested sequencing
@@ -553,7 +575,8 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
    H6/H7) ahead of it.
 5. **F7 → F8 → F9** (mentions: backend → emails → composer). ← **next**
 6. **F10** close-out. Part G items remain background/P3, same as before; **H5** whenever
-   calendar code is next touched; **H6–H8** opportunistic.
+   calendar code is next touched; **H6–H9** opportunistic (**H9** is cheapest folded into the
+   next change that touches `AvatarEditorDialog.vue`).
 
 Workflow rules unchanged from `TODO.md`/`CLAUDE.md`: sync before changes, green commits to
 trunk, deploys are human-run from the VM, cold-load signed-out testing after any router/auth
