@@ -1,4 +1,4 @@
-import { post, patch, put, _delete } from "../fetch_utils"
+import { get, post, patch, put, _delete } from "../fetch_utils"
 
 export const archiveEvent = (eventId, archive) => {
   return post(`/events/${eventId}/archive`, {
@@ -87,10 +87,22 @@ export const votePoll = (eventId, pollId, payload) => {
   return post(`/events/${eventId}/polls/${pollId}/vote`, payload)
 }
 
-// --- Shared lists (F13/F14) ---
+// --- Shared lists (F13/F14, extended by F15/F16) ---
 // The planner owns the lists; everyone signed in owns what they put on them.
 
-/** Create a list (planner/admin). payload: {name, kind: "text"|"location"} */
+/**
+ * Fetch just the lists, author and checker names resolved.
+ *
+ * This is the refresh path (F15). Refetching the whole event to see one new
+ * entry means paying for a user lookup per availability response and again per
+ * sign-up response, which is the wrong trade when several people are working a
+ * list at once. Always an array, never null.
+ */
+export const getLists = (eventId) => {
+  return get(`/events/${eventId}/lists`)
+}
+
+/** Create a list (planner/admin). payload: {name, kind: "text"|"location"|"checklist"} */
 export const createList = (eventId, payload) => {
   return post(`/events/${eventId}/lists`, payload)
 }
@@ -105,7 +117,11 @@ export const deleteList = (eventId, listId) => {
   return _delete(`/events/${eventId}/lists/${listId}`)
 }
 
-/** Add an item to a list (any signed-in user). payload: {text} */
+/**
+ * Add an item to a list (any signed-in user).
+ * payload: {text, parentId?} — parentId nests it under an existing item, up to
+ * three levels deep.
+ */
 export const addListItem = (eventId, listId, payload) => {
   return post(`/events/${eventId}/lists/${listId}/items`, payload)
 }
@@ -115,7 +131,17 @@ export const editListItem = (eventId, listId, itemId, payload) => {
   return put(`/events/${eventId}/lists/${listId}/items/${itemId}`, payload)
 }
 
-/** Delete an item (own, or any if you're a member or above). */
+/**
+ * Delete an item and everything nested under it (own, or any if you're a member
+ * or above). The subtree goes with it, including children someone else added.
+ */
 export const deleteListItem = (eventId, listId, itemId) => {
   return _delete(`/events/${eventId}/lists/${listId}/items/${itemId}`)
+}
+
+/** Tick or untick a checklist item (any signed-in user). */
+export const setListItemChecked = (eventId, listId, itemId, checked) => {
+  return put(`/events/${eventId}/lists/${listId}/items/${itemId}/checked`, {
+    checked,
+  })
 }

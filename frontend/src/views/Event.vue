@@ -270,6 +270,7 @@ import {
   createPoll,
   deletePoll,
   votePoll,
+  getLists,
   createList,
   renameList,
   deleteList,
@@ -336,6 +337,9 @@ export default {
 
     // Sign Up Forms
     currSignUpBlock: null,
+
+    // Shared lists (F15): guards refreshLists against overlapping calls.
+    refreshingLists: false,
   }),
 
 
@@ -601,12 +605,18 @@ export default {
       }
     },
 
-    /** Shared lists (F14): persist then refresh, like polls and comments. */
+    /**
+     * Shared lists (F14): persist then refresh.
+     *
+     * Unlike comments and polls these refresh through refreshLists, not
+     * refreshEvent — several people work a list at once and the whole-event
+     * fetch resolves a user per response before it ever reaches the lists.
+     */
     async onCreateList(payload) {
       const id = this.event.shortId ?? this.event._id
       try {
         await createList(id, payload)
-        await this.refreshEvent()
+        await this.refreshLists()
       } catch (err) {
         this.showError("Could not create the list. Please try again.")
       }
@@ -615,7 +625,7 @@ export default {
       const id = this.event.shortId ?? this.event._id
       try {
         await renameList(id, listId, payload)
-        await this.refreshEvent()
+        await this.refreshLists()
       } catch (err) {
         this.showError("Could not rename the list. Please try again.")
       }
@@ -624,7 +634,7 @@ export default {
       const id = this.event.shortId ?? this.event._id
       try {
         await deleteList(id, listId)
-        await this.refreshEvent()
+        await this.refreshLists()
       } catch (err) {
         this.showError("Could not delete the list. Please try again.")
       }
@@ -633,7 +643,7 @@ export default {
       const id = this.event.shortId ?? this.event._id
       try {
         await addListItem(id, listId, payload)
-        await this.refreshEvent()
+        await this.refreshLists()
       } catch (err) {
         this.showError("Could not add that entry. Please try again.")
       }
@@ -642,7 +652,7 @@ export default {
       const id = this.event.shortId ?? this.event._id
       try {
         await editListItem(id, listId, itemId, payload)
-        await this.refreshEvent()
+        await this.refreshLists()
       } catch (err) {
         this.showError("Could not save that entry. Please try again.")
       }
@@ -651,9 +661,30 @@ export default {
       const id = this.event.shortId ?? this.event._id
       try {
         await deleteListItem(id, listId, itemId)
-        await this.refreshEvent()
+        await this.refreshLists()
       } catch (err) {
         this.showError("Could not remove that entry. Please try again.")
+      }
+    },
+
+    /**
+     * Refresh only the lists (F15).
+     *
+     * Splicing into this.event is safe: processEvent never touches lists, and
+     * EventLists reads them straight off the prop. The busy flag drops
+     * overlapping calls — selecting the Lists tab and expanding a list can
+     * easily land in the same moment.
+     */
+    async refreshLists() {
+      if (this.refreshingLists) return
+      this.refreshingLists = true
+      const id = this.event.shortId ?? this.event._id
+      try {
+        this.$set(this.event, "lists", await getLists(id))
+      } catch (err) {
+        this.showError("Could not refresh the lists. Please try again.")
+      } finally {
+        this.refreshingLists = false
       }
     },
 
