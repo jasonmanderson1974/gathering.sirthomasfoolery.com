@@ -179,9 +179,21 @@ F4 can run in parallel with F2/F3. Cheap Part-H items slot between deploys.
     256×256, **re-encode JPEG q85** (canonicalizes + strips EXIF), upsert + `$set
     avatarUpdatedAt`. New errs codes `invalid-image` / `image-too-large`.
     `DELETE /user/avatar` clears both.
-  - `GET /users/:userId/avatar` in `routes/users.go` — unauthenticated (consistent with
-    `getPublicUserProfile` exposing `Picture`): `Cache-Control: public, max-age=31536000,
-    immutable`, `ETag` = updatedAt, `If-None-Match` → 304, 404 when none.
+  - `GET /users/:userId/avatar` in `routes/users.go` — ~~unauthenticated (consistent with
+    `getPublicUserProfile` exposing `Picture`)~~ **superseded 2026-07-28: the route requires a
+    session** (user's call on the deploy pass). A member's face is membership data on an
+    invite-only club, and the plan's reasoning — that it is no more private than the Google
+    `picture` URL — was too weak to leave every photo fetchable by anyone holding a user id.
+    Gated per-route, not on the `/users` group, so `getPublicUserProfile` beneath it stays
+    reachable while signed out; `routes/users_auth_gate_test.go` drives the real `InitUsers`
+    so a later route can't land on the wrong side of the gate unnoticed. Two knock-ons:
+    `Cache-Control` is **`private`**, not `public` (an authed response behind Cloudflare must
+    not be storable by a shared cache), and `UserAvatarContent` sets
+    `crossorigin="use-credentials"` on **our own** avatar URLs only — production is same-origin
+    so the cookie rides along already, but `npm run serve` is not, and marking the Google
+    `picture` fallback would break it (that CDN refuses credentialed requests).
+    Otherwise unchanged: `max-age=31536000, immutable`, `ETag` = updatedAt,
+    `If-None-Match` → 304, 404 when none, 401 when signed out.
   - Tests: pure decode/validate/re-encode (generate tiny PNG/JPEG fixtures in-test via the
     `image` package; junk + oversized rejection); DB-gated PUT→GET→304→DELETE round-trip.
     Swagger regen. Deployable alone — endpoints are inert without UI.
