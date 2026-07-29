@@ -9,8 +9,8 @@
 > small-club utility over scale. All event access requires sign-in (E3); roles are
 > superAdmin > admin > member > guest.
 >
-> **Status: IN PROGRESS.** F1 and H1 landed 2026-07-28 (`0b5f2272`, `80a20905`) — see their
-> entries for what differed from the plan. Everything else is still planned-not-started. The
+> **Status: IN PROGRESS.** F1, H1 and F2 landed 2026-07-28 (`0b5f2272`, `80a20905`,
+> `719cb4b8`) — see their entries for what differed from the plan. Everything else is still planned-not-started. The
 > feature designs in Part F were reviewed against the codebase on 2026-07-28 (file:line
 > references verified that day) and the three product decisions in "Confirmed decisions" were
 > made by the user. **Line numbers below shift as items land — re-verify before starting one.**
@@ -61,7 +61,19 @@ F4 can run in parallel with F2/F3. Cheap Part-H items slot between deploys.
     empty; both OTP bodies carry it). **Final verification is manual on a real Android device**
     (Gmail's copy-code smart action is heuristic — best-effort, note it in the commit).
 
-- [ ] **F2 · Nickname: model, API, `displayName` sweep.** `M`
+- [x] **F2 · Nickname: model, API, `displayName` sweep.** `M`
+  **DONE 2026-07-28** (`719cb4b8`). Built as planned. Notes for F3/F5/F6/F7:
+  - `allowlistMember.UserId` is a **hex string, not an ObjectID** — `omitempty` cannot omit an
+    ObjectID (a `[12]byte` array), so an unclaimed invitation would ship a zero id reading as
+    real. Do the same for any id added to that struct.
+  - Three planned sweep sites deliberately skipped: the `$posthog.identify` payloads
+    (`App.vue:307`, `SignIn.vue:371`, `Auth.vue:55`) are analytics *traits*, not displayed
+    names, and G1 deletes the stub; `EmailInput.vue:159` `contactToQueryString` operates on
+    Google contacts, which never carry a nickname, and displayName would drop its
+    middle-name trim.
+  - Search and sort follow the displayed name now (respondents, CSV export, directory) —
+    sorting on `firstName` while rendering a nickname misorders visibly.
+  - The roll lives at **`/members`** (route *named* `admin`), not `/admin`.
   - `server/models/user.go`: `Nickname string` (`json:"nickname" bson:"nickname,omitempty"`) +
     method `(u *User) DisplayName()` — nickname if non-empty, else trimmed "First Last".
     `HasCustomName` untouched (it only guards Google-sign-in name overwrites; sign-in never
@@ -338,9 +350,13 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
   `RecurrenceLabel` (its comment claims email/log use; the callers went with Listmonk).
   Also unexport `IsRelease`/`GetDateString` (internal-only). A18-style batch.
 
-- [ ] **H4 · Clear the frontend lint warnings; flip eslint to fully blocking.** `S` · **P2**
-  **Count is stale — re-inventory before starting.** `Settings.vue` alone has 3 warnings
-  (`:270` unused `get`, `:450`/`:468` swallowed `err`) that the "9 across 5 files" tally missed.
+- [ ] **H4 · Clear the frontend lint warnings; flip eslint to fully blocking.** `S–M` · **P2**
+  **The count is wrong because the command is wrong.** `npx eslint src` under eslint 8 lints
+  only `.js` — every `.vue` file is skipped. The real figure is what CI runs, `npm run lint`
+  (`eslint . --ext .js,.vue`): **55 warnings / 0 errors**, not 9. (`frontend-ci.yml:37`'s
+  "~67 remain" is stale in the other direction.) Re-inventory with `npm run lint` before
+  starting; the effort is bigger than `S`. The original 9-warning `.js` list still stands as
+  the subset below:
   `npx eslint src` → 9 warnings / 0 errors across 5 files (`pluginMessagesMixin.js:166-171,237`
   — see H6; `availabilityMixin.js:40` swallowed `err`; `respondentSelectionMixin.js:21`;
   `store/index.js:131`; `sign_in_utils.js:53` — see H7). Clear them and remove the
