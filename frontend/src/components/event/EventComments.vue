@@ -54,6 +54,7 @@
                 :can-delete="canDeleteComment(comment)"
                 :editing="editingId === comment._id"
                 :edit-text.sync="editText"
+                :viewer-id="viewerId"
                 @start-edit="startEdit"
                 @cancel-edit="cancelEdit"
                 @save-edit="saveEdit"
@@ -70,6 +71,7 @@
                   :can-delete="canDeleteComment(reply)"
                   :editing="editingId === reply._id"
                   :edit-text.sync="editText"
+                  :viewer-id="viewerId"
                   @start-edit="startEdit"
                   @cancel-edit="cancelEdit"
                   @save-edit="saveEdit"
@@ -78,15 +80,11 @@
 
                 <!-- Reply composer -->
                 <div class="tw-flex tw-items-end tw-gap-2 tw-pt-1">
-                  <v-textarea
+                  <MentionTextarea
                     v-model="replyText[comment._id]"
                     placeholder="Reply…"
-                    dense
-                    hide-details
-                    auto-grow
-                    :rows="1"
-                    class="tw-flex-grow tw-text-sm"
-                  ></v-textarea>
+                    :candidates="mentionables"
+                  />
                   <v-btn
                     small
                     class="tw-bg-brass tw-text-wood-deep"
@@ -124,6 +122,7 @@
             :can-tag-thread="canSeeMembersOnly"
             :editing="editingId === comment._id"
             :edit-text.sync="editText"
+            :viewer-id="viewerId"
             @start-edit="startEdit"
             @cancel-edit="cancelEdit"
             @save-edit="saveEdit"
@@ -139,15 +138,11 @@
       <!-- Composer -->
       <div class="tw-mt-3 tw-border-t tw-border-brass-dim tw-pt-3">
         <div class="tw-flex tw-items-end tw-gap-2">
-          <v-textarea
+          <MentionTextarea
             v-model="newText"
-            placeholder="Add a message…"
-            dense
-            hide-details
-            auto-grow
-            :rows="1"
-            class="tw-flex-grow tw-text-sm"
-          ></v-textarea>
+            placeholder="Add a message… @ to mention someone"
+            :candidates="mentionables"
+          />
           <v-btn
             small
             class="tw-bg-brass tw-text-wood-deep"
@@ -192,12 +187,14 @@
 import { mapGetters, mapState } from "vuex"
 import dayjs from "dayjs"
 import CommentRow from "@/components/event/CommentRow.vue"
+import MentionTextarea from "@/components/event/MentionTextarea.vue"
 import {
   groupComments,
   replyCount,
   replyCountLabel,
   threadTitle,
 } from "@/components/event/commentThreads"
+import { flattenMentions } from "@/components/event/mentionText"
 
 /**
  * Event discussion (C7) with threads (C13). Presentational: reads
@@ -214,10 +211,16 @@ import {
 export default {
   name: "EventComments",
 
-  components: { CommentRow },
+  components: { CommentRow, MentionTextarea },
 
   props: {
     event: { type: Object, required: true },
+    /**
+     * Who this caller may @mention (F9), fetched once per event by Event.vue.
+     * Empty until it arrives, or if the fetch failed — the composer then behaves
+     * exactly as it did before mentions existed.
+     */
+    mentionables: { type: Array, default: () => [] },
   },
 
   data: () => ({
@@ -260,11 +263,21 @@ export default {
     canPost() {
       return !!this.authUser && this.newText.trim().length > 0
     },
+    viewerId() {
+      return this.authUser?._id ?? ""
+    },
   },
 
   methods: {
-    threadTitle,
     replyCountLabel,
+    /**
+     * A thread's header is plain text, so its mentions are flattened back to
+     * `@Name` first (F9) — otherwise the preview of a comment that starts by
+     * naming someone is mostly token markup.
+     */
+    threadTitle(text) {
+      return threadTitle(flattenMentions(text))
+    },
     formatTime(dt) {
       return dayjs(dt).format("MMM D, h:mm A")
     },

@@ -31,9 +31,17 @@
         </v-btn>
       </div>
 
-      <div v-else class="tw-whitespace-pre-wrap tw-break-words tw-text-sm tw-text-parchment-dim">
-        {{ comment.text }}
-      </div>
+      <!-- One span per part, no whitespace between them: the parts already
+           carry the comment's own spacing and this renders pre-wrap, so any
+           the template added would show up in the message. -->
+      <div v-else class="tw-whitespace-pre-wrap tw-break-words tw-text-sm tw-text-parchment-dim"
+        ><span
+          v-for="(part, i) in parts"
+          :key="i"
+          :class="mentionClass(part)"
+          >{{ part.type === "mention" ? `@${part.text}` : part.text }}</span
+        ></div
+      >
 
       <!-- Controls -->
       <div v-if="!editing" class="tw-mt-0.5 tw-flex tw-gap-3">
@@ -57,6 +65,7 @@
 <script>
 import dayjs from "dayjs"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
+import { splitMentions } from "@/components/event/mentionText"
 
 /**
  * A single comment in the event discussion — used both for top-level messages
@@ -76,11 +85,21 @@ export default {
     canTagThread: { type: Boolean, default: false },
     editing: { type: Boolean, default: false },
     editText: { type: String, default: "" },
+    /** The reader's own account id, so a mention of them stands out (F9). */
+    viewerId: { type: String, default: "" },
   },
 
   emits: ["start-edit", "cancel-edit", "save-edit", "remove", "tag-thread", "update:editText"],
 
   computed: {
+    /**
+     * The comment split into text and mention runs (F9). Mentions are stored
+     * inside the text as `@[Name](id)`, so a comment written before F7, or one
+     * that simply names nobody, comes back as a single text part.
+     */
+    parts() {
+      return splitMentions(this.comment.text)
+    },
     /**
      * The account behind this comment, for the avatar. The server attaches
      * `author` for comments whose account still resolves; guests and deleted
@@ -113,6 +132,18 @@ export default {
   methods: {
     formatTime(dt) {
       return dayjs(dt).format("MMM D, h:mm A")
+    },
+    /**
+     * Mentions read as brass, like every other name-shaped thing in the app;
+     * being named yourself gets a background as well, so you can find it while
+     * scanning a long thread rather than reading for your own name.
+     */
+    mentionClass(part) {
+      if (part.type !== "mention") return null
+      const mine = !!this.viewerId && part.userId === this.viewerId
+      return mine
+        ? "tw-rounded tw-bg-brass/20 tw-px-1 tw-font-medium tw-text-brass"
+        : "tw-font-medium tw-text-brass"
     },
   },
 }

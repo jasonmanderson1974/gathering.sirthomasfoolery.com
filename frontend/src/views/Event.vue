@@ -183,6 +183,7 @@
             <div v-show="bandTab === 'discussion'">
               <EventComments
                 :event="event"
+                :mentionables="mentionables"
                 @add-comment="onAddComment"
                 @edit-comment="onEditComment"
                 @delete-comment="onDeleteComment"
@@ -286,6 +287,7 @@ import {
   tagThread,
   setThreadMembersOnly,
   untagThread,
+  getMentionables,
   createPoll,
   deletePoll,
   votePoll,
@@ -362,6 +364,9 @@ export default {
     // refreshLists from overlapping itself.
     bandTab: "discussion",
     refreshingLists: false,
+
+    // Who the discussion may @mention (F9), fetched once per event.
+    mentionables: [],
   }),
 
 
@@ -714,6 +719,25 @@ export default {
         await this.refreshLists()
       } catch (err) {
         this.showError("Could not update that entry. Please try again.")
+      }
+    },
+
+    /**
+     * Fetch the people this caller may @mention (F9).
+     *
+     * Once per page load, not per keystroke: the roll is ~40 people and the
+     * picker has to open on the first `@` without waiting on the network. A
+     * failure is swallowed — the composer still posts comments, and a
+     * hand-written token still notifies, so a missing picker is a degraded
+     * convenience rather than a broken discussion.
+     */
+    async fetchMentionables() {
+      const id = this.event?.shortId ?? this.event?._id
+      if (!id) return
+      try {
+        this.mentionables = (await getMentionables(id)) ?? []
+      } catch (err) {
+        this.mentionables = []
       }
     },
 
@@ -1092,6 +1116,10 @@ export default {
           return
       }
     }
+
+    // Not awaited and not in `promises`: the mention picker is a convenience on
+    // one tab of the page, so it must never hold up the calendar grid.
+    this.fetchMentionables()
 
     const promises = []
     promises.push(this.fetchAuthUserCalendarEvents())

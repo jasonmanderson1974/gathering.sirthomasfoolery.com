@@ -67,6 +67,16 @@ export const untagThread = (eventId, commentId) => {
   return _delete(`/events/${eventId}/comments/${commentId}/thread`)
 }
 
+/**
+ * Who this caller may @mention here (F9): the whole roll for a member, only the
+ * people already visible on this event for a guest. The server decides which,
+ * and enforces it again when the comment is written — this is the picker's
+ * list, not a permission check.
+ */
+export const getMentionables = (eventId) => {
+  return get(`/events/${eventId}/mentionables`)
+}
+
 // --- Venue / activity polls (C6) ---
 
 /** Create a poll (owner only). payload: {title, allowMultiple?, options: string[]} */

@@ -453,7 +453,33 @@ close-out. Cheap Part-H items slot between deploys.
     escape, verify end-to-end); DB-gated persistence of `Mentions`.
   </details>
 
-- [ ] **F9 · Mention composer UI + rendering.** `L` — needs F7 (F8 independent of this).
+- [x] **F9 · Mention composer UI + rendering.** `L` — needs F7 (F8 independent of this).
+  **DONE 2026-07-29.** Built as planned apart from the picker's mechanics, which the browser
+  had opinions about. Four notes, three of them traps worth keeping:
+  - **The picker is a plain absolutely-positioned list, not a `v-menu`.** A v-menu owns focus
+    and an overlay; both fight a textarea the user is mid-sentence in. A list under the field
+    needs neither and keeps every keystroke in the composer.
+  - **Enter must be bound with `@keydown`, not `@keydown.native`.** `VTextarea.onKeyDown` calls
+    `e.stopPropagation()` on Enter while focused (Vuetify's own guard against Enter closing a
+    surrounding dialog), so a native listener on the component root sees every key *except* the
+    one that matters. It re-emits the event afterwards, so `preventDefault` on the emitted one
+    still suppresses the newline. Cost a debugging session; caught only by driving a real
+    browser, since it can't fail in a node test.
+  - **Escape needed a memory.** `@keyup` re-reads the caret, so the keyup ending the same
+    keypress found the same partial mention and reopened the picker Escape had just closed —
+    Escape looked like a no-op. `dismissedStart` keeps that one mention dismissed while a later
+    `@` still opens normally.
+  - `viewerId` is a prop on `CommentRow` rather than a store read, keeping the row
+    presentational; `EventComments.threadTitle` now flattens before truncating; candidates are
+    fetched fire-and-forget in `Event.vue`'s `created()` so the picker can't hold up the
+    calendar grid, and an empty list just means the composer behaves as it did before mentions.
+  - Verified live against the dev stack with the CDP harness (16 assertions): picker opens and
+    filters, Enter inserts a token the server's pattern matches without breaking the line,
+    Escape dismisses and stays dismissed, the posted comment renders `@Ada Lovelace` styled and
+    never as raw markup, a mention of the reader is highlighted and one of someone else is not,
+    thread headers flatten, the reply composer picks too. Confirmed end-to-end: the token the
+    composer wrote persisted with `mentions: [ObjectId(…)]`, and a guest session's
+    `/mentionables` returned only the one person visible on the event, not the roll.
   - Rendering: new `components/event/mentionText.js` — pure `splitMentions(text)` →
     `[{type:'text'|'mention', text, userId}]` (vitest). `CommentRow.vue` renders mention parts
     as brass-colored spans, the viewer's own mention with a highlighted background; flatten
