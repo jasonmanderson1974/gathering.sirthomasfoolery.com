@@ -68,6 +68,41 @@ func TestBuildInvitationEmailBody(t *testing.T) {
 	}
 }
 
+// Both code emails lead their snippet with the code, so an Android notification
+// shows it even when the subject is truncated. The preheader has to precede the
+// first visible line ("Present this code…" / "Enter this code…"), which is the
+// text a client would otherwise sample.
+func TestCodeEmailsLeadWithTheCodeInThePreheader(t *testing.T) {
+	tests := []struct {
+		name          string
+		body          string
+		wantPreheader string
+		firstVisible  string
+	}{
+		{"sign-in", buildOtpEmailBody("482913"), "482913 is your Fellowship sign-in code", "Present this code"},
+		{"email-change", buildEmailChangeOtpBody("139248"), "139248 is your Fellowship email-change code", "Enter this code"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			pre := strings.Index(tc.body, tc.wantPreheader)
+			if pre == -1 {
+				t.Fatalf("missing preheader %q", tc.wantPreheader)
+			}
+			visible := strings.Index(tc.body, tc.firstVisible)
+			if visible == -1 {
+				t.Fatalf("missing first visible copy %q", tc.firstVisible)
+			}
+			if pre >= visible {
+				t.Errorf("preheader must precede body copy, got pre=%d visible=%d", pre, visible)
+			}
+			if !strings.Contains(tc.body, "mso-hide:all") {
+				t.Error("preheader should be hidden")
+			}
+		})
+	}
+}
+
 // A code is server-generated, but the helper escapes regardless — a code that
 // somehow contained markup must not become markup.
 func TestOtpCodeIsEscaped(t *testing.T) {

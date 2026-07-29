@@ -364,12 +364,17 @@ func generateOtpCode() string {
 // buildOtpEmailBody returns a Fellowship-themed HTML email containing the
 // sign-in code. Inline styles only (email clients strip <style>/<head>), and a
 // dark leather/brass palette that mirrors the sign-in screen.
+//
+// The preheader repeats the code so it survives into the phone notification,
+// where the subject is often truncated and only the snippet is fully visible.
 func buildOtpEmailBody(code string) string {
-	return utils.RenderEmail(
+	return utils.RenderEmailWithPreheader(
+		fmt.Sprintf("%s is your Fellowship sign-in code", code),
 		"Your sign-in code",
 		utils.EmailParagraph("Present this code to complete your entry to the Gathering. It expires in ten minutes.")+
 			utils.EmailCodeBlock(code)+
 			utils.EmailFootnote("If you did not request this code, you may disregard this message. If it doesn't arrive promptly, check your spam folder."),
+		"",
 	)
 }
 

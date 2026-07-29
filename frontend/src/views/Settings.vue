@@ -90,6 +90,7 @@
                 hide-details="auto"
                 placeholder="6-digit code"
                 maxlength="6"
+                autocomplete="one-time-code"
                 :error-messages="emailCodeError"
                 :dense="isPhone"
                 @keydown.enter="verifyEmailCode"

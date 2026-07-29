@@ -332,11 +332,13 @@ func verifyEmailChange(c *gin.Context) {
 // buildEmailChangeOtpBody returns the Fellowship-themed HTML email for
 // confirming a new email address (mirrors the sign-in code email).
 func buildEmailChangeOtpBody(code string) string {
-	return utils.RenderEmail(
+	return utils.RenderEmailWithPreheader(
+		fmt.Sprintf("%s is your Fellowship email-change code", code),
 		"Confirm your new address",
 		utils.EmailParagraph("Enter this code to confirm this address for your Fellowship membership. It expires in ten minutes.")+
 			utils.EmailCodeBlock(code)+
 			utils.EmailFootnote("If you did not request this change, you may disregard this message."),
+		"",
 	)
 }
 

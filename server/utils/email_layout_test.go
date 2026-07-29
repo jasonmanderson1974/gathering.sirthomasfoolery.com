@@ -123,6 +123,62 @@ func TestRenderEmailWithFooterOrdersFooterAfterActions(t *testing.T) {
 	}
 }
 
+// The preheader has to sit before any visible copy — a client samples the
+// document in order, so a preheader after the body defeats the point.
+func TestRenderEmailWithPreheaderComesFirst(t *testing.T) {
+	out := RenderEmailWithPreheader(
+		"482913 is your Fellowship sign-in code",
+		"Your sign-in code",
+		EmailParagraph("body copy"),
+		"",
+	)
+
+	pre := strings.Index(out, "482913 is your Fellowship sign-in code")
+	heading := strings.Index(out, "Your sign-in code")
+	body := strings.Index(out, "body copy")
+
+	if pre == -1 || heading == -1 || body == -1 {
+		t.Fatalf("missing a section (pre=%d heading=%d body=%d)", pre, heading, body)
+	}
+	if pre >= heading || heading >= body {
+		t.Errorf("expected preheader < heading < body, got pre=%d heading=%d body=%d", pre, heading, body)
+	}
+	if !strings.Contains(out, "display:none") || !strings.Contains(out, "mso-hide:all") {
+		t.Error("preheader should be hidden in every client that honours either rule")
+	}
+	if !strings.Contains(out, preheaderPadding) {
+		t.Error("preheader should be padded so body copy stays out of the snippet")
+	}
+}
+
+func TestRenderEmailWithPreheaderEscapes(t *testing.T) {
+	out := RenderEmailWithPreheader(`<script>alert(1)</script>`, "Heading", EmailParagraph("body"), "")
+	if strings.Contains(out, "<script>") {
+		t.Errorf("preheader was not escaped:\n%s", out)
+	}
+}
+
+// Empty means absent, not an empty hidden div padded with filler — otherwise
+// every other email would gain a run of &nbsp; ahead of its real snippet.
+func TestRenderEmailWithPreheaderOmitsEmpty(t *testing.T) {
+	for _, empty := range []string{"", "   "} {
+		out := RenderEmailWithPreheader(empty, "Heading", EmailParagraph("body"), "")
+		if strings.Contains(out, "mso-hide:all") || strings.Contains(out, preheaderPadding) {
+			t.Errorf("empty preheader %q still rendered a block", empty)
+		}
+	}
+}
+
+// The delegating wrappers must not start emitting one.
+func TestRenderEmailHasNoPreheader(t *testing.T) {
+	if strings.Contains(RenderEmail("Heading", EmailParagraph("body")), "mso-hide:all") {
+		t.Error("RenderEmail should delegate with an empty preheader")
+	}
+	if strings.Contains(RenderEmailWithFooter("Heading", EmailParagraph("body"), ""), "mso-hide:all") {
+		t.Error("RenderEmailWithFooter should delegate with an empty preheader")
+	}
+}
+
 func TestEmailCodeBlockEscapes(t *testing.T) {
 	got := EmailCodeBlock("482913")
 	if !strings.Contains(got, "482913") {

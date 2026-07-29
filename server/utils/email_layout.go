@@ -173,6 +173,15 @@ func RenderEmail(heading string, bodyHTML string, actions ...EmailAction) string
 // actions. That is where the "Or visit: <url>" fallback belongs — it backs up
 // the button, so it has to follow it; putting it in bodyHTML pushes it above.
 func RenderEmailWithFooter(heading string, bodyHTML string, footerHTML string, actions ...EmailAction) string {
+	return RenderEmailWithPreheader("", heading, bodyHTML, footerHTML, actions...)
+}
+
+// RenderEmailWithPreheader is RenderEmailWithFooter plus a preheader: hidden
+// text that mail clients lift into the snippet beside the subject in an inbox
+// list or a phone notification. Without one they fall through to the first
+// visible body copy, which for the code emails is "Present this code…" — the
+// one line that doesn't contain the code. An empty preheader renders nothing.
+func RenderEmailWithPreheader(preheader string, heading string, bodyHTML string, footerHTML string, actions ...EmailAction) string {
 	var buttons strings.Builder
 	for _, a := range actions {
 		buttons.WriteString(renderAction(a))
@@ -181,6 +190,7 @@ func RenderEmailWithFooter(heading string, bodyHTML string, footerHTML string, a
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;background-color:%s;">
+  %s
   <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="background-color:%s;">
     <tr>
       <td align="center" style="padding:40px 16px;">
@@ -201,8 +211,33 @@ func RenderEmailWithFooter(heading string, bodyHTML string, footerHTML string, a
   </table>
 </body>
 </html>`,
-		emailPageBg, emailPageBg, emailCardBg, emailBorder, emailInk,
+		emailPageBg, renderPreheader(preheader), emailPageBg, emailCardBg, emailBorder, emailInk,
 		emailBrass, emailBorder, emailInk, html.EscapeString(heading),
 		bodyHTML, buttons.String(), footerHTML,
+	)
+}
+
+// preheaderPadding pushes the visible body copy out of the snippet window. The
+// &nbsp;&zwnj; pair is the standard filler: both are invisible, and alternating
+// them stops clients from collapsing the run into a single space.
+const preheaderPadding = "&nbsp;&zwnj;"
+
+// preheaderPaddingRepeats covers the ~100-140 characters Gmail and Apple Mail
+// sample for a snippet.
+const preheaderPaddingRepeats = 60
+
+// renderPreheader returns the hidden snippet block, or "" for empty text.
+//
+// Every declaration here is doing work in some client: display:none and
+// mso-hide:all for the ones that honour them, and the 1px/zero-size/opacity
+// belt-and-braces for the ones that don't (Gmail on Android ignores
+// display:none on a div often enough to matter).
+func renderPreheader(text string) string {
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	return fmt.Sprintf(
+		`<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;color:transparent;">%s%s</div>`,
+		html.EscapeString(text), strings.Repeat(preheaderPadding, preheaderPaddingRepeats),
 	)
 }

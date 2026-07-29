@@ -158,6 +158,7 @@
               solo
               hide-details="auto"
               maxlength="6"
+              autocomplete="one-time-code"
               :error-messages="otpError"
               @keydown.enter="verifyOtp"
               autofocus
