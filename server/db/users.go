@@ -115,6 +115,42 @@ func GetUsersByEmails(emails []string) map[string]models.User {
 	return result
 }
 
+// GetUsersByIds fetches users for the given ids in a single query and returns
+// them keyed by id hex.
+//
+// The event page resolves three sets of denormalized author names at read time
+// (comments, RSVPs, poll votes) so a nickname change is reflected on rows
+// written before it. Doing that per row would be an N+1 on the hottest endpoint
+// in the app, hence one $in for the union of all three.
+//
+// Ids that match no account are simply absent from the map — the caller falls
+// back to the stored name snapshot, which is what keeps deleted users and
+// legacy guest rows rendering.
+func GetUsersByIds(ids []primitive.ObjectID) map[string]models.User {
+	result := make(map[string]models.User)
+	if len(ids) == 0 {
+		return result
+	}
+
+	cursor, err := UsersCollection.Find(context.Background(), bson.M{
+		"_id": bson.M{"$in": ids},
+	})
+	if err != nil {
+		logger.StdErr.Println(err)
+		return result
+	}
+
+	var users []models.User
+	if err := cursor.All(context.Background(), &users); err != nil {
+		logger.StdErr.Println(err)
+		return result
+	}
+	for _, u := range users {
+		result[u.Id.Hex()] = u
+	}
+	return result
+}
+
 func GetUserByEmail(email string) (*models.User, error) {
 	emailQuery := strings.TrimSpace(email)
 	if emailQuery == "" {

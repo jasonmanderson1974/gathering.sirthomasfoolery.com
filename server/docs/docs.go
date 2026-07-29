@@ -2788,8 +2788,16 @@ const docTemplate = `{
                 "_id": {
                     "type": "string"
                 },
+                "author": {
+                    "description": "Author is the resolved account, attached per-request (never stored) so a\nclient can render the author's avatar and nickname without a lookup per\ncomment. Slimmed to identity fields — see attachCommentAuthors. Nil when\nthe author is a guest row or a deleted account.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.User"
+                        }
+                    ]
+                },
                 "authorName": {
-                    "description": "Denormalized author display name (guest name, or the account's \"First Last\").",
+                    "description": "Denormalized author display name, snapshotted at write time (a legacy\nguest's typed-in name, or the account's DisplayName()).\n\nThe read path overwrites this with the author's CURRENT DisplayName when\nthe account still resolves, so renaming propagates to old comments. The\nstored value stays as the fallback for the cases that never resolve:\ndeleted accounts and legacy guest rows.",
                     "type": "string"
                 },
                 "canManageThread": {

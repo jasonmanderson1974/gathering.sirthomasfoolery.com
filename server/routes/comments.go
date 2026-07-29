@@ -8,7 +8,6 @@
 package routes
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -221,7 +220,7 @@ func addComment(c *gin.Context) {
 		EventId:    event.Id,
 		UserId:     viewer.UserId,
 		IsGuest:    false,
-		AuthorName: strings.TrimSpace(fmt.Sprintf("%s %s", user.FirstName, user.LastName)),
+		AuthorName: user.DisplayName(),
 		Text:       text,
 		CreatedAt:  primitive.NewDateTimeFromTime(time.Now()),
 		ThreadId:   threadId,

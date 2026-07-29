@@ -244,7 +244,7 @@ func votePoll(c *gin.Context) {
 	// The roster name comes from the account, never from the request body.
 	displayName := key
 	if user, err := db.GetUserById(key); err == nil && user != nil {
-		displayName = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
+		displayName = user.DisplayName()
 	}
 
 	if err := applyPollVote(&event.Polls[pollIdx], key, displayName, payload.OptionIds); err != nil {

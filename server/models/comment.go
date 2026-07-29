@@ -20,8 +20,20 @@ type Comment struct {
 	UserId  string `json:"userId" bson:"userId"`
 	IsGuest bool   `json:"isGuest" bson:"isGuest"`
 
-	// Denormalized author display name (guest name, or the account's "First Last").
+	// Denormalized author display name, snapshotted at write time (a legacy
+	// guest's typed-in name, or the account's DisplayName()).
+	//
+	// The read path overwrites this with the author's CURRENT DisplayName when
+	// the account still resolves, so renaming propagates to old comments. The
+	// stored value stays as the fallback for the cases that never resolve:
+	// deleted accounts and legacy guest rows.
 	AuthorName string `json:"authorName" bson:"authorName"`
+
+	// Author is the resolved account, attached per-request (never stored) so a
+	// client can render the author's avatar and nickname without a lookup per
+	// comment. Slimmed to identity fields — see attachCommentAuthors. Nil when
+	// the author is a guest row or a deleted account.
+	Author *User `json:"author,omitempty" bson:"-"`
 
 	Text      string              `json:"text" bson:"text"`
 	CreatedAt primitive.DateTime  `json:"createdAt" bson:"createdAt"`

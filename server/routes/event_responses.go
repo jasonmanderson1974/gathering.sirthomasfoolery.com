@@ -924,7 +924,7 @@ func rsvpToEvent(c *gin.Context) {
 	// Identity comes from the account, never from the request body.
 	if user, err := db.GetUserById(key); err == nil && user != nil {
 		rsvp.Email = user.Email
-		rsvp.Name = fmt.Sprintf("%s %s", user.FirstName, user.LastName)
+		rsvp.Name = user.DisplayName()
 	}
 
 	if event.Rsvps == nil {

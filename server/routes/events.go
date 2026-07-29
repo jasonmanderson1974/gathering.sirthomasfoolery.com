@@ -638,6 +638,13 @@ func getEvent(c *gin.Context) {
 		}
 	}
 
+	// Names on comments, RSVPs and poll votes are snapshots taken when each was
+	// written, so a member who has since set a nickname would still appear under
+	// their old name. Re-resolve them against the accounts as they are now — one
+	// batched lookup for all three. Runs AFTER visibleComments so a hidden
+	// thread's authors are never even looked up.
+	resolveEventDisplayNames(event)
+
 	// Apply privacy logic based on blindAvailabilityEnabled
 	if !utils.Coalesce(event.BlindAvailabilityEnabled) {
 		// Blind availability is NOT enabled - return response as-is
