@@ -233,6 +233,11 @@ definitions:
       isSignUpForm:
         description: Sign up form details
         type: boolean
+      lists:
+        description: Shared lists (F13). Planner-created; anyone signed in adds items.
+        items:
+          $ref: '#/definitions/models.EventList'
+        type: array
       location:
         description: |-
           Free-text venue/address for the gathering (C12). Surfaced on the event
@@ -307,6 +312,37 @@ definitions:
           When true (only meaningful with HasSpecificTimes), recipients must select
           an entire contiguous block of specific times at once, not individual slots.
         type: boolean
+    type: object
+  models.EventList:
+    properties:
+      _id:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/models.EventListItem'
+        type: array
+      kind:
+        description: |-
+          Kind is ListKindText or ListKindLocation, fixed when the list is created.
+          A location list feeds its input through the Google address lookup and
+          renders each item as a maps link; it stores the same plain string either
+          way, matching Event.Location.
+        type: string
+      name:
+        type: string
+    type: object
+  models.EventListItem:
+    properties:
+      _id:
+        type: string
+      authorName:
+        type: string
+      createdAt:
+        type: integer
+      text:
+        type: string
+      userId:
+        type: string
     type: object
   models.EventType:
     enum:
@@ -1493,6 +1529,191 @@ paths:
           schema:
             $ref: '#/definitions/responses.Error'
       summary: Resolves an event identifier to both short and long IDs
+      tags:
+      - events
+  /events/{eventId}/lists:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: List name and kind (text|location)
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            kind:
+              type: string
+            name:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.EventList'
+      summary: Creates a shared list on an event (planner or admin)
+      tags:
+      - events
+  /events/{eventId}/lists/{listId}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: List ID
+        in: path
+        name: listId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Deletes a shared list and everything on it (planner or admin)
+      tags:
+      - events
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: List ID
+        in: path
+        name: listId
+        required: true
+        type: string
+      - description: New list name
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            name:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Renames a shared list (planner or admin)
+      tags:
+      - events
+  /events/{eventId}/lists/{listId}/items:
+    post:
+      consumes:
+      - application/json
+      description: Open to every signed-in user, guests included — filling in the
+        lists is the point of them.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: List ID
+        in: path
+        name: listId
+        required: true
+        type: string
+      - description: Item text
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            text:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.EventListItem'
+      summary: Adds an item to a shared list
+      tags:
+      - events
+  /events/{eventId}/lists/{listId}/items/{itemId}:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: List ID
+        in: path
+        name: listId
+        required: true
+        type: string
+      - description: Item ID
+        in: path
+        name: itemId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Deletes a list item (own, or any when the caller is a member or above)
+      tags:
+      - events
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: List ID
+        in: path
+        name: listId
+        required: true
+        type: string
+      - description: Item ID
+        in: path
+        name: itemId
+        required: true
+        type: string
+      - description: New item text
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            text:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Edits one of the caller's own list items
       tags:
       - events
   /events/{eventId}/polls:

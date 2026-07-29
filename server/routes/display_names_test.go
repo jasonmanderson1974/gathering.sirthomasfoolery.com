@@ -145,12 +145,13 @@ func TestResolvePollVoteNames(t *testing.T) {
 	}
 }
 
-// One query for all three sources is the point — so the id set has to be the
+// One query for all four sources is the point — so the id set has to be the
 // deduped union, and must exclude everything that isn't an account id.
 func TestEventDisplayNameIdsDedupesTheUnion(t *testing.T) {
 	shared := primitive.NewObjectID()
 	rsvpOnly := primitive.NewObjectID()
 	voteOnly := primitive.NewObjectID()
+	listOnly := primitive.NewObjectID()
 
 	comments := []models.Comment{
 		{UserId: shared.Hex()},
@@ -166,11 +167,16 @@ func TestEventDisplayNameIdsDedupesTheUnion(t *testing.T) {
 	polls := []models.Poll{{Options: []models.PollOption{{
 		Votes: map[string]string{shared.Hex(): "x", voteOnly.Hex(): "y", "Guest Tom": "z"},
 	}}}}
+	lists := []models.EventList{{Items: []models.EventListItem{
+		{UserId: shared},
+		{UserId: listOnly},
+		{}, // an item with no author id contributes nothing
+	}}}
 
-	ids := eventDisplayNameIds(comments, rsvps, polls)
+	ids := eventDisplayNameIds(comments, rsvps, polls, lists)
 
-	if len(ids) != 3 {
-		t.Fatalf("got %d ids, want 3 (the deduped union): %v", len(ids), ids)
+	if len(ids) != 4 {
+		t.Fatalf("got %d ids, want 4 (the deduped union): %v", len(ids), ids)
 	}
 	found := make(map[primitive.ObjectID]bool, len(ids))
 	for _, id := range ids {
@@ -179,7 +185,7 @@ func TestEventDisplayNameIdsDedupesTheUnion(t *testing.T) {
 		}
 		found[id] = true
 	}
-	for _, want := range []primitive.ObjectID{shared, rsvpOnly, voteOnly} {
+	for _, want := range []primitive.ObjectID{shared, rsvpOnly, voteOnly, listOnly} {
 		if !found[want] {
 			t.Errorf("missing id %s", want.Hex())
 		}
@@ -187,7 +193,7 @@ func TestEventDisplayNameIdsDedupesTheUnion(t *testing.T) {
 }
 
 func TestEventDisplayNameIdsEmptyWhenNothingToResolve(t *testing.T) {
-	if ids := eventDisplayNameIds(nil, nil, nil); len(ids) != 0 {
+	if ids := eventDisplayNameIds(nil, nil, nil, nil); len(ids) != 0 {
 		t.Errorf("got %v, want no ids (and therefore no query)", ids)
 	}
 }

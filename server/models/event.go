@@ -230,6 +230,43 @@ type PollOption struct {
 	Votes map[string]string `json:"votes" bson:"votes,omitempty"`
 }
 
+// EventList is a shared checklist on an event (F13) — "Menu", "Bars to Visit".
+// The planner creates the list and fixes its Kind; anyone signed in adds items
+// to it. Stored as an array on the Event like Polls, but every mutation is a
+// targeted array update (see db/event_lists.go) rather than a whole-array $set:
+// unlike polls, which a handful of people vote on occasionally, a list invites
+// everyone to append at once, and rewriting the array from a value read earlier
+// in the request loses concurrent additions.
+type EventList struct {
+	Id   primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
+	Name string             `json:"name" bson:"name,omitempty"`
+	// Kind is ListKindText or ListKindLocation, fixed when the list is created.
+	// A location list feeds its input through the Google address lookup and
+	// renders each item as a maps link; it stores the same plain string either
+	// way, matching Event.Location.
+	Kind  string          `json:"kind" bson:"kind,omitempty"`
+	Items []EventListItem `json:"items" bson:"items,omitempty"`
+}
+
+// The two list kinds. Anything else is rejected at write time rather than
+// defaulted, so a typo can't quietly produce a list that renders as plain text.
+const (
+	ListKindText     = "text"
+	ListKindLocation = "location"
+)
+
+// EventListItem is one entry on a list. AuthorName is a DisplayName() snapshot
+// taken at write time and re-resolved on read (see routes/display_names.go), so
+// it survives the author's account being deleted but still follows a nickname
+// change.
+type EventListItem struct {
+	Id         primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
+	Text       string             `json:"text" bson:"text,omitempty"`
+	UserId     primitive.ObjectID `json:"userId" bson:"userId,omitempty"`
+	AuthorName string             `json:"authorName" bson:"authorName,omitempty"`
+	CreatedAt  primitive.DateTime `json:"createdAt" bson:"createdAt,omitempty"`
+}
+
 type SignUpBlock struct {
 	Id        primitive.ObjectID  `json:"_id" bson:"_id,omitempty"`
 	Name      string              `json:"name" bson:"name,omitempty"`
@@ -323,6 +360,9 @@ type Event struct {
 	// Venue / activity polls (C6). Owner-created multiple-choice polls; votes
 	// live on each option.
 	Polls []Poll `json:"polls" bson:"polls,omitempty"`
+
+	// Shared lists (F13). Planner-created; anyone signed in adds items.
+	Lists []EventList `json:"lists" bson:"lists,omitempty"`
 
 	// Whether this (non-recurring) gathering has been captured into the
 	// Chronicle (C10). Set once by the scheduler after the gathering ends so it

@@ -51,11 +51,13 @@ func slimUserForDisplay(user models.User) *models.User {
 }
 
 // eventDisplayNameIds collects the union of account ids referenced by the
-// comments, RSVPs and poll votes handed to it — one id set for one query.
+// comments, RSVPs, poll votes and list items handed to it — one id set for one
+// query.
 func eventDisplayNameIds(
 	comments []models.Comment,
 	rsvps map[string]*models.Rsvp,
 	polls []models.Poll,
+	lists []models.EventList,
 ) []primitive.ObjectID {
 	seen := make(map[primitive.ObjectID]bool)
 	ids := make([]primitive.ObjectID, 0, len(comments)+len(rsvps))
@@ -83,6 +85,14 @@ func eventDisplayNameIds(
 			for key := range option.Votes {
 				add(key)
 			}
+		}
+	}
+	for _, list := range lists {
+		for _, item := range list.Items {
+			if item.UserId.IsZero() {
+				continue
+			}
+			add(item.UserId.Hex())
 		}
 	}
 	return ids
@@ -146,11 +156,29 @@ func resolvePollVoteNames(polls []models.Poll, users map[string]models.User) {
 	}
 }
 
-// resolveEventDisplayNames applies all three in one pass over one lookup.
+// resolveListItemNames overwrites each list item's serialized author name with
+// the account's current DisplayName. Items whose author no longer resolves keep
+// their stored snapshot.
+func resolveListItemNames(lists []models.EventList, users map[string]models.User) {
+	for listIdx := range lists {
+		items := lists[listIdx].Items
+		for itemIdx := range items {
+			user, ok := users[items[itemIdx].UserId.Hex()]
+			if !ok {
+				continue
+			}
+			if name := user.DisplayName(); name != "" {
+				items[itemIdx].AuthorName = name
+			}
+		}
+	}
+}
+
+// resolveEventDisplayNames applies all four in one pass over one lookup.
 // Best-effort: an id that doesn't resolve just keeps its snapshot, and an
 // empty id set skips the query entirely.
 func resolveEventDisplayNames(event *models.Event) {
-	ids := eventDisplayNameIds(event.Comments, event.Rsvps, event.Polls)
+	ids := eventDisplayNameIds(event.Comments, event.Rsvps, event.Polls, event.Lists)
 	if len(ids) == 0 {
 		return
 	}
@@ -161,4 +189,5 @@ func resolveEventDisplayNames(event *models.Event) {
 	event.Comments = attachCommentAuthors(event.Comments, users)
 	resolveRsvpNames(event.Rsvps, users)
 	resolvePollVoteNames(event.Polls, users)
+	resolveListItemNames(event.Lists, users)
 }

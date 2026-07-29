@@ -53,6 +53,12 @@ var eventRoutes = []struct {
 	{http.MethodPost, "/api/events/abc/polls", false},
 	{http.MethodDelete, "/api/events/abc/polls/p1", false},
 	{http.MethodPost, "/api/events/abc/polls/p1/vote", false},
+	{http.MethodPost, "/api/events/abc/lists", false},
+	{http.MethodPatch, "/api/events/abc/lists/l1", false},
+	{http.MethodDelete, "/api/events/abc/lists/l1", false},
+	{http.MethodPost, "/api/events/abc/lists/l1/items", false},
+	{http.MethodPut, "/api/events/abc/lists/l1/items/i1", false},
+	{http.MethodDelete, "/api/events/abc/lists/l1/items/i1", false},
 }
 
 func newEventRouter() *gin.Engine {
@@ -123,6 +129,8 @@ func TestEventRoutes_TableCoversEveryRegisteredRoute(t *testing.T) {
 		p := strings.Replace(rt.path, "/abc", "/:eventId", 1)
 		p = strings.Replace(p, "/c1", "/:commentId", 1)
 		p = strings.Replace(p, "/p1", "/:pollId", 1)
+		p = strings.Replace(p, "/l1", "/:listId", 1)
+		p = strings.Replace(p, "/i1", "/:itemId", 1)
 		listed[rt.method+" "+p] = true
 	}
 

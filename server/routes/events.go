@@ -65,6 +65,12 @@ func InitEvents(router *gin.RouterGroup) {
 	authed.POST("/:eventId/polls", createPoll)
 	authed.DELETE("/:eventId/polls/:pollId", deletePoll)
 	authed.POST("/:eventId/polls/:pollId/vote", votePoll)
+	authed.POST("/:eventId/lists", createEventList)
+	authed.PATCH("/:eventId/lists/:listId", renameEventList)
+	authed.DELETE("/:eventId/lists/:listId", deleteEventList)
+	authed.POST("/:eventId/lists/:listId/items", addEventListItem)
+	authed.PUT("/:eventId/lists/:listId/items/:itemId", editEventListItem)
+	authed.DELETE("/:eventId/lists/:listId/items/:itemId", deleteEventListItem)
 }
 
 // trimmedLocation normalizes a venue submitted by a client. A nil pointer means
