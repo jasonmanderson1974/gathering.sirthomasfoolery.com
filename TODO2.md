@@ -14,10 +14,13 @@
 > their entries for what differed from the plan. F11 and F12 were opened out of F5, H9 out of F6.
 > **F13/F14 (Lists of Lists) were added and built 2026-07-29** (`c7ad40b4`, `647a07bc`, plus
 > `c6493dc3` making the lists collapsible on a direct request), taking priority over the mention
-> track at the user's request. **F7 and F8 landed 2026-07-29** — everything else is still
-> planned-not-started, and **F9 (the mention composer + rendering) is next**. F7 and F8 are both
+> track at the user's request. **F7 and F8 landed 2026-07-29** — F7 and F8 are both
 > deployed-safe on their own: tokens render as literal text until F9, and mention emails already
 > fire for anyone who hand-writes a token.
+> **F15/F16 (Lists of Lists v2) were added 2026-07-29 and take priority over F9** at the user's
+> request — lists are expected to carry real weight (5–7 people on one event's lists at once),
+> so the side panel becomes a tabbed full-width band, items nest, a checklist kind arrives and
+> refreshes stop paying for a whole-event refetch. **F15 is next**; F9 follows.
 > The feature designs in Part F
 > were reviewed against the codebase on 2026-07-28 and the product decisions in the two
 > "Confirmed decisions" blocks were made by the user.
@@ -50,6 +53,28 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
   someone else set up, even though they can remove individual items in it.
 - **Items: anyone signed in adds; you may edit and delete your own; members+ may delete
   anyone's.** Editing is own-only — there is no edit-anyone right at any role.
+
+## Confirmed decisions (user, 2026-07-29) — Lists of Lists **v2** (F15/F16)
+
+Taken after F13/F14 shipped, on the expectation that lists carry real weight: not many events at
+once, but **5–7 people working a single event's lists simultaneously** is likely. That number is
+what drives the refresh design below — it is too many for "refetch on your own writes only", and
+far too few to justify a realtime layer this app has never had.
+
+- **Tabbed, full width — not a side panel.** Discussion and Lists become two tabs over one
+  full-width band. The tab is labelled **"Lists"**; the existing list/entry vocabulary stays
+  (the user's "Tasks" was shorthand, not a rename).
+- **Nesting: 3 levels total** — item → child → grandchild, and a grandchild takes no children.
+  **All three kinds nest**, not just checklists. Every level is independently collapsible.
+- **Third kind: Checklist**, beside Anything (`text`) and Places (`location`). Entries carry a
+  checkbox **anyone signed in may tick or untick**, guests included — same reasoning as adding
+  items. Track **only the last person to change the state**, in both directions, with no
+  history: "Checked by Ada" / "Unchecked by Bart".
+- **Deleting an item deletes its subtree** (cascade), atomically. The right to delete an item is
+  the right to delete what hangs off it.
+- **Refresh is explicit, not polled**: on selecting the Lists tab, on expanding a list, and from
+  a refresh icon in the panel's top-right. No `setInterval` — the app has never had one and
+  three deliberate triggers cover a 5–7-person work session.
 
 ---
 
@@ -518,6 +543,122 @@ close-out. Cheap Part-H items slot between deploys.
     whole discussion. Two details the pattern needed: the rename/delete buttons live in the header
     so their clicks are `.stop`ped, and a just-created list opens itself (the create path only
     knows the name it sent, so the watcher matches the refetched list by name, from the end).
+  - **The 2/3 + 1/3 side-panel layout is superseded by F16** (2026-07-29) — the panel becomes the
+    Lists tab of a full-width tabbed band. Everything else here still stands; the collapse idiom
+    above is what F16's per-item nesting copies.
+
+- [ ] **F15 · Lists v2 backend: nesting, checklists, cascade delete, a cheap lists GET.** `M` ·
+  **P1** — no F-deps (extends F13). **Deployable alone and inert**: every new field is
+  `omitempty`, the two new routes are additive, and an old client never sends `parentId` or
+  `checked`.
+  - **Nesting is stored flat**: `ParentId *primitive.ObjectID` on `EventListItem`
+    (`models/event.go:262-268`), nil/absent = top-level, so **existing items need no migration**.
+    A pointer, not a bare ObjectID — `omitempty` cannot omit a `[12]byte` array, and a zero id
+    would serialize as 24 zeros and read as a real parent (the F2 lesson, restated because it
+    bites the same way here).
+    Nested *arrays* were rejected: every mutation in `db/event_lists.go` is a single atomic
+    `UpdateByID` with 2-level `arrayFilters`, and depth-N arrays would drag back the whole-array
+    rewrite that the package comment there exists to warn against (polls' lost-update bug).
+  - **Depth is validated at insert** against the event as read, and unlike the item cap that is
+    exact rather than advisory: items are never re-parented, so an item's depth is immutable once
+    written. `maxListItemDepth = 3`; new pure `listItemDepth(list, item)` walks `ParentId`
+    (missing parent counts as root, walk bounded by item count so malformed data can't loop) and
+    `addEventListItem` rejects `parent depth + 1 >= 3` with 400 `list-depth-exceeded`.
+    The one race left is the parent being deleted between read and `$push`, which yields an
+    **orphan** — rendered at root by the frontend, not swept server-side.
+  - **Cascade delete**: `collectDescendantIds(list, rootId)` (pure, includes the root) then ONE
+    `$pull {"lists.$[l].items": {"_id": {"$in": ids}}}` — a single-document update, therefore
+    atomic. `db.DeleteEventListItem` is **replaced** by `DeleteEventListItems(eventId, listId,
+    itemIds)` rather than kept alongside it: the single-item case is a slice of one, and two code
+    paths for one operation is how they drift.
+  - **Checklist kind**: `ListKindChecklist = "checklist"` (`models/event.go:253-256`),
+    `validListKind` widens. Four new fields on the item — `Checked bool`,
+    `CheckedBy *primitive.ObjectID`, `CheckedByName string`, `CheckedAt primitive.DateTime`, all
+    `omitempty`. Absent = never toggled; after the first toggle all four are always `$set`
+    together, so `checked:false` **with** a name renders "Unchecked by Bart" while an untouched
+    item renders nothing. `omitempty` on the bool is safe because the write is a literal `bson.M`
+    `$set` (struct tags don't apply to it) and an absent field reads falsy on the client.
+  - `PUT /events/:eventId/lists/:listId/items/:itemId/checked` `{checked}` — **no gate beyond
+    being signed in**, same reasoning as `addEventListItem`. Bind as `Checked *bool` with
+    `binding:"required"`: a bare `bool` would reject `false`, i.e. every uncheck. Wrong kind of
+    list → 400 `not-a-checklist`. `db.SetEventListItemChecked` returns **MatchedCount > 0**, not
+    ModifiedCount — re-checking an already-checked item legitimately modifies nothing and must
+    not 404.
+  - `GET /events/:eventId/lists` — `loadListContext` (so, any signed-in user, the same access
+    `getEvent` already grants post-E3), resolve names, return the bare lists array with nil
+    normalized to `[]`. **This is the point of the whole refresh story**: `getEvent`
+    (`routes/events.go:496-699`) does an N+1 `GetUserById` per availability responder *and*
+    another per sign-up response before it ever reaches the lists, so refetching the event to see
+    one new checkbox is absurd at 5–7 concurrent users. New `resolveListDisplayNames(lists)` in
+    `display_names.go` = `eventDisplayNameIds(nil,nil,nil,lists)` → one `db.GetUsersByIds` →
+    `resolveListItemNames`. Zero N+1.
+  - Read-time name resolution grows to cover the checker: `eventDisplayNameIds`' lists loop
+    (`display_names.go:90-97`) also collects `CheckedBy` when non-nil, and
+    `resolveListItemNames` (:162-175) overwrites `CheckedByName` in the same pass — so a nickname
+    change propagates to "Checked by …" exactly as F3 did for authors.
+  - **Both new routes must be added to the `eventRoutes` table** in `event_auth_gate_test.go`
+    (:23-63) — `TestEventRoutes_TableCoversEveryRegisteredRoute` fails until they are, which is
+    the intended behaviour and how F13's six routes were caught. `/l1`/`/i1` placeholders already
+    map back; `/checked` is a literal segment and needs no replace-chain entry. Also extend
+    `listsTestRouter` (`event_lists_db_test.go:19-29`), which duplicates the route table by hand.
+  - Tests: pure — `validListKind` + checklist; `listItemDepth` (root/child/grandchild/orphan/
+    cycle-terminates); `collectDescendantIds` (leaf, full subtree, siblings excluded); the
+    display-name additions. DB-gated — nested add stores `parentId`, a 4th level 400s, unknown
+    parent 404s; cascade delete takes the grandchild and spares the sibling, works across authors,
+    stays idempotent; check→uncheck round-trip with attribution both directions, 400 on a text
+    list, nickname resolving at read time without writing back; the GET (401 anonymous, resolved
+    names signed in, `[]` not `null` when empty). Swagger regen.
+
+- [ ] **F16 · Lists v2 frontend: the tabbed band, the tree, the checkboxes.** `L` · **P1** —
+  needs F15. Split into three deployable commits (plumbing → tabs → tree/checklist) so trunk
+  stays green and the endpoint is proven live before any UI leans on it.
+  - **Plumbing first, UI unchanged.** `EventService.js` gains `getLists(eventId)` (needs the
+    `get` import — the lists section has only ever used post/patch/put/delete) and
+    `setListItemChecked(...)`. `Event.vue` gains `refreshLists()` — `getLists` then
+    `this.$set(this.event, "lists", lists)` — and all six list handlers (:605-658) swap
+    `refreshEvent()` for it. Safe to splice: `processEvent` never touches `lists`, and
+    `EventLists`' `pendingExpandName` watcher keys off `lists` changing, so create-then-auto-expand
+    still fires. A `refreshingLists` flag drops overlapping calls (tab-select and expand can
+    coincide).
+  - **Tabs: the `NewDialog.vue:15-39` idiom** (a row of small text `v-btn`s, active class
+    `tw-bg-brass/10 tw-text-brass`), not `SlideToggle` — that is a segmented *value* control with
+    equal-width sliding border, the wrong register for switching panels. The app has no `v-tabs`
+    anywhere and this stays consistent with what it does have.
+    `bandTab` lives in `Event.vue` (it owns `refreshLists`, so the watcher sits next to what it
+    calls). Panels are **`v-show`, not `v-if`** — drafts, `expandedThreads` and `expandedLists`
+    must survive a tab switch, and the watcher supplies the fetch-on-select that `v-if` +
+    `created()` would otherwise have given. Labels carry counts (`Discussion (12)` / `Lists (3)`,
+    omitted at 0): with the other panel now hidden, the count is the only signal there is
+    anything behind it.
+  - **`EventLists`' root `v-if="lists.length || canManage"` must go** — correct for a side panel
+    that should stay out of the way, wrong for a tab, where a guest on an event with no lists
+    would select "Lists" and get a blank band. Always render; show "No lists yet."
+  - Refresh icon (`mdi-refresh`) in the panel's title row emitting `refresh`; `toggleList`'s
+    **expand** branch emits it too. Both land on `Event.vue`'s `refreshLists`.
+  - **The tree renders from a flat list of precomputed rows, not a recursive component.** New pure
+    `components/event/eventLists.js` (the `commentThreads.js` pattern): `flattenListItems(items,
+    collapsedIds)` → `[{item, depth, hasChildren, collapsed}]` DFS, orphans at root, cycle-guarded;
+    `canAddChild(depth)`; `checkStateLabel(item)`. The vitest env is node with no jsdom, so
+    anything left inside the `.vue` is untestable — same constraint that shaped F5 and F14.
+    Indent from a **static** class map `["", "tw-pl-6", "tw-pl-12"]`; Tailwind purges on literal
+    source text, so a computed `` `tw-pl-${n}` `` would emit nothing.
+  - Per-item: chevron when it has children (toggling `collapsedItemIds` — children default
+    **expanded**, since the list header is already the collapse unit and subtrees are small); a
+    "+" button only when `canAddChild(row.depth)`, opening ONE inline sub-composer at a time
+    (`addingChildOf` + `childDraftText`, mirroring `editingItemId` — a second keyed draft map
+    would repeat F14's reactivity trap for no gain); `add-item` now carries `{text, parentId}`.
+  - Checklist rows: a clickable brass icon-checkbox (`mdi-checkbox-marked` /
+    `mdi-checkbox-blank-outline` in a `v-icon`, the `EventPolls.vue:213-221` idiom) — there is no
+    brass-themed `v-checkbox` in the app and a default Vuetify one looks wrong on leather.
+    Emits `toggle-item-checked`. Footer line shows `authorName` plus `checkStateLabel(item)`.
+    Third radio in the new-list form (`EventLists.vue:232-235`).
+  - Tests: vitest for all three pure helpers (legacy flat items → all depth 0; DFS order;
+    collapse hides descendants but keeps the row; orphan at root; cycle terminates; empty).
+    **Then verify live** — F5, F6 and F14 each shipped or nearly shipped a defect that lint, tests
+    and the build all passed: tab state surviving a switch, the network tab showing `/lists` and
+    not `/events/:id`, a second session's check appearing after a refresh, 3 levels nesting and
+    the 4th blocked, cascade delete, guest vs member rights, free text still accepted by
+    `LocationInput` with no Google key, two viewports, both standing harnesses.
 
 <details>
 <summary>Original F13/F14 design (as planned 2026-07-29)</summary>
@@ -823,10 +964,12 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
    H6/H7) ahead of it.
 5. ~~**F13 → F14** (Lists of Lists: backend → panel).~~ **Done 2026-07-29**, taken ahead of the
    mention track at the user's request. The two were independent, so nothing was rewritten.
-6. **F7 → F8 → F9** (mentions: backend → emails → composer). **F7 and F8 done 2026-07-29**;
-   **F9 ← next** — the composer and the mention rendering, after which the feature track is
-   complete and only F10's close-out sweep remains.
-7. **F10** close-out. Part G items remain background/P3, same as before; **H5** whenever
+6. **F7 → F8** (mentions: backend → emails). **Both done 2026-07-29.**
+7. **F15 → F16** (Lists v2: backend → tabbed band, tree, checklists). **← next**, taken ahead of
+   F9 at the user's request 2026-07-29 for the same reason F13/F14 were: the two tracks share no
+   code, so the order costs nothing. F16 lands as three commits (plumbing → tabs → tree).
+8. **F9** (the mention composer + rendering), after which the feature track is complete.
+9. **F10** close-out. Part G items remain background/P3, same as before; **H5** whenever
    calendar code is next touched; **H6–H9** opportunistic (**H9** is cheapest folded into the
    next change that touches `AvatarEditorDialog.vue`).
 
