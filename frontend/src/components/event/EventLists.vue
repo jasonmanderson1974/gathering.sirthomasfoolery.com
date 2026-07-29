@@ -90,15 +90,19 @@
           </template>
         </div>
 
-        <!-- Entries (only while the list is open) -->
+        <!-- Entries (only while the list is open). Rendered from a flat list of
+             precomputed rows rather than a recursive component, so the tree
+             building itself is a pure function with tests. -->
         <div v-if="isExpanded(list._id)" class="tw-mt-2 tw-space-y-1">
           <div
-            v-for="item in itemsOf(list)"
-            :key="item._id"
-            class="tw-rounded tw-px-2 tw-py-1 hover:tw-bg-brass/10"
+            v-for="row in rowsOf(list)"
+            :key="row.item._id"
+            :class="`tw-rounded tw-px-2 tw-py-1 hover:tw-bg-brass/10 ${
+              indentClass(row.depth)
+            }`"
           >
             <!-- Inline edit of one's own entry -->
-            <template v-if="editingItemId === item._id">
+            <template v-if="editingItemId === row.item._id">
               <LocationInput
                 v-if="isLocationList(list)"
                 v-model="editText"
@@ -106,7 +110,7 @@
                 hide-details
                 hide-icon
                 autofocus
-                @enter="submitEdit(list, item)"
+                @enter="submitEdit(list, row.item)"
               />
               <v-text-field
                 v-else
@@ -115,7 +119,7 @@
                 hide-details
                 autofocus
                 :maxlength="maxItemLength"
-                @keyup.enter="submitEdit(list, item)"
+                @keyup.enter="submitEdit(list, row.item)"
                 @keyup.esc="cancelEdit"
               />
               <div class="tw-mt-2 tw-flex tw-gap-2">
@@ -124,55 +128,152 @@
                   small
                   class="tw-bg-brass tw-text-wood-deep"
                   :disabled="!editText.trim()"
-                  @click="submitEdit(list, item)"
+                  @click="submitEdit(list, row.item)"
                   >Save</v-btn
                 >
               </div>
             </template>
 
             <div v-else class="tw-flex tw-items-start tw-gap-2">
-              <v-icon small class="tw-mt-0.5 tw-flex-none tw-text-parchment-dim">
+              <!-- Collapse toggle, in a fixed-width slot that stays empty on an
+                   entry with no children, so text lines up down the column. -->
+              <div class="tw-mt-0.5 tw-w-4 tw-flex-none">
+                <v-icon
+                  v-if="row.hasChildren"
+                  small
+                  class="tw-cursor-pointer tw-text-parchment-dim"
+                  :title="row.collapsed ? 'Show sub-entries' : 'Hide sub-entries'"
+                  @click="toggleItem(row.item._id)"
+                >
+                  {{ row.collapsed ? "mdi-chevron-right" : "mdi-chevron-down" }}
+                </v-icon>
+              </div>
+
+              <!-- The entry's own marker: a checkbox anyone may tick, a map pin,
+                   or a plain bullet. -->
+              <v-icon
+                v-if="isChecklist(list)"
+                small
+                class="tw-mt-0.5 tw-flex-none tw-cursor-pointer tw-text-brass"
+                :title="row.item.checked ? 'Uncheck' : 'Check off'"
+                @click="toggleChecked(list, row.item)"
+              >
+                {{
+                  row.item.checked
+                    ? "mdi-checkbox-marked"
+                    : "mdi-checkbox-blank-outline"
+                }}
+              </v-icon>
+              <v-icon
+                v-else
+                small
+                class="tw-mt-0.5 tw-flex-none tw-text-parchment-dim"
+              >
                 {{ isLocationList(list) ? "mdi-map-marker" : "mdi-circle-small" }}
               </v-icon>
+
               <div class="tw-min-w-0 tw-flex-grow">
                 <a
                   v-if="isLocationList(list)"
-                  :href="mapsUrl(item.text)"
+                  :href="mapsUrl(row.item.text)"
                   target="_blank"
                   rel="noopener"
                   class="tw-break-words tw-text-sm tw-text-brass"
-                  >{{ item.text }}</a
+                  >{{ row.item.text }}</a
                 >
-                <span v-else class="tw-break-words tw-text-sm">
-                  {{ item.text }}
+                <span
+                  v-else
+                  :class="`tw-break-words tw-text-sm ${
+                    row.item.checked ? 'tw-text-parchment-dim tw-line-through' : ''
+                  }`"
+                >
+                  {{ row.item.text }}
                 </span>
                 <div class="tw-text-xs tw-text-parchment-dim">
-                  {{ item.authorName }}
+                  {{ row.item.authorName
+                  }}<span v-if="checkLabel(row.item)">
+                    · {{ checkLabel(row.item) }}</span
+                  >
                 </div>
               </div>
               <div class="tw-flex tw-flex-none">
                 <v-btn
-                  v-if="isMine(item)"
+                  v-if="canNest(row)"
+                  icon
+                  x-small
+                  class="tw-text-parchment-dim"
+                  title="Add sub-entry"
+                  @click="startChild(row.item)"
+                >
+                  <v-icon small>mdi-plus</v-icon>
+                </v-btn>
+                <v-btn
+                  v-if="isMine(row.item)"
                   icon
                   x-small
                   class="tw-text-parchment-dim"
                   title="Edit entry"
-                  @click="startEdit(item)"
+                  @click="startEdit(row.item)"
                 >
                   <v-icon small>mdi-pencil</v-icon>
                 </v-btn>
                 <v-btn
-                  v-if="canDelete(item)"
+                  v-if="canDelete(row.item)"
                   icon
                   x-small
                   class="tw-text-parchment-dim"
-                  title="Remove entry"
+                  :title="
+                    row.hasChildren
+                      ? 'Remove entry and its sub-entries'
+                      : 'Remove entry'
+                  "
                   @click="
-                    $emit('delete-item', { listId: list._id, itemId: item._id })
+                    $emit('delete-item', {
+                      listId: list._id,
+                      itemId: row.item._id,
+                    })
                   "
                 >
                   <v-icon small>mdi-close</v-icon>
                 </v-btn>
+              </div>
+            </div>
+
+            <!-- Sub-entry composer, one at a time, directly under its parent -->
+            <div
+              v-if="addingChildOf === row.item._id"
+              class="tw-mt-1 tw-pl-6"
+            >
+              <LocationInput
+                v-if="isLocationList(list)"
+                v-model="childText"
+                dense
+                hide-details
+                hide-icon
+                autofocus
+                placeholder="Add a place…"
+                @enter="submitChild(list)"
+              />
+              <v-text-field
+                v-else
+                v-model="childText"
+                dense
+                hide-details
+                autofocus
+                placeholder="Add a sub-entry…"
+                :maxlength="maxItemLength"
+                @keyup.enter="submitChild(list)"
+                @keyup.esc="cancelChild"
+              />
+              <div class="tw-mt-2 tw-flex tw-gap-2">
+                <v-btn small text @click="cancelChild">Cancel</v-btn>
+                <v-btn
+                  small
+                  class="tw-bg-brass tw-text-wood-deep"
+                  :disabled="!childText.trim()"
+                  @click="submitChild(list)"
+                  >Add</v-btn
+                >
               </div>
             </div>
           </div>
@@ -246,13 +347,10 @@
         <v-radio-group v-model="newKind" row dense hide-details class="tw-mt-1">
           <v-radio label="Anything" value="text" />
           <v-radio label="Places" value="location" />
+          <v-radio label="Checklist" value="checklist" />
         </v-radio-group>
         <div class="tw-mt-1 tw-text-xs tw-text-parchment-dim">
-          {{
-            newKind === "location"
-              ? "Entries are looked up as addresses and link to a map."
-              : "Entries are plain text."
-          }}
+          {{ kindHint }}
         </div>
         <div class="tw-mt-3 tw-flex tw-gap-2">
           <v-btn small text @click="cancelNewList">Cancel</v-btn>
@@ -283,6 +381,11 @@
 import { mapGetters, mapState } from "vuex"
 import { mapsSearchUrl } from "@/utils"
 import LocationInput from "@/components/LocationInput.vue"
+import {
+  flattenListItems,
+  canAddChild,
+  checkStateLabel,
+} from "@/components/event/eventLists"
 
 /**
  * Shared lists on an event (F14) — "Menu", "Bars to Visit". Presentational:
@@ -326,6 +429,14 @@ export default {
     renameText: "",
     editingItemId: null,
     editText: "",
+    // Ids of entries whose sub-entries are hidden. Sub-entries start SHOWN —
+    // the list header is already the collapse unit, and a subtree is small.
+    collapsedItemIds: [],
+    // The one entry currently taking a sub-entry, and its draft. One at a time,
+    // like editingItemId: a keyed map would repeat the reactivity dance the
+    // per-list drafts need, for no gain when only one composer is ever open.
+    addingChildOf: null,
+    childText: "",
     // Mirrors the server's caps (routes/event_lists.go) so the field stops at
     // the same point the API would truncate.
     maxNameLength: 100,
@@ -340,6 +451,7 @@ export default {
     "add-item",
     "edit-item",
     "delete-item",
+    "toggle-item-checked",
   ],
 
   computed: {
@@ -365,6 +477,15 @@ export default {
         return this.isEventOwner
       }
       return this.canInvite
+    },
+    kindHint() {
+      if (this.newKind === "location") {
+        return "Entries are looked up as addresses and link to a map."
+      }
+      if (this.newKind === "checklist") {
+        return "Entries get a checkbox anyone can tick off."
+      }
+      return "Entries are plain text."
     },
   },
 
@@ -403,10 +524,19 @@ export default {
         this.$emit("refresh")
       } else {
         this.expandedLists.splice(i, 1)
-        // A draft edit belongs to the open list; leaving it armed would reopen
-        // the next expansion mid-edit.
-        if (this.editingItemId && this.itemBelongsTo(listId, this.editingItemId)) {
+        // A draft edit or sub-entry belongs to the open list; leaving one armed
+        // would reopen the next expansion mid-compose.
+        if (
+          this.editingItemId &&
+          this.itemBelongsTo(listId, this.editingItemId)
+        ) {
           this.cancelEdit()
+        }
+        if (
+          this.addingChildOf &&
+          this.itemBelongsTo(listId, this.addingChildOf)
+        ) {
+          this.cancelChild()
         }
       }
     },
@@ -417,8 +547,45 @@ export default {
     itemsOf(list) {
       return list.items ?? []
     },
+    // The tree, flattened to rows with a depth. Built in a pure module so the
+    // nesting rules are testable — nothing inside a .vue file is.
+    rowsOf(list) {
+      return flattenListItems(this.itemsOf(list), this.collapsedItemIds)
+    },
+    // Static classes, not a computed `tw-pl-${n}`: Tailwind purges on literal
+    // source text, so a built-up class name emits no CSS at all.
+    indentClass(depth) {
+      return ["", "tw-pl-6", "tw-pl-12"][depth] ?? "tw-pl-12"
+    },
+    toggleItem(itemId) {
+      const i = this.collapsedItemIds.indexOf(itemId)
+      if (i === -1) {
+        this.collapsedItemIds.push(itemId)
+      } else {
+        this.collapsedItemIds.splice(i, 1)
+      }
+    },
+    // A grandchild takes no children, so it isn't offered the control.
+    canNest(row) {
+      return !!this.authUser && canAddChild(row.depth)
+    },
+    checkLabel(item) {
+      return checkStateLabel(item)
+    },
     isLocationList(list) {
       return list.kind === "location"
+    },
+    isChecklist(list) {
+      return list.kind === "checklist"
+    },
+    // Open to anyone signed in, guests included — the server agrees.
+    toggleChecked(list, item) {
+      if (!this.authUser) return
+      this.$emit("toggle-item-checked", {
+        listId: list._id,
+        itemId: item._id,
+        checked: !item.checked,
+      })
     },
     isMine(item) {
       return !!this.authUser && item.userId === this.authUser._id
@@ -439,6 +606,27 @@ export default {
       if (!text) return
       this.$emit("add-item", { listId: list._id, payload: { text } })
       this.$set(this.newItemText, list._id, "")
+    },
+
+    startChild(item) {
+      this.addingChildOf = item._id
+      this.childText = ""
+      // A hidden subtree would swallow what you're about to add.
+      const i = this.collapsedItemIds.indexOf(item._id)
+      if (i !== -1) this.collapsedItemIds.splice(i, 1)
+    },
+    cancelChild() {
+      this.addingChildOf = null
+      this.childText = ""
+    },
+    submitChild(list) {
+      const text = this.childText.trim()
+      if (!text) return
+      this.$emit("add-item", {
+        listId: list._id,
+        payload: { text, parentId: this.addingChildOf },
+      })
+      this.cancelChild()
     },
 
     startEdit(item) {

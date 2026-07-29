@@ -202,6 +202,7 @@
                 @add-item="onAddListItem"
                 @edit-item="onEditListItem"
                 @delete-item="onDeleteListItem"
+                @toggle-item-checked="onToggleListItemChecked"
               />
             </div>
           </div>
@@ -295,6 +296,7 @@ import {
   addListItem,
   editListItem,
   deleteListItem,
+  setListItemChecked,
 } from "@/utils/services/EventService"
 import pluginMessagesMixin from "@/components/event/pluginMessagesMixin"
 export default {
@@ -702,6 +704,16 @@ export default {
         await this.refreshLists()
       } catch (err) {
         this.showError("Could not remove that entry. Please try again.")
+      }
+    },
+
+    async onToggleListItemChecked({ listId, itemId, checked }) {
+      const id = this.event.shortId ?? this.event._id
+      try {
+        await setListItemChecked(id, listId, itemId, checked)
+        await this.refreshLists()
+      } catch (err) {
+        this.showError("Could not update that entry. Please try again.")
       }
     },
 
