@@ -12,11 +12,12 @@
 > **Status: IN PROGRESS.** F1, H1, F2, F3, F4 and F5 landed 2026-07-28 (`0b5f2272`, `80a20905`,
 > `719cb4b8`, `0a9f450d`, `6c281faf`, F5 this commit); F6, H4, H6 and H7 landed 2026-07-29 — see
 > their entries for what differed from the plan. F11 and F12 were opened out of F5, H9 out of F6.
-> **F13/F14 (Lists of Lists) were added 2026-07-29 and take priority over the mention track** —
-> their file:line references were verified against the tree that day. Everything else is still
-> planned-not-started. The feature designs in Part F were reviewed against the codebase on
-> 2026-07-28 and the product decisions in the two "Confirmed decisions" blocks were made by the
-> user. **Line numbers below shift as items land — re-verify before starting one.**
+> **F13/F14 (Lists of Lists) were added and built 2026-07-29** (`c7ad40b4`, `647a07bc`), taking
+> priority over the mention track at the user's request. Everything else is still
+> planned-not-started — **the mention track F7 → F8 → F9 is next**. The feature designs in Part F
+> were reviewed against the codebase on 2026-07-28 and the product decisions in the two
+> "Confirmed decisions" blocks were made by the user.
+> **Line numbers below shift as items land — re-verify before starting one.**
 
 Priority legend: **P0** = do first · **P1** = high value · **P2** = moderate · **P3** = nice-to-have.
 Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
@@ -51,9 +52,9 @@ Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 ## PART F — Feature track (P1 unless noted)
 
 Each item is independently green-deployable to trunk (new fields `omitempty`, endpoints additive,
-UI reads defensively). See "Suggested sequencing" at the bottom for the current order —
-**F13 → F14 (Lists of Lists) is next**, then the mention track F7 → F8 → F9. Cheap Part-H items
-slot between deploys.
+UI reads defensively). See "Suggested sequencing" at the bottom for the current order — the
+mention track **F7 → F8 → F9 is next** now that Lists of Lists (F13/F14) has landed. Cheap Part-H
+items slot between deploys.
 
 - [x] **F1 · OTP code visible/copyable from the Android email notification.** `S`
   **DONE 2026-07-28** (`0b5f2272`). Built as planned, with one correction: `buildOtpEmailBody`
@@ -415,7 +416,50 @@ slot between deploys.
   existing deleted-user branch, plus a DB-gated test. Currently a 500 on the app's hottest
   endpoint for the whole event, not just the bad row.
 
-- [ ] **F13 · Lists of Lists backend: model, routes, permissions.** `M` · **P1** — no F-deps;
+- [x] **F13 · Lists of Lists backend: model, routes, permissions.** `M` · **P1**
+  **DONE 2026-07-29** (`c7ad40b4`). Built as planned. Notes:
+  - **`requireEventManager` was not reusable here and is not called.** The plan said
+    "`requireEventManager(...) || viewer.IsAdmin`", but that function *writes its own 403* and
+    takes a `*gin.Context`, so or-ing it with a second condition would emit an error response on
+    a request that then succeeds. `canManageLists` restates the rule as a pure method on
+    `listViewer` instead — which is also what made the whole permission matrix unit-testable
+    without a request. Behaviour is identical, including the legacy-ownerless member+ fallback.
+  - **The item cap is advisory and says so in a comment.** It is measured against the event as
+    read, so two simultaneous adds at the boundary can both pass and land at 101. Enforcing it
+    exactly would mean reading and rewriting the whole array — the precise lost-update bug the
+    feature was designed around — so the guardrail loses and concurrency wins.
+  - **`addEventListItem` re-checks the write landed** (`modified == false` → 404): the cap check
+    reads the event, and the list can be deleted between that read and the `$push`. Without it
+    the caller gets a 200 for an item that went nowhere.
+  - The auth-gate table in `event_auth_gate_test.go` had to grow the six new routes and two new
+    id placeholders — it drives the real `InitEvents`, so it failed loudly until it did. Working
+    exactly as intended; nothing landed outside the authed group.
+  - `eventDisplayNameIds` now takes a fourth argument (`lists`); the existing pure test was
+    extended rather than duplicated, and asserts an item with no author id contributes nothing.
+  - Caps as planned (100 / 300 runes, 20 lists, 100 items). Swagger regenerated — all four list
+    paths present.
+
+- [x] **F14 · Lists of Lists frontend: the panel beside the discussion.** `M` · **P1**
+  **DONE 2026-07-29** (`647a07bc`). Built as planned. Notes:
+  - **Draft entry text is a per-list map written through `$set`, not `v-model`.** One shared
+    draft string would have leaked what you typed in one list into every other list's field, and
+    `v-model="newItemText[list._id]"` into a key that does not exist yet is the Vue 2 reactivity
+    trap — the field would not update. Both inputs (plain and `LocationInput`) use
+    `:value` + `@input` for the same reason.
+  - **`canManageUsers` comes from `mapGetters`, not `this.$store.getters`** — first draft mixed
+    the two styles in one component.
+  - Verified live on the dev stack across two viewports and both roles, plus a click-through of
+    the add flow (type → Add → round-trip → field clears → count updates), because F5 and F6 each
+    shipped a defect that lint, tests and the build all passed. Nothing visual was wrong this
+    time. Both standing harnesses green; seeded fixtures removed afterwards.
+  - `mapsSearchUrl` extracted to `general_utils.js` and adopted by `EventLocation.vue`, with
+    vitest covering `&`-escaping (the one that would otherwise split the query string) and the
+    empty/nil case the event's own location still hits before a venue is set.
+
+<details>
+<summary>Original F13/F14 design (as planned 2026-07-29)</summary>
+
+- **F13 · Lists of Lists backend: model, routes, permissions.** `M` · **P1** — no F-deps;
   independent of the mention track, and **scheduled ahead of it** (user's call, 2026-07-29).
   The planner creates a named list on an event ("Menu", "Bars to Visit"); anyone signed in adds
   items to it. Closest existing analogue is polls — a planner-created structure everyone else
@@ -494,7 +538,7 @@ slot between deploys.
     `userId`/`authorName`, never email/phone/role. Swagger regen.
   - **Deployable alone** — endpoints are inert until F14 ships the UI.
 
-- [ ] **F14 · Lists of Lists frontend: the panel beside the discussion.** `M` · **P1** — needs F13.
+- **F14 · Lists of Lists frontend: the panel beside the discussion.** `M` · **P1** — needs F13.
   - **Layout.** The user's ask is discussion ≈ 2/3 with lists ≈ 1/3 to its right. `Event.vue:85`
     already opens a `lg:tw-flex` row for the whole page, but it has a single child and the split
     wanted here is *within* the discussion band, so wrap the `EventComments` block (~:161-171) in a
@@ -537,6 +581,8 @@ slot between deploys.
     (`server/tools/mintsession`) adds an item, edits and deletes its own, is refused on another's;
     a member deletes anyone's; maps links open; the location input still accepts free text with
     the Google key unset; both standing browser harnesses green.
+
+</details>
 
 ---
 
@@ -712,10 +758,9 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
    frontend code is in (so the lint flip covers it).
 4. ~~**F6** (admin editing — reuses everything above).~~ **Done 2026-07-29**, with H4 (and
    H6/H7) ahead of it.
-5. **F13 → F14** (Lists of Lists: backend → panel). ← **next** — moved ahead of the mention
-   track on 2026-07-29 at the user's request. The two are independent, so nothing is rewritten
-   by taking lists first.
-6. **F7 → F8 → F9** (mentions: backend → emails → composer).
+5. ~~**F13 → F14** (Lists of Lists: backend → panel).~~ **Done 2026-07-29**, taken ahead of the
+   mention track at the user's request. The two were independent, so nothing was rewritten.
+6. **F7 → F8 → F9** (mentions: backend → emails → composer). ← **next**
 7. **F10** close-out. Part G items remain background/P3, same as before; **H5** whenever
    calendar code is next touched; **H6–H9** opportunistic (**H9** is cheapest folded into the
    next change that touches `AvatarEditorDialog.vue`).
