@@ -12,7 +12,7 @@
         :key="list._id"
         class="tw-rounded tw-border tw-border-brass-dim/60 tw-p-2 sm:tw-p-3"
       >
-        <!-- Header: name, or the rename field -->
+        <!-- Header: the collapse toggle, or the rename field -->
         <div class="tw-flex tw-items-start tw-justify-between tw-gap-2">
           <div v-if="renamingId === list._id" class="tw-flex-grow">
             <v-text-field
@@ -36,20 +36,30 @@
             </div>
           </div>
           <template v-else>
-            <div class="tw-min-w-0">
-              <div class="tw-break-words tw-font-medium">{{ list.name }}</div>
-              <div class="tw-text-xs tw-text-parchment-dim">
-                {{ itemsOf(list).length }}
-                {{ itemsOf(list).length === 1 ? "entry" : "entries" }}
+            <div
+              class="tw-flex tw-min-w-0 tw-flex-grow tw-cursor-pointer tw-items-start tw-gap-2"
+              @click="toggleList(list._id)"
+            >
+              <v-icon small class="tw-mt-0.5 tw-flex-none">
+                {{ isExpanded(list._id) ? "mdi-chevron-down" : "mdi-chevron-right" }}
+              </v-icon>
+              <div class="tw-min-w-0">
+                <div class="tw-break-words tw-font-medium">{{ list.name }}</div>
+                <div class="tw-text-xs tw-text-parchment-dim">
+                  {{ itemsOf(list).length }}
+                  {{ itemsOf(list).length === 1 ? "entry" : "entries" }}
+                </div>
               </div>
             </div>
+            <!-- The management buttons sit inside the header, so their clicks
+                 must not also toggle the list open or shut. -->
             <div v-if="canManage" class="tw-flex tw-flex-none">
               <v-btn
                 icon
                 x-small
                 class="tw-text-parchment-dim"
                 title="Rename list"
-                @click="startRename(list)"
+                @click.stop="startRename(list)"
               >
                 <v-icon small>mdi-pencil</v-icon>
               </v-btn>
@@ -58,7 +68,7 @@
                 x-small
                 class="tw-text-red"
                 title="Delete list"
-                @click="$emit('delete-list', list._id)"
+                @click.stop="$emit('delete-list', list._id)"
               >
                 <v-icon small>mdi-delete</v-icon>
               </v-btn>
@@ -66,8 +76,8 @@
           </template>
         </div>
 
-        <!-- Entries -->
-        <div class="tw-mt-2 tw-space-y-1">
+        <!-- Entries (only while the list is open) -->
+        <div v-if="isExpanded(list._id)" class="tw-mt-2 tw-space-y-1">
           <div
             v-for="item in itemsOf(list)"
             :key="item._id"
@@ -162,7 +172,10 @@
         </div>
 
         <!-- Add an entry: open to everyone -->
-        <div class="tw-mt-2 tw-border-t tw-border-brass-dim/40 tw-pt-2">
+        <div
+          v-if="isExpanded(list._id)"
+          class="tw-mt-2 tw-border-t tw-border-brass-dim/40 tw-pt-2"
+        >
           <LocationInput
             v-if="isLocationList(list)"
             :value="newItemText[list._id] || ''"
@@ -285,6 +298,13 @@ export default {
     newKind: "text",
     // Draft entry text per list id, so typing in one list doesn't disturb another.
     newItemText: {},
+    // Ids of the lists currently open. Lists start collapsed, like the
+    // discussion's threads: the panel is a scannable index of what needs
+    // filling in, and you open the one you came for.
+    expandedLists: [],
+    // Name of a list this viewer just created, so it can be opened as soon as
+    // the refetch brings it back with an id.
+    pendingExpandName: null,
     renamingId: null,
     renameText: "",
     editingItemId: null,
@@ -330,9 +350,48 @@ export default {
     },
   },
 
+  watch: {
+    // Event.vue persists then refetches, so a list this viewer just created
+    // arrives here as new data. Open it: whoever named a list means to start
+    // filling it in, and its add-entry field is inside the collapsed body.
+    lists(current) {
+      if (!this.pendingExpandName) return
+      // Searched from the end: a new list is appended, so with two of the same
+      // name this opens the one just made rather than the older one.
+      const created = [...current]
+        .reverse()
+        .find((l) => l.name === this.pendingExpandName)
+      if (!created) return
+      this.pendingExpandName = null
+      if (!this.expandedLists.includes(created._id)) {
+        this.expandedLists.push(created._id)
+      }
+    },
+  },
+
   methods: {
     mapsUrl(text) {
       return mapsSearchUrl(text)
+    },
+    isExpanded(listId) {
+      return this.expandedLists.includes(listId)
+    },
+    toggleList(listId) {
+      const i = this.expandedLists.indexOf(listId)
+      if (i === -1) {
+        this.expandedLists.push(listId)
+      } else {
+        this.expandedLists.splice(i, 1)
+        // A draft edit belongs to the open list; leaving it armed would reopen
+        // the next expansion mid-edit.
+        if (this.editingItemId && this.itemBelongsTo(listId, this.editingItemId)) {
+          this.cancelEdit()
+        }
+      }
+    },
+    itemBelongsTo(listId, itemId) {
+      const list = this.lists.find((l) => l._id === listId)
+      return this.itemsOf(list ?? {}).some((i) => i._id === itemId)
     },
     itemsOf(list) {
       return list.items ?? []
@@ -399,6 +458,7 @@ export default {
       const name = this.newName.trim()
       if (!name) return
       this.$emit("create-list", { name, kind: this.newKind })
+      this.pendingExpandName = name
       this.cancelNewList()
     },
     cancelNewList() {
