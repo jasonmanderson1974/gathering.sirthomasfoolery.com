@@ -9,9 +9,11 @@
 > small-club utility over scale. All event access requires sign-in (E3); roles are
 > superAdmin > admin > member > guest.
 >
-> **Status: PLANNED, not started.** Nothing below has been implemented. The feature designs in
-> Part F were reviewed against the codebase on 2026-07-28 (file:line references verified that
-> day) and the three product decisions in "Confirmed decisions" were made by the user.
+> **Status: IN PROGRESS.** F1 and H1 landed 2026-07-28 (`0b5f2272`, `80a20905`) — see their
+> entries for what differed from the plan. Everything else is still planned-not-started. The
+> feature designs in Part F were reviewed against the codebase on 2026-07-28 (file:line
+> references verified that day) and the three product decisions in "Confirmed decisions" were
+> made by the user. **Line numbers below shift as items land — re-verify before starting one.**
 
 Priority legend: **P0** = do first · **P1** = high value · **P2** = moderate · **P3** = nice-to-have.
 Effort: **S** ≈ <½ day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
@@ -37,7 +39,12 @@ Ten work items, each independently green-deployable to trunk (new fields `omitem
 additive, UI reads defensively). Suggested order: F1 first (quick win), then F2→F9 in order;
 F4 can run in parallel with F2/F3. Cheap Part-H items slot between deploys.
 
-- [ ] **F1 · OTP code visible/copyable from the Android email notification.** `S`
+- [x] **F1 · OTP code visible/copyable from the Android email notification.** `S`
+  **DONE 2026-07-28** (`0b5f2272`). Built as planned, with one correction: `buildOtpEmailBody`
+  called `RenderEmail` (:168), not `RenderEmailWithFooter` — the chain is
+  `RenderEmail → RenderEmailWithFooter → RenderEmailWithPreheader` (new base), and both OTP
+  builders call the new helper directly. `autocomplete="one-time-code"` shipped too.
+  **Still needs the manual Android check** (Gmail's copy-code action is heuristic).
   The subject already leads with the code (`routes/auth.go` ~:469: `"%s is your Fellowship
   sign-in code"`), but the notification preview pulls body text that doesn't repeat it.
   - `server/utils/email_layout.go`: new `RenderEmailWithPreheader(preheader, heading, bodyHTML,
@@ -306,7 +313,11 @@ F4 can run in parallel with F2/F3. Cheap Part-H items slot between deploys.
 
 None has a correctness or security symptom; all are cleanup/hygiene. Ranked by value:
 
-- [ ] **H1 · `NumEventsCreated`: dead aggregate on every profile fetch.** `S` · **P2**
+- [x] **H1 · `NumEventsCreated`: dead aggregate on every profile fetch.** `S` · **P2**
+  **DONE 2026-07-28** (`80a20905`). Sharper than written: the count's error path returned 500
+  for the whole of `GET /user/profile`, so a transient Mongo failure on a dead field could
+  bounce a user out on cold load. Writers were `events.go:329` + `event_import.go:230` (:229 is
+  the comment). Also removed `signedIn := true` in `createEvent`, dead once its `$inc` went.
   `routes/user.go:65-70` runs `db.GetEventsCreatedThisMonth` on **every** `GET /user/profile`
   (incl. every cold-load router-guard call) and the frontend never reads `numEventsCreated`
   (zero grep hits). Paywall-quota leftover that survived E4. Also remove the two writers still
@@ -327,7 +338,9 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
   `RecurrenceLabel` (its comment claims email/log use; the callers went with Listmonk).
   Also unexport `IsRelease`/`GetDateString` (internal-only). A18-style batch.
 
-- [ ] **H4 · Clear the 9 frontend lint warnings; flip eslint to fully blocking.** `S` · **P2**
+- [ ] **H4 · Clear the frontend lint warnings; flip eslint to fully blocking.** `S` · **P2**
+  **Count is stale — re-inventory before starting.** `Settings.vue` alone has 3 warnings
+  (`:270` unused `get`, `:450`/`:468` swallowed `err`) that the "9 across 5 files" tally missed.
   `npx eslint src` → 9 warnings / 0 errors across 5 files (`pluginMessagesMixin.js:166-171,237`
   — see H6; `availabilityMixin.js:40` swallowed `err`; `respondentSelectionMixin.js:21`;
   `store/index.js:131`; `sign_in_utils.js:53` — see H7). Clear them and remove the
