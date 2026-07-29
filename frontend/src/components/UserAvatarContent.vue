@@ -26,9 +26,15 @@
     >
       mdi-microsoft-outlook
     </v-icon>
+    <!--
+      `tw-rounded-full` is load-bearing, not decoration: v-avatar clips to a
+      circle, so a square border on this div survives only where the square
+      touches the circle — four tick marks at the compass points instead of a
+      ring. Rounding the div makes its border follow the same curve.
+    -->
     <div
       v-else
-      :class="`tw-flex tw-size-full tw-items-center tw-justify-center tw-border tw-border-brass-dim tw-bg-wood tw-font-medium tw-text-${textSize} tw-text-brass`"
+      :class="`tw-flex tw-size-full tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-brass-dim tw-bg-wood tw-font-medium tw-text-${textSize} tw-text-brass`"
     >
       {{ initials }}
     </div>

@@ -21,11 +21,11 @@
       persistent
     >
       <v-card>
-        <v-card-title>Choose your photo</v-card-title>
+        <v-card-title>{{ title }}</v-card-title>
         <v-card-text>
           <div class="tw-mb-3 tw-text-sm tw-text-parchment-dim">
-            Drag to reposition, pinch or scroll to zoom. Your photo is saved as
-            a square.
+            Drag to reposition, pinch or scroll to zoom. The photo is saved as a
+            square.
           </div>
 
           <div v-if="loading" class="tw-py-8 tw-text-center tw-text-sm">
@@ -105,6 +105,11 @@ export default {
     value: { type: Boolean, default: false },
     /** Set by the caller while its upload request is in flight. */
     saving: { type: Boolean, default: false },
+    /**
+     * Heading. The default is the self-serve wording; the admin edit passes
+     * the member's name, since "your photo" is wrong when it isn't yours.
+     */
+    title: { type: String, default: "Choose your photo" },
   },
 
   emits: ["input", "save"],

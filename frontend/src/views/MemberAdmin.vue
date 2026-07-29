@@ -135,6 +135,18 @@
             {{ roleLabel(member.role) }}
           </span>
 
+          <!-- Edit name/nickname/photo (admins only, and only once they've joined) -->
+          <v-btn
+            v-if="canEditProfile(member)"
+            icon
+            small
+            :disabled="busyEmail === member.email"
+            title="Edit name, nickname and photo"
+            @click="openEditor(member)"
+          >
+            <v-icon small color="brass">mdi-pencil</v-icon>
+          </v-btn>
+
           <!-- Strike (admins only) -->
           <v-btn
             v-if="canManageUsers"
@@ -148,6 +160,121 @@
           </v-btn>
         </div>
       </div>
+
+      <!--
+        Profile editor. Bound to `editEmail` rather than to a copied row, so
+        `editingMember` re-resolves out of `members` after a re-fetch — that is
+        what refreshes the photo preview in place once an upload lands.
+      -->
+      <v-dialog v-model="editDialog" width="480" content-class="tw-m-0">
+        <v-card v-if="editingMember">
+          <v-card-title class="tw-font-head">
+            Edit {{ rollDisplayName(editingMember) }}
+          </v-card-title>
+          <v-card-text>
+            <div class="tw-mb-4 tw-text-sm tw-text-parchment-dim">
+              {{ editingMember.email }}
+            </div>
+
+            <!-- Photo -->
+            <div class="tw-mb-6 tw-flex tw-items-center tw-gap-4">
+              <UserAvatarContent :user="editingMember" :size="72" />
+              <div class="tw-flex tw-flex-col tw-items-start tw-gap-1">
+                <v-btn
+                  text
+                  small
+                  class="tw-text-brass"
+                  :loading="savingAvatar"
+                  @click="$refs.avatarEditor.pickFile()"
+                >
+                  {{ editingMember.avatarUpdatedAt ? "Change photo" : "Add photo" }}
+                </v-btn>
+                <v-btn
+                  v-if="editingMember.avatarUpdatedAt"
+                  text
+                  small
+                  :loading="removingAvatar"
+                  @click="removeMemberAvatar"
+                >
+                  Remove photo
+                </v-btn>
+              </div>
+            </div>
+
+            <!--
+              Captions above the fields rather than Vuetify `label` props:
+              `solo` hides the label as soon as the field has a value, which is
+              always here (the form opens pre-filled), leaving unlabelled boxes.
+              Settings uses the same heading-above-field shape.
+            -->
+            <div class="tw-mb-1 tw-text-sm tw-font-medium tw-text-parchment">
+              First name
+            </div>
+            <v-text-field
+              v-model="editFirstName"
+              solo
+              hide-details="auto"
+              class="tw-mb-3"
+              :disabled="savingProfile"
+            />
+            <div class="tw-mb-1 tw-text-sm tw-font-medium tw-text-parchment">
+              Last name
+            </div>
+            <v-text-field
+              v-model="editLastName"
+              solo
+              hide-details="auto"
+              class="tw-mb-3"
+              :disabled="savingProfile"
+            />
+            <div class="tw-mb-1 tw-text-sm tw-font-medium tw-text-parchment">
+              Nickname
+            </div>
+            <v-text-field
+              v-model="editNickname"
+              placeholder="What the club actually calls them"
+              solo
+              hide-details="auto"
+              :disabled="savingProfile"
+            />
+            <div class="tw-mt-1 tw-text-xs tw-text-parchment-dim">
+              A nickname stands in for the name wherever it appears. Leave it
+              empty to remove one.
+            </div>
+          </v-card-text>
+
+          <v-card-actions>
+            <v-spacer />
+            <v-btn text class="tw-text-brass" @click="editDialog = false">
+              Cancel
+            </v-btn>
+            <v-btn text :loading="savingProfile" @click="saveProfile">
+              Save
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!--
+        One editor instance for the whole roll, outside the v-for: it is only
+        ever open for `editingMember`, and a per-row copy would mean a hidden
+        file input per member.
+
+        The title uses displayName, not rollDisplayName: the
+        "Nickname (First Last)" pairing is right for scanning a list, but in a
+        heading it wraps mid-word.
+      -->
+      <AvatarEditorDialog
+        ref="avatarEditor"
+        v-model="avatarDialog"
+        :saving="savingAvatar"
+        :title="
+          editingMember
+            ? `Choose a photo for ${displayName(editingMember)}`
+            : 'Choose a photo'
+        "
+        @save="saveMemberAvatar"
+      />
 
       <!-- Role reference (admins only) -->
       <div v-if="canManageUsers" class="tw-flex tw-flex-col tw-gap-3">
@@ -213,14 +340,23 @@
 
 <script>
 import { mapState, mapGetters, mapActions } from "vuex"
-import { get, post, _delete, rollDisplayName } from "@/utils"
+import {
+  get,
+  post,
+  patch,
+  put,
+  _delete,
+  displayName,
+  rollDisplayName,
+} from "@/utils"
 import { roles, roleLabels } from "@/constants"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
+import AvatarEditorDialog from "@/components/settings/AvatarEditorDialog.vue"
 
 export default {
   name: "MemberAdmin",
 
-  components: { UserAvatarContent },
+  components: { UserAvatarContent, AvatarEditorDialog },
 
   metaInfo() {
     return { title: "The Roll · The Fellowship" }
@@ -235,6 +371,17 @@ export default {
       loading: true,
       adding: false,
       busyEmail: "",
+      // Profile editor. The dialog keys off the email rather than a copied row
+      // so it follows the member across a re-fetch.
+      editDialog: false,
+      editEmail: "",
+      editFirstName: "",
+      editLastName: "",
+      editNickname: "",
+      savingProfile: false,
+      avatarDialog: false,
+      savingAvatar: false,
+      removingAvatar: false,
       // Static reference chart: what each standing may do (columns ascend in privilege)
       roleMatrix: {
         cols: [roles.GUEST, roles.MEMBER, roles.ADMIN, roles.SUPER_ADMIN],
@@ -262,6 +409,12 @@ export default {
     selfEmail() {
       return (this.authUser?.email || "").toLowerCase()
     },
+    // Resolved out of `members` on every render, so a re-fetch after an avatar
+    // upload updates the preview (and its `?v=`) without any extra plumbing.
+    editingMember() {
+      if (!this.editEmail) return null
+      return this.members.find((m) => m.email === this.editEmail) || null
+    },
     // Roles this actor may grant. Admins: guest/member/admin. Members: guest only.
     grantableRoleOptions() {
       const opts = [{ text: roleLabels[roles.GUEST], value: roles.GUEST }]
@@ -287,6 +440,7 @@ export default {
 
   methods: {
     rollDisplayName,
+    displayName,
     ...mapActions(["showError", "showInfo"]),
     roleLabel(role) {
       return roleLabels[role] || roleLabels[roles.MEMBER]
@@ -312,6 +466,84 @@ export default {
         member.role !== roles.SUPER_ADMIN &&
         member.email.toLowerCase() !== this.selfEmail
       )
+    },
+    // Editing writes to a user document, so an unclaimed invitation has nothing
+    // to edit — the server returns 400 for that case and this hides the control.
+    // Self-edit IS allowed (unlike role changes): it is harmless, and Settings
+    // offers the same thing.
+    canEditProfile(member) {
+      return (
+        this.canManageUsers &&
+        member.hasAccount &&
+        member.role !== roles.SUPER_ADMIN
+      )
+    },
+    openEditor(member) {
+      this.editEmail = member.email
+      this.editFirstName = member.firstName || ""
+      this.editLastName = member.lastName || ""
+      this.editNickname = member.nickname || ""
+      this.editDialog = true
+    },
+    async saveProfile() {
+      const member = this.editingMember
+      if (!member || this.savingProfile) return
+      this.savingProfile = true
+      try {
+        // Every field is sent, so the server's "omitted means leave alone"
+        // semantics are not load-bearing here — but an empty nickname still
+        // means clear, which is exactly what the empty field should do.
+        await patch("/admin/member/profile", {
+          email: member.email,
+          firstName: this.editFirstName,
+          lastName: this.editLastName,
+          nickname: this.editNickname,
+        })
+        await this.fetchAllowlist()
+        this.editDialog = false
+        this.showInfo("Details updated.")
+      } catch (err) {
+        // The one rejection worth naming: a name may be edited but not erased.
+        if (err?.error === "invalid-name") {
+          this.showError("A first and last name are both required.")
+        } else {
+          this.showError("Could not update those details.")
+        }
+      } finally {
+        this.savingProfile = false
+      }
+    },
+    async saveMemberAvatar(image) {
+      const member = this.editingMember
+      if (!member) return
+      this.savingAvatar = true
+      try {
+        await put("/admin/member/avatar", { email: member.email, image })
+        // Re-fetch rather than patch the row: avatarUpdatedAt is the cache
+        // buster every avatar on screen is keyed off, so the roll needs the
+        // server's new value, not a guess.
+        await this.fetchAllowlist()
+        this.avatarDialog = false
+        this.showInfo("Photo updated.")
+      } catch (err) {
+        this.showError("There was a problem saving that photo.")
+      } finally {
+        this.savingAvatar = false
+      }
+    },
+    async removeMemberAvatar() {
+      const member = this.editingMember
+      if (!member) return
+      this.removingAvatar = true
+      try {
+        await _delete("/admin/member/avatar", { email: member.email })
+        await this.fetchAllowlist()
+        this.showInfo("Photo removed.")
+      } catch (err) {
+        this.showError("There was a problem removing that photo.")
+      } finally {
+        this.removingAvatar = false
+      }
     },
     strikeTitle(member) {
       if (member.role === roles.SUPER_ADMIN)
