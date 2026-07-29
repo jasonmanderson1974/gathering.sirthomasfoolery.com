@@ -51,6 +51,9 @@ const (
 	InvalidImage string = "invalid-image"
 	// ImageTooLarge: the uploaded avatar exceeded the upload size cap
 	ImageTooLarge string = "image-too-large"
+	// InvalidName: a name field was sent but was blank after trimming. Names
+	// may be edited but not erased — DisplayName falls back to them.
+	InvalidName string = "invalid-name"
 )
 
 // Sentinel error returned by signInHelper when an email is not allowlisted, so

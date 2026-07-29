@@ -79,6 +79,88 @@ func SetUserRole(email string, role models.Role) (int64, error) {
 	return res.MatchedCount, nil
 }
 
+// UserProfileUpdate carries the profile fields an admin may edit on someone
+// else's behalf. Every field is a pointer so "leave this alone" is
+// distinguishable from "set this to empty" — a PATCH that names only a
+// nickname must not blank out the name.
+//
+// Nickname additionally treats a pointer to "" as *clear it*, matching the
+// self-serve /user/nickname route: the field is bson-omitempty, so storing ""
+// would round-trip as absent anyway, and $unset keeps the documents honest.
+type UserProfileUpdate struct {
+	FirstName *string
+	LastName  *string
+	Nickname  *string
+}
+
+// UpdateUserProfileByEmail applies a partial profile update to the account with
+// the given email, returning how many documents matched (0 = no such account).
+//
+// Case-insensitive on email via the same collation SetUserRole uses: the
+// allowlist stores whatever an admin typed, so the lookup cannot assume the
+// stored casing matches.
+func UpdateUserProfileByEmail(email string, fields UserProfileUpdate) (int64, error) {
+	e := strings.ToLower(strings.TrimSpace(email))
+	if e == "" {
+		return 0, nil
+	}
+
+	set := bson.M{}
+	unset := bson.M{}
+	if fields.FirstName != nil {
+		set["firstName"] = *fields.FirstName
+	}
+	if fields.LastName != nil {
+		set["lastName"] = *fields.LastName
+	}
+	// A name edit is a deliberate one, so it pins the name against the
+	// overwrite that a calendar-account sync would otherwise do.
+	if fields.FirstName != nil || fields.LastName != nil {
+		set["hasCustomName"] = true
+	}
+	if fields.Nickname != nil {
+		if *fields.Nickname == "" {
+			unset["nickname"] = ""
+		} else {
+			set["nickname"] = *fields.Nickname
+		}
+	}
+
+	update := bson.M{}
+	if len(set) > 0 {
+		update["$set"] = set
+	}
+	if len(unset) > 0 {
+		update["$unset"] = unset
+	}
+	// Mongo rejects an empty update document, and "change nothing" is a
+	// legitimate request (the UI can submit an untouched form). Report it as a
+	// match without a write — but only after confirming the account exists, so
+	// the caller's 400-on-no-account check still fires.
+	if len(update) == 0 {
+		user, err := GetUserByEmail(e)
+		if err != nil || user == nil {
+			return 0, err
+		}
+		return 1, nil
+	}
+
+	opts := options.Update().SetCollation(&options.Collation{
+		Locale:   "en",
+		Strength: 2, // case-insensitive match on email
+	})
+	res, err := UsersCollection.UpdateOne(
+		context.Background(),
+		bson.M{"email": e},
+		update,
+		opts,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.MatchedCount, nil
+}
+
 // GetUsersByEmails fetches users for the given emails in a single query and
 // returns them keyed by lowercased email (case-insensitive match). Avoids N+1
 // lookups when enriching a list of allowlist entries.

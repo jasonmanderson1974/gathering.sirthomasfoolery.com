@@ -38,6 +38,9 @@ func InitAdmin(router *gin.RouterGroup) {
 	adminRouter.POST("/allowlist", addAllowlistEmail)
 	adminRouter.DELETE("/allowlist", removeAllowlistEmail)
 	adminRouter.POST("/member/role", setMemberRole)
+	adminRouter.PATCH("/member/profile", updateMemberProfile)
+	adminRouter.PUT("/member/avatar", updateMemberAvatar)
+	adminRouter.DELETE("/member/avatar", deleteMemberAvatar)
 }
 
 // allowlistMember is an allowlist entry enriched with the registered-user

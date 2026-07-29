@@ -741,6 +741,132 @@ paths:
       summary: Adds an email to the allowlist (invite a member)
       tags:
       - admin
+  /admin/member/avatar:
+    delete:
+      consumes:
+      - application/json
+      description: Admin-only. Idempotent — removing a photo that isn't there succeeds.
+      parameters:
+      - description: Target email
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            email:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: user-does-not-exist
+          schema:
+            $ref: '#/definitions/responses.Error'
+        "403":
+          description: not-authorized / super-admin-immutable
+          schema:
+            $ref: '#/definitions/responses.Error'
+      summary: Removes another member's profile photo (admin only)
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      description: |-
+        Admin-only. Runs the identical pipeline as the self-serve route:
+        centre-cropped, downscaled to 256x256, re-encoded as JPEG.
+      parameters:
+      - description: Target email and a data URL of the image
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            email:
+              type: string
+            image:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              avatarUpdatedAt:
+                type: integer
+            type: object
+        "400":
+          description: invalid-image / user-does-not-exist
+          schema:
+            $ref: '#/definitions/responses.Error'
+        "403":
+          description: not-authorized / super-admin-immutable
+          schema:
+            $ref: '#/definitions/responses.Error'
+        "413":
+          description: image-too-large
+          schema:
+            $ref: '#/definitions/responses.Error'
+      summary: Sets another member's profile photo (admin only)
+      tags:
+      - admin
+  /admin/member/profile:
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        Admin-only. Fields are optional: omitting one leaves it unchanged.
+        Sending an empty nickname clears it. Super admins cannot be edited,
+        and the target must already have an account (an unclaimed invitation
+        has nothing to edit).
+      parameters:
+      - description: Target email plus the fields to change
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            email:
+              type: string
+            firstName:
+              type: string
+            lastName:
+              type: string
+            nickname:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              email:
+                type: string
+              firstName:
+                type: string
+              lastName:
+                type: string
+              nickname:
+                type: string
+            type: object
+        "400":
+          description: user-does-not-exist
+          schema:
+            $ref: '#/definitions/responses.Error'
+        "403":
+          description: not-authorized / super-admin-immutable
+          schema:
+            $ref: '#/definitions/responses.Error'
+      summary: Updates another member's name and/or nickname (admin only)
+      tags:
+      - admin
   /admin/member/role:
     post:
       consumes:
