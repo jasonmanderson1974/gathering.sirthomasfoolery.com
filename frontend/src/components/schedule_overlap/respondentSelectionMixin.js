@@ -18,7 +18,7 @@ export default {
         this.curRespondent = id
       }
     },
-    mouseLeaveRespondent(e) {
+    mouseLeaveRespondent() {
       if (this.curRespondents.length === 0) {
         if (this.state === this.states.SINGLE_AVAILABILITY) {
           this.state = this.defaultState

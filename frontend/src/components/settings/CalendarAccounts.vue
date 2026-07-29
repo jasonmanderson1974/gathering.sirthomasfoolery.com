@@ -101,7 +101,6 @@ import { mapState, mapActions, mapMutations } from "vuex"
 import { authTypes, calendarTypes } from "@/constants"
 import {
   get,
-  post,
   _delete,
   signInGoogle,
   signInOutlook,

@@ -163,13 +163,9 @@ export default {
         }
       }
 
-      // Validate that all start/end times fall within event's date range
-      const eventDates = this.event.dates.map((d) => new Date(d))
-      const eventStartTime = this.event.startTime // Hours (e.g., 9 for 9am)
-      const eventDuration = this.event.duration // Hours
-
-      // Convert all slot times from user's timezone to UTC and validate
-      const convertedSlots = []
+      // Check that every slot parses in the user's timezone and is well-ordered.
+      // Whether a slot falls *inside* the event's date range is checked further
+      // down against the real grid (`timeSlotToRowCol`), via coveredWidth.
       for (let i = 0; i < slots.length; i++) {
         const slot = slots[i]
 
@@ -235,7 +231,7 @@ export default {
         // Also generate timestamps in the same loop
         let coveredWidth = 0
 
-        timeSlotToRowCol.forEach((value, key) => {
+        timeSlotToRowCol.forEach((value) => {
           const slotStartMs = value.startTime.valueOf()
           const slotEndMs = value.endTime.valueOf()
 

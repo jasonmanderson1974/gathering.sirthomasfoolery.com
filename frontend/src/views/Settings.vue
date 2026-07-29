@@ -339,7 +339,7 @@
 
 <script>
 import { mapState, mapActions, mapMutations } from "vuex"
-import { _delete, patch, post, put, isPhone, get, formatPhone } from "@/utils"
+import { _delete, patch, post, put, isPhone, formatPhone } from "@/utils"
 import CalendarAccounts from "@/components/settings/CalendarAccounts.vue"
 import AvatarEditorDialog from "@/components/settings/AvatarEditorDialog.vue"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
@@ -589,7 +589,7 @@ export default {
         .then(() => {
           window.location.reload()
         })
-        .catch((err) => {
+        .catch(() => {
           this.showError(
             "There was a problem deleting your account! Please try again later."
           )
@@ -607,7 +607,7 @@ export default {
         .then(() => {
           window.location.reload()
         })
-        .catch((err) => {
+        .catch(() => {
           this.showError(
             "There was a problem updating your name! Please try again later."
           )

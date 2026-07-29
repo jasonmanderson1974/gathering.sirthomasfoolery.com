@@ -37,7 +37,7 @@ export default {
           this.fetchedResponses = responses
           this.getResponsesFormatted()
         })
-        .catch((err) => {
+        .catch(() => {
           this.showError(
             "There was an error fetching availability! Please refresh the page."
           )

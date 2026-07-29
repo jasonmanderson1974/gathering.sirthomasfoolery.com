@@ -297,7 +297,7 @@ export default {
             eventType: this.event.type,
           })
         })
-        .catch((err) => {
+        .catch(() => {
           this.showError(
             "There was a problem removing that event! Please try again later."
           )
@@ -309,7 +309,7 @@ export default {
         eventName: this.duplicateDialogOptions.name,
         copyAvailability: this.duplicateDialogOptions.copyAvailability,
       })
-        .then(({ eventId, shortId }) => {
+        .then(({ eventId }) => {
           this.getEvents()
           this.$refs.menu.save() // NOTE: Not sure why but without this line, the menu persists to the next event.
 
@@ -323,7 +323,7 @@ export default {
             copyAvailability: this.duplicateDialogOptions.copyAvailability,
           })
         })
-        .catch((err) => {
+        .catch(() => {
           this.showError(
             "There was a problem duplicating that event! Please try again later."
           )

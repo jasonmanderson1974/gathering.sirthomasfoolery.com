@@ -1018,34 +1018,20 @@
 <script>
 import {
   timeNumToTimeText,
-  dateCompare,
   getDateHoursOffset,
   post,
   put,
-  isBetween,
-  clamp,
   isPhone,
   utcTimeToLocalTime,
   splitTimeBlocksByDay,
   getTimeBlock,
   dateToDowDate,
-  _delete,
-  get,
-  getDateDayOffset,
   getSpecificTimesDayStarts,
-  isDateBetween,
-  generateEnabledCalendarsPayload,
   isTouchEnabled,
   isElementInViewport,
-  lightOrDark,
-  removeTransparencyFromHex,
   userPrefers12h,
-  getCalendarAccountKey,
-  getISODateString,
-  getDateWithTimezone,
   getScheduleTimezoneOffset,
   getTimezoneReferenceDateForEvent,
-  timeNumToTimeString,
   prefersStartOnMonday,
   displayName,
 } from "@/utils"
@@ -1060,19 +1046,15 @@ import {
 import { setScheduledEvent } from "@/utils/services/EventService"
 import { nextScheduleLocation } from "./scheduleLocation"
 import { mapMutations, mapActions, mapState, mapGetters } from "vuex"
-import UserAvatarContent from "@/components/UserAvatarContent.vue"
 import CalendarAccounts from "@/components/settings/CalendarAccounts.vue"
-import SignUpBlock from "@/components/sign_up_form/SignUpBlock.vue"
 import SignUpBlocksOverlay from "./SignUpBlocksOverlay.vue"
 import SignUpBlocksList from "@/components/sign_up_form/SignUpBlocksList.vue"
 import ZigZag from "./ZigZag.vue"
-import ConfirmDetailsDialog from "./ConfirmDetailsDialog.vue"
 import ToolRow from "./ToolRow.vue"
 import RespondentsList from "./RespondentsList.vue"
 import GCalWeekSelector from "./GCalWeekSelector.vue"
 import ExpandableSection from "../ExpandableSection.vue"
 import WorkingHoursToggle from "./WorkingHoursToggle.vue"
-import AlertText from "../AlertText.vue"
 import Tooltip from "../Tooltip.vue"
 import ColorLegend from "./ColorLegend.vue"
 
@@ -1797,7 +1779,7 @@ export default {
     },
     max() {
       let max = 0
-      for (const [dateTime, availability] of this.responsesFormatted) {
+      for (const availability of this.responsesFormatted.values()) {
         if (availability.size > max) {
           max = availability.size
         }
@@ -2486,7 +2468,7 @@ export default {
       this.calendarMaxScroll = e.target.scrollWidth - e.target.offsetWidth
       this.calendarScrollLeft = e.target.scrollLeft
     },
-    onScroll(e) {
+    onScroll() {
       this.checkElementsVisible()
     },
     /** Checks whether certain elements are visible and sets variables accoringly */
@@ -2636,10 +2618,7 @@ export default {
 
     /** Initialize sign up blocks to be added array */
     resetSignUpBlocksToAddByDay() {
-      this.signUpBlocksToAddByDay = []
-      for (const day of this.signUpBlocksByDay) {
-        this.signUpBlocksToAddByDay.push([])
-      }
+      this.signUpBlocksToAddByDay = this.signUpBlocksByDay.map(() => [])
     },
 
     /** Emits sign up for block to parent element. A full block is still
@@ -2655,7 +2634,15 @@ export default {
     //#region Specific times for specific days
     // -----------------------------------
 
-    /** Saves the temporary times to the event */
+    /**
+     * Saves the temporary times to the event.
+     *
+     * Writes straight through the `event` prop: the parent shares the same
+     * object, so this is how the edited times reach it — there is no
+     * update event to emit. Untangling it belongs with the split of this
+     * component (TODO2 G2), not with a lint pass.
+     */
+    /* eslint-disable vue/no-mutating-props */
     saveTempTimes() {
       // Set event times
       this.event.times = [...this.tempTimes]
@@ -2692,6 +2679,7 @@ export default {
           this.showError(err)
         })
     },
+    /* eslint-enable vue/no-mutating-props */
 
     /** Returns the min and max hours from the times */
     getMinMaxHoursFromTimes(times) {
@@ -2945,20 +2933,16 @@ export default {
     }
   },
   components: {
-    AlertText,
     AvailabilityTypeToggle,
     ColorLegend,
     ExpandableSection,
     BufferTimeSwitch,
-    UserAvatarContent,
     ZigZag,
-    ConfirmDetailsDialog,
     ToolRow,
     CalendarAccounts,
     RespondentsList,
     GCalWeekSelector,
     WorkingHoursToggle,
-    SignUpBlock,
     SignUpBlocksOverlay,
     SignUpBlocksList,
     CalendarEventBlock, // Added component registration

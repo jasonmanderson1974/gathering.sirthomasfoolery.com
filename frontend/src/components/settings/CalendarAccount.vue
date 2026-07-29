@@ -8,11 +8,20 @@
         class="tw-flex tw-w-full tw-flex-row tw-items-center"
       >
         <div v-if="toggleState" class="tw-flex tw-items-center">
+          <!--
+            The write-through into `account.enabled` is load-bearing: the toggle
+            POSTs but never refetches, so the shared reference is what keeps the
+            checkbox (and the parent's copy) in sync until the next authUser
+            refresh. Untangling it means owning the toggle state properly —
+            tracked as part of the toggle-mixin extraction (TODO2 G1).
+          -->
+          <!-- eslint-disable vue/no-mutating-props -->
           <v-checkbox
             v-model="account.enabled"
             @change="(enabled) => toggleCalendarAccount(enabled)"
             hide-details
           />
+          <!-- eslint-enable vue/no-mutating-props -->
           <div
             v-if="hasSubCalendars"
             class="-tw-ml-2 tw-h-fit tw-w-fit tw-cursor-pointer"
@@ -98,12 +107,7 @@
 <script>
 import { mapState, mapActions } from "vuex"
 import { authTypes, calendarTypes } from "@/constants"
-import {
-  post,
-  _delete,
-  signInGoogle,
-  getCalendarAccountKey,
-} from "@/utils"
+import { post, signInGoogle, getCalendarAccountKey } from "@/utils"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
 
 export default {
@@ -203,7 +207,7 @@ export default {
           calendarType: this.account.calendarType,
           enabled,
           subCalendarId,
-        }).catch((err) => {
+        }).catch(() => {
           this.showError(
             "There was a problem with toggling your calendar account! Please try again later."
           )
@@ -226,7 +230,7 @@ export default {
           email: this.account.email,
           calendarType: this.account.calendarType,
           enabled,
-        }).catch((err) => {
+        }).catch(() => {
           this.showError(
             "There was a problem with toggling your calendar account! Please try again later."
           )

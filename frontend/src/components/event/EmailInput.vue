@@ -53,7 +53,7 @@
 <script>
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
 import UserChip from "@/components/general/UserChip.vue"
-import { validateEmail, get, post, displayName } from "@/utils"
+import { validateEmail, get, displayName } from "@/utils"
 
 export default {
   name: "EmailReminders",

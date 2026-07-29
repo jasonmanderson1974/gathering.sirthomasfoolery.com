@@ -177,49 +177,6 @@
         </v-checkbox>
 
         <div class="tw-flex tw-flex-col tw-gap-2">
-          <!-- <ExpandableSection
-            v-if="authUser"
-            label="Email reminders"
-            v-model="showEmailReminders"
-            :auto-scroll="dialog"
-          >
-            <div class="tw-flex tw-flex-col tw-gap-5 tw-pt-2">
-              <EmailInput
-                v-show="authUser"
-                ref="emailInput"
-                @requestContactsAccess="requestContactsAccess"
-                labelColor="tw-text-parchment-dim"
-                :addedEmails="addedEmails"
-                @update:emails="(newEmails) => (emails = newEmails)"
-              >
-                <template v-slot:header>
-                  <div class="tw-flex tw-gap-1">
-                    <div class="tw-text-parchment-dim">
-                      Remind people to fill out the event
-                    </div>
-
-                    <v-tooltip
-                      top
-                      content-class="tw-bg-very-dark-gray tw-shadow-lg tw-opacity-100 tw-py-4"
-                    >
-                      <template v-slot:activator="{ on, attrs }">
-                        <v-icon small v-bind="attrs" v-on="on"
-                          >mdi-information-outline
-                        </v-icon>
-                      </template>
-                      <div>
-                        Reminder emails will be sent the day of event
-                        creation,<br />one day after, and three days after. You
-                        will also receive <br />an email when everybody has
-                        filled out the event.
-                      </div>
-                    </v-tooltip>
-                  </div>
-                </template>
-              </EmailInput>
-            </div>
-          </ExpandableSection> -->
-
           <ExpandableSection
             v-model="showAdvancedOptions"
             label="Advanced options"
@@ -355,7 +312,6 @@ import {
 import { mapActions, mapState } from "vuex"
 import TimezoneSelector from "./schedule_overlap/TimezoneSelector.vue"
 import HelpDialog from "./HelpDialog.vue"
-import EmailInput from "./event/EmailInput.vue"
 import DatePicker from "@/components/DatePicker.vue"
 import SlideToggle from "./SlideToggle.vue"
 import {
@@ -363,7 +319,6 @@ import {
   getAvailabilityFields,
   getAvailabilityMode,
 } from "./availabilityModes"
-import AlertText from "@/components/AlertText.vue"
 import OverflowGradient from "@/components/OverflowGradient.vue"
 
 import dayjs from "dayjs"
@@ -389,11 +344,9 @@ export default {
   components: {
     TimezoneSelector,
     HelpDialog,
-    EmailInput,
     DatePicker,
     SlideToggle,
     ExpandableSection,
-    AlertText,
     OverflowGradient,
   },
 
@@ -645,7 +598,7 @@ export default {
             posthogPayload.eventId = eventId
             this.$posthog?.capture("Sign up form created", posthogPayload)
           })
-          .catch((err) => {
+          .catch(() => {
             this.showError(
               "There was a problem creating that event! Please try again later."
             )
@@ -665,7 +618,7 @@ export default {
               this.reset()
               window.location.reload()
             })
-            .catch((err) => {
+            .catch(() => {
               this.showError(
                 "There was a problem editing this event! Please try again later."
               )

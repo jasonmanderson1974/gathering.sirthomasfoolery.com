@@ -32,11 +32,9 @@
 </template>
 
 <script>
-import EventType from "@/components/EventType.vue"
 import BottomFab from "@/components/BottomFab.vue"
 import Dashboard from "@/components/home/Dashboard.vue"
 import { mapState, mapActions, mapMutations, mapGetters } from "vuex"
-import { eventTypes } from "@/constants"
 import { isPhone, get } from "@/utils"
 
 export default {
@@ -47,7 +45,6 @@ export default {
   },
 
   components: {
-    EventType,
     BottomFab,
     Dashboard,
   },

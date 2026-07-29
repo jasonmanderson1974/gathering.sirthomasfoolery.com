@@ -54,6 +54,9 @@ export default {
         scrollHeight > clientHeight && scrollTop < scrollHeight - clientHeight - 1 // 1px tolerance
     },
     scrollToBottom() {
+      // `scrollContainer` is a raw HTMLElement, not Vue state — setting
+      // scrollTop is imperative DOM API, not a mutation of parent data.
+      // eslint-disable-next-line vue/no-mutating-props
       this.scrollContainer.scrollTop = this.scrollContainer.scrollHeight
     },
   },

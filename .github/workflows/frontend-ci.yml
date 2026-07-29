@@ -33,8 +33,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Lint is BLOCKING on errors (backlog cleared 2026-07-22, TODO A8):
-      # eslint exits nonzero on any error; warnings (~67 remain) still pass.
+      # Lint is FULLY BLOCKING (warning backlog cleared 2026-07-29, TODO2 H4):
+      # the rules sit at `error`, and `--max-warnings 0` in the lint script
+      # means a new warning fails the build too. Deliberate exceptions carry an
+      # `eslint-disable` comment stating why — see frontend/.eslintrc.cjs.
       - name: Lint
         run: npm run lint
 

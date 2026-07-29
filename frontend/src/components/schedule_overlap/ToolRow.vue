@@ -228,7 +228,6 @@
 import TimezoneSelector from "./TimezoneSelector.vue"
 import GCalWeekSelector from "./GCalWeekSelector.vue"
 import { isPhone } from "@/utils"
-import ExpandableSection from "../ExpandableSection.vue"
 import EventOptions from "./EventOptions.vue"
 import LocationInput from "@/components/LocationInput.vue"
 import { timeTypes, isOwnerlessEvent, serverURL } from "@/constants"
@@ -264,7 +263,6 @@ export default {
     TimezoneSelector,
     LocationInput,
     GCalWeekSelector,
-    ExpandableSection,
     EventOptions,
   },
 

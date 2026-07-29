@@ -128,7 +128,7 @@ export default new Vuex.Store({
     },
 
     createNew(
-      { state, getters, commit, dispatch },
+      { getters, commit, dispatch },
       { eventOnly = false, folderId = null }
     ) {
       // Guests may respond to events but not create them (enforced server-side too).
