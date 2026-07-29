@@ -417,25 +417,6 @@ func AdvanceGathering(eventId primitive.ObjectID, expectedStart, newStart, newEn
 	return res.ModifiedCount > 0, nil
 }
 
-func GetEventsCreatedThisMonth(userId primitive.ObjectID) (int, error) {
-	// Get the start of this month
-	now := time.Now()
-	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-
-	result, err := EventsCollection.CountDocuments(context.Background(), bson.M{
-		"ownerId": userId,
-		"_id": bson.M{
-			"$gte": primitive.NewObjectIDFromTimestamp(startOfMonth),
-		},
-	})
-	if err != nil {
-		logger.StdErr.Println(err)
-		return 0, err
-	}
-
-	return int(result), nil
-}
-
 // shortIdAlphabet omits 0/1/O/I/l so a short id can be read aloud or copied off
 // a screen without ambiguity.
 const shortIdAlphabet = "23456789ABCDEFabcdef"

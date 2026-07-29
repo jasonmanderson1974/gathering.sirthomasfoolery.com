@@ -226,10 +226,5 @@ func importEvent(c *gin.Context) {
 		logger.StdErr.Println("failed to set numResponses on the imported event:", err)
 	}
 
-	// Increment user's NumEventsCreated (a statistic — log and carry on)
-	if _, err := db.UsersCollection.UpdateOne(context.Background(), bson.M{"_id": user.Id}, bson.M{"$inc": bson.M{"numEventsCreated": 1}}); err != nil {
-		logger.StdErr.Println("failed to increment numEventsCreated:", err)
-	}
-
 	c.JSON(http.StatusCreated, gin.H{"eventId": newId.Hex(), "shortId": shortId})
 }

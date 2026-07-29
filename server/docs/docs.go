@@ -3325,9 +3325,6 @@ const docTemplate = `{
                 "lastName": {
                     "type": "string"
                 },
-                "numEventsCreated": {
-                    "type": "integer"
-                },
                 "phone": {
                     "type": "string"
                 },

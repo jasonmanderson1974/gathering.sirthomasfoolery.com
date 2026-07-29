@@ -559,8 +559,6 @@ definitions:
         type: boolean
       lastName:
         type: string
-      numEventsCreated:
-        type: integer
       phone:
         type: string
       picture:

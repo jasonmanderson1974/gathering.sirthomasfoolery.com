@@ -35,8 +35,6 @@ type User struct {
 
 	// Calendar options
 	CalendarOptions *CalendarOptions `json:"calendarOptions" bson:"calendarOptions,omitempty"`
-
-	NumEventsCreated int `json:"numEventsCreated" bson:"numEventsCreated,omitempty"`
 }
 
 // Declare the possible types of TokenOrigin

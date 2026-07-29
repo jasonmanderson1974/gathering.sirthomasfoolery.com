@@ -261,7 +261,6 @@ func createEvent(c *gin.Context) {
 		return
 	}
 	ownerId := user.Id
-	signedIn := true
 
 	// Construct event object
 	numResponses := 0
@@ -322,14 +321,6 @@ func createEvent(c *gin.Context) {
 		return
 	}
 	insertedId := result.InsertedID.(primitive.ObjectID).Hex()
-
-	if signedIn {
-		// A statistic, not part of the event — log rather than fail a creation
-		// that has already succeeded.
-		if _, err := db.UsersCollection.UpdateOne(context.Background(), bson.M{"_id": ownerId}, bson.M{"$inc": bson.M{"numEventsCreated": 1}}); err != nil {
-			logger.StdErr.Println("failed to increment numEventsCreated:", err)
-		}
-	}
 
 	c.JSON(http.StatusCreated, gin.H{"eventId": insertedId, "shortId": event.ShortId})
 }

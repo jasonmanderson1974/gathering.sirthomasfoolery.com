@@ -3317,9 +3317,6 @@
                 "lastName": {
                     "type": "string"
                 },
-                "numEventsCreated": {
-                    "type": "integer"
-                },
                 "phone": {
                     "type": "string"
                 },
