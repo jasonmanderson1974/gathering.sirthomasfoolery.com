@@ -35,6 +35,7 @@ func InitUser(router *gin.RouterGroup) {
 	userRouter.GET("/profile", getProfile)
 	userRouter.PATCH("/name", updateName)
 	userRouter.PATCH("/phone", updatePhone)
+	userRouter.PATCH("/nickname", updateNickname)
 	userRouter.POST("/email/request-change", requestEmailChange)
 	userRouter.POST("/email/verify-change", verifyEmailChange)
 	userRouter.PATCH("/calendar-options", updateCalendarOptions)
@@ -94,6 +95,47 @@ func updateName(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{})
+}
+
+// nicknameMaxRunes bounds a nickname to something that fits the surfaces it
+// replaces a name on — a respondent column header, a chip, a comment byline.
+const nicknameMaxRunes = 40
+
+// @Summary Updates the user's nickname
+// @Tags user
+// @Accept json
+// @Produce json
+// @Param payload body object{nickname=string} true "Object containing the nickname; empty clears it"
+// @Success 200
+// @Router /user/nickname [patch]
+func updateNickname(c *gin.Context) {
+	payload := struct {
+		Nickname string `json:"nickname"`
+	}{}
+	if err := c.BindJSON(&payload); err != nil {
+		return
+	}
+
+	authUser := utils.GetAuthUser(c)
+	nickname := trimAndTruncate(payload.Nickname, nicknameMaxRunes)
+
+	// Clearing unsets rather than storing "": the field is bson-omitempty, so
+	// an empty string would round-trip as absent anyway, and $unset keeps the
+	// documents honest about who actually has one.
+	var update bson.M
+	if nickname == "" {
+		update = bson.M{"$unset": bson.M{"nickname": ""}}
+	} else {
+		update = bson.M{"$set": bson.M{"nickname": nickname}}
+	}
+
+	if _, err := db.UsersCollection.UpdateByID(context.Background(), authUser.Id, update); err != nil {
+		logger.StdErr.Println(err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"nickname": nickname})
 }
 
 // @Summary Updates the user's phone number

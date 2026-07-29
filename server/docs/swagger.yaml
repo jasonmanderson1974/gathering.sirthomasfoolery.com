@@ -559,6 +559,13 @@ definitions:
         type: boolean
       lastName:
         type: string
+      nickname:
+        description: |-
+          Nickname is what the club actually calls this person. When set it stands
+          in for the name everywhere it is displayed — see DisplayName. The real
+          name is kept, not replaced, so the roll and the directory can still show
+          both.
+        type: string
       phone:
         type: string
       picture:
@@ -621,10 +628,22 @@ definitions:
         type: boolean
       lastName:
         type: string
+      nickname:
+        type: string
       phone:
         type: string
       role:
         $ref: '#/definitions/models.Role'
+      userId:
+        description: |-
+          UserId is empty for an invitation nobody has claimed yet. The roll needs
+          it to address a specific account — avatars, and the admin edit that F6
+          adds — where the email alone won't do.
+
+          A hex string, not an ObjectID: `omitempty` cannot omit an ObjectID (it is
+          a [12]byte array, which encoding/json never considers empty), so an
+          unclaimed invitation would ship a zero id that reads as real.
+        type: string
     type: object
 host: localhost:3002/api
 info:
@@ -2159,6 +2178,28 @@ paths:
         "200":
           description: OK
       summary: Updates the user's name
+      tags:
+      - user
+  /user/nickname:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Object containing the nickname; empty clears it
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            nickname:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Updates the user's nickname
       tags:
       - user
   /user/phone:

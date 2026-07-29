@@ -8,6 +8,7 @@ import {
   convertUTCSlotsToLocalISO,
   validateDOWPayload,
   timezoneObservesDST,
+  displayName,
 } from "@/utils"
 import { eventTypes, allTimezones } from "@/constants"
 import dayjs from "dayjs"
@@ -404,7 +405,7 @@ export default {
             const eventResponse = this.event.responses?.[userId]
             if (eventResponse?.user) {
               const user = eventResponse.user
-              name = `${user.firstName || ""} ${user.lastName || ""}`.trim()
+              name = displayName(user)
               email = user.email || ""
             } else {
               // Fallback: use userId if user info not available

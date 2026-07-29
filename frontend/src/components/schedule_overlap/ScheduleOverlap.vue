@@ -621,7 +621,7 @@
                   <span v-else>
                     {{
                       authUser && !addingAvailabilityAsGuest
-                        ? `${authUser.firstName} ${authUser.lastName}`
+                        ? displayName(authUser)
                         : curGuestId?.length > 0
                         ? curGuestId
                         : "a guest"
@@ -1047,6 +1047,7 @@ import {
   getTimezoneReferenceDateForEvent,
   timeNumToTimeString,
   prefersStartOnMonday,
+  displayName,
 } from "@/utils"
 import {
   availabilityTypes,
@@ -2266,6 +2267,7 @@ export default {
   methods: {
     ...mapMutations(["setAuthUser"]),
     ...mapActions(["showInfo", "showError"]),
+    displayName,
 
     // -----------------------------------
     //#region Date

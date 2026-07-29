@@ -40,6 +40,7 @@ func getPublicUserProfile(c *gin.Context) {
 		Id:        user.Id,
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
+		Nickname:  user.Nickname,
 		Picture:   user.Picture,
 	}
 	c.JSON(http.StatusOK, public)

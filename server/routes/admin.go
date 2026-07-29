@@ -44,11 +44,20 @@ func InitAdmin(router *gin.RouterGroup) {
 // otherwise the role recorded on the allowlist invitation.
 type allowlistMember struct {
 	models.AllowlistEntry
-	HasAccount bool        `json:"hasAccount"`
-	FirstName  string      `json:"firstName,omitempty"`
-	LastName   string      `json:"lastName,omitempty"`
-	Phone      string      `json:"phone,omitempty"`
-	Role       models.Role `json:"role"`
+	HasAccount bool `json:"hasAccount"`
+	// UserId is empty for an invitation nobody has claimed yet. The roll needs
+	// it to address a specific account — avatars, and the admin edit that F6
+	// adds — where the email alone won't do.
+	//
+	// A hex string, not an ObjectID: `omitempty` cannot omit an ObjectID (it is
+	// a [12]byte array, which encoding/json never considers empty), so an
+	// unclaimed invitation would ship a zero id that reads as real.
+	UserId    string      `json:"userId,omitempty"`
+	FirstName string      `json:"firstName,omitempty"`
+	LastName  string      `json:"lastName,omitempty"`
+	Nickname  string      `json:"nickname,omitempty"`
+	Phone     string      `json:"phone,omitempty"`
+	Role      models.Role `json:"role"`
 }
 
 func authUserFromContext(c *gin.Context) *models.User {
@@ -93,8 +102,10 @@ func getAllowlist(c *gin.Context) {
 		m := allowlistMember{AllowlistEntry: entry, Role: models.NormalizeRole(entry.Role)}
 		if user, ok := users[utils.NormalizeEmail(entry.Email)]; ok {
 			m.HasAccount = true
+			m.UserId = user.Id.Hex()
 			m.FirstName = user.FirstName
 			m.LastName = user.LastName
+			m.Nickname = user.Nickname
 			m.Phone = user.Phone
 			m.Role = user.EffectiveRole()
 		}

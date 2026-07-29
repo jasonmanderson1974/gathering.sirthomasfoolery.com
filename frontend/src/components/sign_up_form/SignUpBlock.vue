@@ -83,7 +83,7 @@
           </v-avatar>
         </div>
         <div v-if="!anonymize || response.user._id == authUser._id" class="tw-transition-all tw-text-sm">
-          {{ response.user.firstName + " " + response.user.lastName }}
+          {{ displayName(response.user) }}
         </div>
         <div v-else class="tw-transition-all tw-text-sm tw-italic">Attendee</div>
       </div>
@@ -106,7 +106,7 @@
           v-if="!anonymize || response.user._id == authUser._id"
           class="tw-text-sm tw-italic"
         >
-          {{ response.user.firstName + " " + response.user.lastName }}
+          {{ displayName(response.user) }}
         </div>
         <div v-else class="tw-text-sm tw-italic">Attendee</div>
       </div>
@@ -130,7 +130,7 @@
 </template>
 
 <script>
-import { getStartEndDateString } from "@/utils"
+import { getStartEndDateString, displayName } from "@/utils"
 import { mapState } from "vuex"
 
 export default {
@@ -177,6 +177,7 @@ export default {
   },
 
   methods: {
+    displayName,
     saveName() {
       this.$emit("update:signUpBlock", {
         ...this.signUpBlock,

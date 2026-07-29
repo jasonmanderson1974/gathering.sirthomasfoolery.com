@@ -121,9 +121,7 @@
                   :class="respondentClass(user._id)"
                 >
                   {{
-                    user.firstName +
-                    " " +
-                    user.lastName +
+                    displayName(user) +
                     (respondentIfNeeded(user._id) ? "*" : "")
                   }}
                 </div>
@@ -277,7 +275,7 @@
         <v-card-title>Are you sure?</v-card-title>
         <v-card-text class="tw-text-sm tw-text-parchment-dim"
           >Are you sure you want to delete
-          <strong>{{ userToDelete?.firstName }}</strong
+          <strong>{{ displayName(userToDelete) }}</strong
           >'s availability from this event?</v-card-text
         >
         <v-card-actions>
@@ -317,7 +315,7 @@
 </style>
 
 <script>
-import { _delete, isPhone } from "@/utils"
+import { _delete, isPhone, displayName } from "@/utils"
 import UserAvatarContent from "../UserAvatarContent.vue"
 import { mapState, mapActions } from "vuex"
 import EventOptions from "./EventOptions.vue"
@@ -449,8 +447,9 @@ export default {
           return 1
         }
 
-        // Otherwise, sort by first name
-        return (a.firstName || "").localeCompare(b.firstName || "")
+        // Otherwise, sort by the name as shown — sorting on firstName while
+        // rendering a nickname puts nicknamed people in visibly wrong places.
+        return displayName(a).localeCompare(displayName(b))
       })
       return orderedRespondents
     },
@@ -461,6 +460,7 @@ export default {
 
   methods: {
     ...mapActions(["showError", "showInfo"]),
+    displayName,
     /** Emit clickRespondent event */
     clickRespondent(e, userId) {
       e.stopImmediatePropagation()

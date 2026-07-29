@@ -35,7 +35,7 @@
         </v-list-item-avatar>
         <v-list-item-content>
           <v-list-item-title>
-            {{ `${item.firstName} ${item.lastName}` }}
+            {{ displayName(item) }}
           </v-list-item-title>
           <v-list-item-subtitle>{{ item.email }}</v-list-item-subtitle>
         </v-list-item-content>
@@ -58,7 +58,7 @@
 <script>
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
 import UserChip from "@/components/general/UserChip.vue"
-import { validateEmail, get, post } from "@/utils"
+import { validateEmail, get, post, displayName } from "@/utils"
 
 export default {
   name: "EmailReminders",
@@ -97,6 +97,7 @@ export default {
   },
 
   methods: {
+    displayName,
     /**
      * Requests access to contacts.
      */

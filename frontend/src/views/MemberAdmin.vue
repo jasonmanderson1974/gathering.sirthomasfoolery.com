@@ -87,7 +87,7 @@
           <div class="tw-min-w-0 tw-flex-1">
             <div class="tw-truncate tw-font-medium tw-text-parchment">
               <span v-if="member.hasAccount">
-                {{ member.firstName }} {{ member.lastName }}
+                {{ rollDisplayName(member) }}
               </span>
               <span v-else class="tw-italic tw-text-parchment-dim">
                 Awaiting first entry
@@ -209,7 +209,7 @@
 
 <script>
 import { mapState, mapGetters, mapActions } from "vuex"
-import { get, post, _delete } from "@/utils"
+import { get, post, _delete, rollDisplayName } from "@/utils"
 import { roles, roleLabels } from "@/constants"
 
 export default {
@@ -279,6 +279,7 @@ export default {
   },
 
   methods: {
+    rollDisplayName,
     ...mapActions(["showError", "showInfo"]),
     roleLabel(role) {
       return roleLabels[role] || roleLabels[roles.MEMBER]

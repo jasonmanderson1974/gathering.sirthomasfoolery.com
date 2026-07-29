@@ -58,7 +58,7 @@
                             mdi-account
                           </v-icon>
 
-                          {{ respondent.firstName }} {{ respondent.lastName }}
+                          {{ displayName(respondent) }}
                         </div>
                       </td>
                       <td class="tw-pr-4">
@@ -92,7 +92,7 @@
                             </v-list-item-avatar>
                             <v-list-item-content>
                               <v-list-item-title>
-                                {{ `${item.firstName} ${item.lastName}` }}
+                                {{ displayName(item) }}
                               </v-list-item-title>
                               <v-list-item-subtitle>
                                 {{ item.email }}
@@ -148,7 +148,7 @@
 
 <script>
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
-import { validateEmail, get } from "@/utils"
+import { validateEmail, get, displayName } from "@/utils"
 
 export default {
   name: "ConfirmDetailsDialog",
@@ -214,6 +214,7 @@ export default {
   },
 
   methods: {
+    displayName,
     confirm() {
       this.$emit("confirm", {
         emails: this.emails,
@@ -251,7 +252,7 @@ export default {
     },
     emailFilter(item, queryText) {
       // Custom email filter (unused)
-      const searchText = `${item.firstName} ${item.lastName} ${item.email}`
+      const searchText = `${displayName(item)} ${item.firstName} ${item.lastName} ${item.email}`
       return searchText.toLowerCase().includes(queryText.toLowerCase())
     },
   },

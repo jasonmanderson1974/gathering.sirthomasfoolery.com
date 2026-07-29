@@ -214,6 +214,41 @@ export const lightOrDark = (color) => {
 }
 
 
+/**
+ * The name to show for a user: their nickname when they have one, otherwise
+ * "First Last".
+ *
+ * Mirrors User.DisplayName() on the server — keep the two in step. Prefer this
+ * over concatenating the name fields anywhere a name is rendered, so setting a
+ * nickname takes effect everywhere at once.
+ *
+ * Returns "" for a user with no name at all; callers that need a fallback (a
+ * stored snapshot, an email, "Guest") supply their own, since the sensible
+ * answer differs by surface.
+ */
+export const displayName = (user) => {
+  if (!user) return ""
+  const nickname = (user.nickname ?? "").trim()
+  if (nickname) return nickname
+  return `${(user.firstName ?? "").trim()} ${(user.lastName ?? "").trim()}`.trim()
+}
+
+/**
+ * "Nickname (First Last)" for The Roll and the Fellowship directory — the two
+ * places that have to stay legible to an admin looking for a specific person.
+ * Falls back to the plain name when there is no nickname.
+ */
+export const rollDisplayName = (member) => {
+  if (!member) return ""
+  const nickname = (member.nickname ?? "").trim()
+  const realName = `${(member.firstName ?? "").trim()} ${(
+    member.lastName ?? ""
+  ).trim()}`.trim()
+  if (!nickname) return realName
+  if (!realName) return nickname
+  return `${nickname} (${realName})`
+}
+
 export const prefersStartOnMonday = () => {
   let defaultStartOnMonday = false
   try {

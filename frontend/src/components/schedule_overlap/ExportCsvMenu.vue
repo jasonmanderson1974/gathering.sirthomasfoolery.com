@@ -53,7 +53,7 @@
 </template>
 
 <script>
-import { getLocale } from "@/utils"
+import { getLocale, displayName } from "@/utils"
 
 /**
  * "Export CSV" kebab menu + format dialog for the respondents list, with the
@@ -108,16 +108,16 @@ export default {
         ? 1
         : (this.event.duration * 60) / increment
 
-      // Get responses sorted by first name
+      // Get responses sorted by the name the export will show
       const responses = Object.values(this.parsedResponses).sort((a, b) =>
-        a.user.firstName.localeCompare(b.user.firstName)
+        displayName(a.user).localeCompare(displayName(b.user))
       )
 
       if (this.exportCsvDialog.type === "datesToAvailable") {
         // Write CSV header
         const header = ["Date / Time"]
         header.push(
-          ...responses.map((r) => r.user.firstName + " " + r.user.lastName)
+          ...responses.map((r) => displayName(r.user))
         )
         csv.push(header)
 
@@ -154,7 +154,7 @@ export default {
         // Iterate through the responses
         for (const response of responses) {
           // The first row is the name
-          const row = [`${response.user.firstName} ${response.user.lastName}`]
+          const row = [displayName(response.user)]
 
           // Iterate through the dates
           for (const date of this.event.dates) {

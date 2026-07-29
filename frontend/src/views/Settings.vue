@@ -42,6 +42,42 @@
           </v-expand-transition>
         </div>
 
+        <!-- Nickname -->
+        <div>
+          <div class="tw-mb-1 tw-font-medium">Nickname</div>
+          <div class="tw-mb-2 tw-max-w-lg tw-text-sm tw-text-parchment-dim">
+            What the Fellowship calls you. Set one and it stands in for your
+            name throughout — leave it empty to go by your name.
+          </div>
+          <div class="tw-flex tw-max-w-lg tw-items-center tw-gap-2">
+            <v-text-field
+              v-model="nickname"
+              outlined
+              hide-details
+              placeholder="Nickname"
+              :maxlength="nicknameMaxLength"
+              :dense="isPhone"
+            />
+          </div>
+          <v-expand-transition>
+            <div v-if="nicknameUnsavedChanges" class="tw-mt-4">
+              <v-btn
+                @click="resetNickname"
+                color="primary"
+                outlined
+                class="tw-mr-2"
+                >Cancel</v-btn
+              >
+              <v-btn
+                @click="saveNickname"
+                color="primary"
+                :loading="savingNickname"
+                >Save changes</v-btn
+              >
+            </div>
+          </v-expand-transition>
+        </div>
+
         <!-- Email -->
         <div>
           <div class="tw-mb-1 tw-font-medium">Email</div>
@@ -300,6 +336,11 @@ export default {
     // Profile settings
     firstName: "",
     lastName: "",
+    nickname: "",
+    savingNickname: false,
+    // Matches nicknameMaxRunes on the server, which truncates rather than
+    // rejecting — so the input stops you before the server silently would.
+    nicknameMaxLength: 40,
     phone: "",
     savingPhone: false,
 
@@ -324,6 +365,9 @@ export default {
     profileUnsavedChanges() {
       return this.nameUnsavedChanges
     },
+    nicknameUnsavedChanges() {
+      return this.nickname.trim() !== (this.authUser.nickname || "")
+    },
     phoneUnsavedChanges() {
       return this.phone !== (this.authUser.phone || "")
     },
@@ -341,6 +385,26 @@ export default {
     formatPhone,
     beautifyPhone() {
       this.phone = this.formatPhone(this.phone)
+    },
+    resetNickname() {
+      this.nickname = this.authUser.nickname || ""
+    },
+    // Saved the phone way (patch → refresh → toast), not the name way: saveName
+    // reloads the whole page, which is a heavy answer to a one-field edit.
+    saveNickname() {
+      this.savingNickname = true
+      patch(`/user/nickname`, { nickname: this.nickname.trim() })
+        .then(async () => {
+          await this.refreshAuthUser()
+          this.nickname = this.authUser.nickname || ""
+          this.showInfo("Nickname updated.")
+        })
+        .catch(() => {
+          this.showError("There was a problem updating your nickname.")
+        })
+        .finally(() => {
+          this.savingNickname = false
+        })
     },
     savePhone() {
       this.phone = this.formatPhone(this.phone)
@@ -476,6 +540,7 @@ export default {
   created() {
     this.firstName = this.authUser.firstName
     this.lastName = this.authUser.lastName
+    this.nickname = this.authUser.nickname || ""
     this.phone = this.authUser.phone || ""
   },
 }

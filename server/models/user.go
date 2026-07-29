@@ -1,6 +1,8 @@
 package models
 
 import (
+	"strings"
+
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -15,6 +17,12 @@ type User struct {
 	LastName  string             `json:"lastName" bson:"lastName,omitempty"`
 	Phone     string             `json:"phone" bson:"phone,omitempty"`
 	Picture   string             `json:"picture" bson:"picture,omitempty"`
+
+	// Nickname is what the club actually calls this person. When set it stands
+	// in for the name everywhere it is displayed — see DisplayName. The real
+	// name is kept, not replaced, so the roll and the directory can still show
+	// both.
+	Nickname string `json:"nickname" bson:"nickname,omitempty"`
 
 	// Whether the user has set a custom name for themselves, i.e. don't change their name when they sign in
 	HasCustomName *bool `json:"hasCustomName" bson:"hasCustomName,omitempty"`
@@ -35,6 +43,24 @@ type User struct {
 
 	// Calendar options
 	CalendarOptions *CalendarOptions `json:"calendarOptions" bson:"calendarOptions,omitempty"`
+}
+
+// DisplayName is the name to show for this user: the nickname when they have
+// one, otherwise "First Last".
+//
+// Every name a user sees should come from here rather than concatenating the
+// two name fields, so setting a nickname takes effect everywhere at once. The
+// exceptions are deliberate: the roll and the directory pair the nickname with
+// the real name so admins can still tell who is who.
+//
+// A user with neither a nickname nor a name yields "" — the caller decides what
+// to fall back to (a stored snapshot, an email, "Guest"), because the sensible
+// answer differs by surface.
+func (u *User) DisplayName() string {
+	if nickname := strings.TrimSpace(u.Nickname); nickname != "" {
+		return nickname
+	}
+	return strings.TrimSpace(strings.TrimSpace(u.FirstName) + " " + strings.TrimSpace(u.LastName))
 }
 
 // Declare the possible types of TokenOrigin

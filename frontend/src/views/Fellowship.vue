@@ -108,7 +108,7 @@
                   v-if="member.hasAccount"
                   class="tw-truncate tw-font-medium tw-text-parchment"
                 >
-                  {{ member.firstName }} {{ member.lastName }}
+                  {{ rollDisplayName(member) }}
                 </span>
                 <span
                   v-else
@@ -152,7 +152,7 @@
 
 <script>
 import { mapGetters } from "vuex"
-import { get, formatPhone, isPhone } from "@/utils"
+import { get, formatPhone, isPhone, rollDisplayName } from "@/utils"
 import { roles, roleLabels } from "@/constants"
 
 export default {
@@ -181,8 +181,11 @@ export default {
       return this.members.filter((m) => {
         if (!this.showGuests && m.role === roles.GUEST) return false
         if (!q) return true
-        const hay = `${m.firstName || ""} ${m.lastName || ""} ${m.email}`
-          .toLowerCase()
+        // Search both names — someone looking for "Bartholomew" should find
+        // him even when the roll shows "Bart".
+        const hay = `${m.nickname || ""} ${m.firstName || ""} ${
+          m.lastName || ""
+        } ${m.email}`.toLowerCase()
         return hay.includes(q)
       })
     },
@@ -204,6 +207,7 @@ export default {
   },
 
   methods: {
+    rollDisplayName,
     formatPhone,
     roleLabel(role) {
       return roleLabels[role] || roleLabels[roles.MEMBER]
@@ -217,6 +221,10 @@ export default {
       return "tw-border-brass-dim tw-text-parchment"
     },
     initials(member) {
+      // A nickname is one word, so it gets one initial; a real name still
+      // gets two. Either way the monogram starts with what the card shows.
+      const nickname = (member.nickname || "").trim()
+      if (nickname) return nickname.charAt(0).toUpperCase()
       const f = (member.firstName || "").trim()
       const l = (member.lastName || "").trim()
       if (f || l) {
@@ -227,7 +235,7 @@ export default {
     // Display name for exports (matches the card: pending entries show a
     // placeholder rather than a blank).
     exportName(m) {
-      const name = `${m.firstName || ""} ${m.lastName || ""}`.trim()
+      const name = rollDisplayName(m)
       return m.hasAccount && name ? name : "Awaiting first entry"
     },
     // Download the currently-filtered roll as a CSV (what you see is what you

@@ -12,7 +12,7 @@
       <v-list class="py-0" :dense="isPhone">
         <v-list-item>
           <v-list-item-title>
-            <strong>{{ `${authUser.firstName} ${authUser.lastName}` }}</strong>
+            <strong>{{ displayName(authUser) }}</strong>
           </v-list-item-title>
         </v-list-item>
         <!-- <v-list-item id="add-team-member-btn" @click="addTeamMember">
@@ -77,7 +77,7 @@
 <script>
 import UserAvatarContent from "@/components/UserAvatarContent"
 import { mapState, mapMutations, mapGetters } from "vuex"
-import { post, isPhone } from "@/utils"
+import { post, isPhone, displayName } from "@/utils"
 import TeamsNotReadyDialog from "./TeamsNotReadyDialog.vue"
 
 export default {
@@ -107,6 +107,7 @@ export default {
 
   methods: {
     ...mapMutations(["setAuthUser"]),
+    displayName,
     async signOut() {
       await post("/auth/sign-out")
       this.setAuthUser(null)

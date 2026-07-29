@@ -18,13 +18,14 @@
       v-else
       :class="`tw-flex tw-size-full tw-items-center tw-justify-center tw-bg-[linear-gradient(-25deg,#2b6cb0,#63b3ed,#2b6cb0)] tw-text-${textSize} tw-text-white`"
     >
-      {{ user.firstName?.charAt(0) ?? user.email?.charAt(0) ?? "" }}
+      {{ monogram }}
     </div>
   </v-avatar>
 </template>
 
 <script>
 import { calendarTypes } from "@/constants"
+import { displayName } from "@/utils"
 
 export default {
   name: "UserAvatarContent",
@@ -39,6 +40,16 @@ export default {
     },
     textSize() {
       return this.size <= 24 ? "xs" : "lg"
+    },
+    /**
+     * First character of the name as shown, so a nicknamed user's monogram
+     * matches the name beside it. Falls back to the email for accounts with no
+     * name at all.
+     */
+    monogram() {
+      return (
+        displayName(this.user).charAt(0) || this.user.email?.charAt(0) || ""
+      )
     },
   },
 }

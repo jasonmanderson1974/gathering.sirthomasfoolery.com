@@ -2334,6 +2334,41 @@
                 }
             }
         },
+        "/user/nickname": {
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user"
+                ],
+                "summary": "Updates the user's nickname",
+                "parameters": [
+                    {
+                        "description": "Object containing the nickname; empty clears it",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "nickname": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
         "/user/phone": {
             "patch": {
                 "consumes": [
@@ -3317,6 +3352,10 @@
                 "lastName": {
                     "type": "string"
                 },
+                "nickname": {
+                    "description": "Nickname is what the club actually calls this person. When set it stands\nin for the name everywhere it is displayed — see DisplayName. The real\nname is kept, not replaced, so the roll and the directory can still show\nboth.",
+                    "type": "string"
+                },
                 "phone": {
                     "type": "string"
                 },
@@ -3409,11 +3448,18 @@
                 "lastName": {
                     "type": "string"
                 },
+                "nickname": {
+                    "type": "string"
+                },
                 "phone": {
                     "type": "string"
                 },
                 "role": {
                     "$ref": "#/definitions/models.Role"
+                },
+                "userId": {
+                    "description": "UserId is empty for an invitation nobody has claimed yet. The roll needs\nit to address a specific account — avatars, and the admin edit that F6\nadds — where the email alone won't do.\n\nA hex string, not an ObjectID: `omitempty` cannot omit an ObjectID (it is\na [12]byte array, which encoding/json never considers empty), so an\nunclaimed invitation would ship a zero id that reads as real.",
+                    "type": "string"
                 }
             }
         }
