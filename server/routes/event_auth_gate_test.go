@@ -54,11 +54,13 @@ var eventRoutes = []struct {
 	{http.MethodPost, "/api/events/abc/polls", false},
 	{http.MethodDelete, "/api/events/abc/polls/p1", false},
 	{http.MethodPost, "/api/events/abc/polls/p1/vote", false},
+	{http.MethodGet, "/api/events/abc/lists", false},
 	{http.MethodPost, "/api/events/abc/lists", false},
 	{http.MethodPatch, "/api/events/abc/lists/l1", false},
 	{http.MethodDelete, "/api/events/abc/lists/l1", false},
 	{http.MethodPost, "/api/events/abc/lists/l1/items", false},
 	{http.MethodPut, "/api/events/abc/lists/l1/items/i1", false},
+	{http.MethodPut, "/api/events/abc/lists/l1/items/i1/checked", false},
 	{http.MethodDelete, "/api/events/abc/lists/l1/items/i1", false},
 }
 

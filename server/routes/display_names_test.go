@@ -197,3 +197,60 @@ func TestEventDisplayNameIdsEmptyWhenNothingToResolve(t *testing.T) {
 		t.Errorf("got %v, want no ids (and therefore no query)", ids)
 	}
 }
+
+// Whoever ticked a checklist box is displayed next to the author, so their id
+// has to join the same lookup — including when they didn't write the item.
+func TestEventDisplayNameIdsIncludesTheChecker(t *testing.T) {
+	author := primitive.NewObjectID()
+	checker := primitive.NewObjectID()
+	zero := primitive.NilObjectID
+
+	lists := []models.EventList{{Items: []models.EventListItem{
+		{UserId: author, CheckedBy: &checker},
+		{UserId: author},                   // never ticked: nothing extra
+		{UserId: author, CheckedBy: &zero}, // a zero id contributes nothing
+	}}}
+
+	ids := eventDisplayNameIds(nil, nil, nil, lists)
+
+	if len(ids) != 2 {
+		t.Fatalf("got %d ids, want 2 (author + checker): %v", len(ids), ids)
+	}
+	found := make(map[primitive.ObjectID]bool, len(ids))
+	for _, id := range ids {
+		found[id] = true
+	}
+	if !found[author] || !found[checker] {
+		t.Errorf("ids %v are missing the author or the checker", ids)
+	}
+}
+
+// A nickname change has to reach "Checked by …" the same way it reaches the
+// author line, and an id that no longer resolves keeps its stored snapshot.
+func TestResolveListItemNamesResolvesAuthorAndChecker(t *testing.T) {
+	author := primitive.NewObjectID()
+	checker := primitive.NewObjectID()
+	deleted := primitive.NewObjectID()
+
+	lists := []models.EventList{{Items: []models.EventListItem{
+		{UserId: author, AuthorName: "Ada Old", CheckedBy: &checker, CheckedByName: "Bart Old"},
+		{UserId: deleted, AuthorName: "Gone Away", CheckedBy: &deleted, CheckedByName: "Gone Away"},
+	}}}
+	users := map[string]models.User{
+		author.Hex():  {Id: author, Nickname: "Ada"},
+		checker.Hex(): {Id: checker, FirstName: "Bart", LastName: "New"},
+	}
+
+	resolveListItemNames(lists, users)
+
+	items := lists[0].Items
+	if items[0].AuthorName != "Ada" {
+		t.Errorf("author name = %q, want the current nickname", items[0].AuthorName)
+	}
+	if items[0].CheckedByName != "Bart New" {
+		t.Errorf("checker name = %q, want the current display name", items[0].CheckedByName)
+	}
+	if items[1].AuthorName != "Gone Away" || items[1].CheckedByName != "Gone Away" {
+		t.Errorf("an unresolvable id must keep its snapshot, got %+v", items[1])
+	}
+}

@@ -27,6 +27,11 @@ const (
 	maxListItemLength = 300
 	maxListsPerEvent  = 20
 	maxItemsPerList   = 100
+	// How many levels of nesting an item may sit at: a top-level item, a child
+	// and a grandchild. Unlike the caps above this one is exact rather than
+	// advisory — an item is never re-parented, so the depth it is written at is
+	// the depth it keeps, and a check against the event as read cannot go stale.
+	maxListItemDepth = 3
 )
 
 // Error codes specific to lists.
@@ -38,6 +43,8 @@ const (
 	errListItemNotFound = "list-item-not-found"
 	errTooManyLists     = "too-many-lists"
 	errListFull         = "list-full"
+	errListTooDeep      = "list-depth-exceeded"
+	errNotChecklist     = "not-a-checklist"
 )
 
 // listViewer is the caller's identity as it bears on lists. Kept as a plain
@@ -122,7 +129,9 @@ func sanitizeListItemText(text string) (string, bool) {
 
 // validListKind reports whether kind is one this feature renders.
 func validListKind(kind string) bool {
-	return kind == models.ListKindText || kind == models.ListKindLocation
+	return kind == models.ListKindText ||
+		kind == models.ListKindLocation ||
+		kind == models.ListKindChecklist
 }
 
 // findEventList locates a list on an event by hex id.
@@ -143,6 +152,69 @@ func findListItem(list *models.EventList, itemId string) (*models.EventListItem,
 		}
 	}
 	return nil, false
+}
+
+// listItemDepth returns an item's 0-based depth on its list, walking ParentId
+// upwards.
+//
+// A parent that no longer exists counts as no parent at all: the item is an
+// orphan — its parent was deleted between someone else's read and write — and
+// both this and the frontend treat it as top-level rather than hiding it.
+//
+// The walk is bounded by the item count so that malformed data terminates. This
+// code cannot produce a cycle (a parent is chosen from items that already
+// exist, and nothing is ever re-parented), but a hand-edited document could.
+func listItemDepth(list *models.EventList, item *models.EventListItem) int {
+	depth := 0
+	current := item
+	for range list.Items {
+		if current.ParentId == nil {
+			break
+		}
+		parent, found := findListItem(list, current.ParentId.Hex())
+		if !found {
+			break
+		}
+		depth++
+		current = parent
+	}
+	return depth
+}
+
+// collectDescendantIds returns rootId together with every item nested beneath
+// it — the id set that one atomic $pull removes when an item is deleted.
+//
+// The set is computed from the event as read, so an item someone else adds
+// under this subtree in the same instant is not in it: that item survives as an
+// orphan and reappears at the top level, which is a far better failure than a
+// partially deleted subtree. The seen set both dedupes the $in and guarantees
+// termination on malformed data.
+func collectDescendantIds(list *models.EventList, rootId primitive.ObjectID) []primitive.ObjectID {
+	ids := []primitive.ObjectID{rootId}
+	seen := map[primitive.ObjectID]bool{rootId: true}
+
+	// Breadth-first over the flat array. maxListItemDepth bounds how deep this
+	// can go in practice, but the loop is written against the frontier so it
+	// stays correct if that cap ever moves.
+	frontier := []primitive.ObjectID{rootId}
+	for len(frontier) > 0 {
+		var next []primitive.ObjectID
+		for _, item := range list.Items {
+			if item.ParentId == nil || seen[item.Id] {
+				continue
+			}
+			for _, parentId := range frontier {
+				if *item.ParentId == parentId {
+					seen[item.Id] = true
+					next = append(next, item.Id)
+					break
+				}
+			}
+		}
+		ids = append(ids, next...)
+		frontier = next
+	}
+	return ids
 }
 
 // loadListContext resolves the event, the signed-in user and the viewer for a
@@ -321,12 +393,14 @@ func deleteEventList(c *gin.Context) {
 // @Produce json
 // @Param eventId path string true "Event ID"
 // @Param listId path string true "List ID"
-// @Param payload body object{text=string} true "Item text"
+// @Param payload body object{text=string,parentId=string} true "Item text, optionally nested under an existing item"
 // @Success 200 {object} models.EventListItem
 // @Router /events/{eventId}/lists/{listId}/items [post]
 func addEventListItem(c *gin.Context) {
 	payload := struct {
 		Text string `json:"text" binding:"required"`
+		// Optional: the item this one hangs under. Absent means top-level.
+		ParentId string `json:"parentId"`
 	}{}
 	if err := c.Bind(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
@@ -359,10 +433,28 @@ func addEventListItem(c *gin.Context) {
 		return
 	}
 
+	// Nesting, when asked for. The depth check is exact rather than advisory:
+	// nothing is ever re-parented, so a parent's depth cannot change under us
+	// between this read and the write below.
+	var parentId *primitive.ObjectID
+	if payload.ParentId != "" {
+		parent, parentFound := findListItem(list, payload.ParentId)
+		if !parentFound {
+			c.JSON(http.StatusNotFound, responses.Error{Error: errListItemNotFound})
+			return
+		}
+		if listItemDepth(list, parent)+1 >= maxListItemDepth {
+			c.JSON(http.StatusBadRequest, responses.Error{Error: errListTooDeep})
+			return
+		}
+		parentId = &parent.Id
+	}
+
 	// Identity and credit come from the session, never the payload (E3).
 	item := models.EventListItem{
 		Id:         primitive.NewObjectID(),
 		Text:       text,
+		ParentId:   parentId,
 		UserId:     user.Id,
 		AuthorName: user.DisplayName(),
 		CreatedAt:  primitive.NewDateTimeFromTime(time.Now()),
@@ -436,7 +528,8 @@ func editEventListItem(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// @Summary Deletes a list item (own, or any when the caller is a member or above)
+// @Summary Deletes a list item and everything nested under it (own, or any when the caller is a member or above)
+// @Description The right to delete an item is the right to delete its subtree, so a reply-like child added by someone else goes with its parent.
 // @Tags events
 // @Accept json
 // @Produce json
@@ -465,11 +558,107 @@ func deleteEventListItem(c *gin.Context) {
 		return
 	}
 
-	if _, err := db.DeleteEventListItem(event.Id, list.Id, item.Id); err != nil {
+	// Cascade: the item plus everything beneath it, removed in one update so no
+	// one can observe a half-deleted subtree.
+	itemIds := collectDescendantIds(list, item.Id)
+	if _, err := db.DeleteEventListItems(event.Id, list.Id, itemIds); err != nil {
 		logger.StdErr.Println(err)
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 		return
 	}
 
 	c.Status(http.StatusOK)
+}
+
+// @Summary Ticks or unticks a checklist item
+// @Description Open to every signed-in user, guests included — the same reasoning as adding an item. Only the last person to change the state is recorded; there is no history.
+// @Tags events
+// @Accept json
+// @Produce json
+// @Param eventId path string true "Event ID"
+// @Param listId path string true "List ID"
+// @Param itemId path string true "Item ID"
+// @Param payload body object{checked=bool} true "New checked state"
+// @Success 200
+// @Router /events/{eventId}/lists/{listId}/items/{itemId}/checked [put]
+func setEventListItemChecked(c *gin.Context) {
+	payload := struct {
+		// A POINTER with binding:"required": a bare bool would fail the binding
+		// on `false`, i.e. on every uncheck.
+		Checked *bool `json:"checked" binding:"required"`
+	}{}
+	if err := c.Bind(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
+		return
+	}
+
+	// No gate beyond being signed in: ticking things off is the point of a
+	// checklist, and it is as reversible as adding an item.
+	event, user, _, ok := loadListContext(c)
+	if !ok {
+		return
+	}
+	list, found := findEventList(event, c.Param("listId"))
+	if !found {
+		c.JSON(http.StatusNotFound, responses.Error{Error: errListNotFound})
+		return
+	}
+	if list.Kind != models.ListKindChecklist {
+		c.JSON(http.StatusBadRequest, responses.Error{Error: errNotChecklist})
+		return
+	}
+	item, itemFound := findListItem(list, c.Param("itemId"))
+	if !itemFound {
+		c.JSON(http.StatusNotFound, responses.Error{Error: errListItemNotFound})
+		return
+	}
+
+	// Credit comes from the session, and both directions are recorded — an
+	// uncheck is as much a change of state as a check.
+	matched, err := db.SetEventListItemChecked(
+		event.Id, list.Id, item.Id,
+		*payload.Checked,
+		user.Id, user.DisplayName(),
+		primitive.NewDateTimeFromTime(time.Now()),
+	)
+	if err != nil {
+		logger.StdErr.Println(err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
+	if !matched {
+		// Removed between the read and the write.
+		c.JSON(http.StatusNotFound, responses.Error{Error: errListItemNotFound})
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+// @Summary Returns just the shared lists on an event, display names resolved
+// @Description The cheap refresh: getEvent resolves a user per availability response and per sign-up response before it ever reaches the lists, which is far too much work to see one new entry appear.
+// @Tags events
+// @Accept json
+// @Produce json
+// @Param eventId path string true "Event ID"
+// @Success 200 {array} models.EventList
+// @Router /events/{eventId}/lists [get]
+func getEventLists(c *gin.Context) {
+	// Any signed-in user, which is the same access getEvent grants: post-E3
+	// every event route requires a session, and the lists are already part of
+	// that response.
+	event, _, _, ok := loadListContext(c)
+	if !ok {
+		return
+	}
+
+	resolveListDisplayNames(event.Lists)
+
+	lists := event.Lists
+	if lists == nil {
+		// An event with no lists serializes as [] rather than null, so the
+		// client can splice the result in without a nil check.
+		lists = []models.EventList{}
+	}
+	c.JSON(http.StatusOK, lists)
 }

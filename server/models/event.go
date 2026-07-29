@@ -240,31 +240,55 @@ type PollOption struct {
 type EventList struct {
 	Id   primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
 	Name string             `json:"name" bson:"name,omitempty"`
-	// Kind is ListKindText or ListKindLocation, fixed when the list is created.
+	// Kind is one of the ListKind constants, fixed when the list is created.
 	// A location list feeds its input through the Google address lookup and
 	// renders each item as a maps link; it stores the same plain string either
-	// way, matching Event.Location.
+	// way, matching Event.Location. A checklist gives every item a checkbox.
 	Kind  string          `json:"kind" bson:"kind,omitempty"`
 	Items []EventListItem `json:"items" bson:"items,omitempty"`
 }
 
-// The two list kinds. Anything else is rejected at write time rather than
+// The list kinds. Anything else is rejected at write time rather than
 // defaulted, so a typo can't quietly produce a list that renders as plain text.
 const (
-	ListKindText     = "text"
-	ListKindLocation = "location"
+	ListKindText      = "text"
+	ListKindLocation  = "location"
+	ListKindChecklist = "checklist"
 )
 
 // EventListItem is one entry on a list. AuthorName is a DisplayName() snapshot
 // taken at write time and re-resolved on read (see routes/display_names.go), so
 // it survives the author's account being deleted but still follows a nickname
 // change.
+//
+// Items nest up to models-agnostic depth (see routes/event_lists.go's
+// maxListItemDepth) by pointing at a parent rather than by containing children:
+// a tree of arrays would force whole-array rewrites on every mutation, which is
+// exactly what db/event_lists.go's targeted updates exist to avoid.
 type EventListItem struct {
-	Id         primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
-	Text       string             `json:"text" bson:"text,omitempty"`
-	UserId     primitive.ObjectID `json:"userId" bson:"userId,omitempty"`
-	AuthorName string             `json:"authorName" bson:"authorName,omitempty"`
-	CreatedAt  primitive.DateTime `json:"createdAt" bson:"createdAt,omitempty"`
+	Id   primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
+	Text string             `json:"text" bson:"text,omitempty"`
+	// ParentId is nil for a top-level item. A POINTER, not a bare ObjectID:
+	// omitempty can't omit a [12]byte array, so a zero id would serialize as 24
+	// zeros and read back as a real parent. Items written before nesting existed
+	// have no field at all, which decodes to nil — hence no migration.
+	ParentId   *primitive.ObjectID `json:"parentId,omitempty" bson:"parentId,omitempty"`
+	UserId     primitive.ObjectID  `json:"userId" bson:"userId,omitempty"`
+	AuthorName string              `json:"authorName" bson:"authorName,omitempty"`
+	CreatedAt  primitive.DateTime  `json:"createdAt" bson:"createdAt,omitempty"`
+
+	// Checklist state, meaningful only on a ListKindChecklist list. All four are
+	// absent until someone first ticks the box, and from then on they are always
+	// written together — so Checked=false alongside a CheckedByName renders
+	// "Unchecked by Bart", while an item nobody has touched renders nothing.
+	// Only the last change is kept; there is deliberately no history.
+	//
+	// omitempty on the bool is safe because the write is a literal bson.M $set
+	// (struct tags don't apply to it), so an uncheck really does store false.
+	Checked       bool                `json:"checked,omitempty" bson:"checked,omitempty"`
+	CheckedBy     *primitive.ObjectID `json:"checkedBy,omitempty" bson:"checkedBy,omitempty"`
+	CheckedByName string              `json:"checkedByName,omitempty" bson:"checkedByName,omitempty"`
+	CheckedAt     primitive.DateTime  `json:"checkedAt,omitempty" bson:"checkedAt,omitempty"`
 }
 
 type SignUpBlock struct {

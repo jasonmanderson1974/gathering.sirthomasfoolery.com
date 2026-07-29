@@ -1294,6 +1294,39 @@ const docTemplate = `{
             }
         },
         "/events/{eventId}/lists": {
+            "get": {
+                "description": "The cheap refresh: getEvent resolves a user per availability response and per sign-up response before it ever reaches the lists, which is far too much work to see one new entry appear.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Returns just the shared lists on an event, display names resolved",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.EventList"
+                            }
+                        }
+                    }
+                }
+            },
             "post": {
                 "consumes": [
                     "application/json"
@@ -1452,13 +1485,16 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Item text",
+                        "description": "Item text, optionally nested under an existing item",
                         "name": "payload",
                         "in": "body",
                         "required": true,
                         "schema": {
                             "type": "object",
                             "properties": {
+                                "parentId": {
+                                    "type": "string"
+                                },
                                 "text": {
                                     "type": "string"
                                 }
@@ -1532,6 +1568,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "description": "The right to delete an item is the right to delete its subtree, so a reply-like child added by someone else goes with its parent.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1541,7 +1578,7 @@ const docTemplate = `{
                 "tags": [
                     "events"
                 ],
-                "summary": "Deletes a list item (own, or any when the caller is a member or above)",
+                "summary": "Deletes a list item and everything nested under it (own, or any when the caller is a member or above)",
                 "parameters": [
                     {
                         "type": "string",
@@ -1563,6 +1600,63 @@ const docTemplate = `{
                         "name": "itemId",
                         "in": "path",
                         "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/events/{eventId}/lists/{listId}/items/{itemId}/checked": {
+            "put": {
+                "description": "Open to every signed-in user, guests included — the same reasoning as adding an item. Only the last person to change the state is recorded; there is no history.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Ticks or unticks a checklist item",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "List ID",
+                        "name": "listId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Item ID",
+                        "name": "itemId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New checked state",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "checked": {
+                                    "type": "boolean"
+                                }
+                            }
+                        }
                     }
                 ],
                 "responses": {
@@ -3642,7 +3736,7 @@ const docTemplate = `{
                     }
                 },
                 "kind": {
-                    "description": "Kind is ListKindText or ListKindLocation, fixed when the list is created.\nA location list feeds its input through the Google address lookup and\nrenders each item as a maps link; it stores the same plain string either\nway, matching Event.Location.",
+                    "description": "Kind is one of the ListKind constants, fixed when the list is created.\nA location list feeds its input through the Google address lookup and\nrenders each item as a maps link; it stores the same plain string either\nway, matching Event.Location. A checklist gives every item a checkbox.",
                     "type": "string"
                 },
                 "name": {
@@ -3659,8 +3753,25 @@ const docTemplate = `{
                 "authorName": {
                     "type": "string"
                 },
+                "checked": {
+                    "description": "Checklist state, meaningful only on a ListKindChecklist list. All four are\nabsent until someone first ticks the box, and from then on they are always\nwritten together — so Checked=false alongside a CheckedByName renders\n\"Unchecked by Bart\", while an item nobody has touched renders nothing.\nOnly the last change is kept; there is deliberately no history.\n\nomitempty on the bool is safe because the write is a literal bson.M $set\n(struct tags don't apply to it), so an uncheck really does store false.",
+                    "type": "boolean"
+                },
+                "checkedAt": {
+                    "type": "integer"
+                },
+                "checkedBy": {
+                    "type": "string"
+                },
+                "checkedByName": {
+                    "type": "string"
+                },
                 "createdAt": {
                     "type": "integer"
+                },
+                "parentId": {
+                    "description": "ParentId is nil for a top-level item. A POINTER, not a bare ObjectID:\nomitempty can't omit a [12]byte array, so a zero id would serialize as 24\nzeros and read back as a real parent. Items written before nesting existed\nhave no field at all, which decodes to nil — hence no migration.",
+                    "type": "string"
                 },
                 "text": {
                     "type": "string"

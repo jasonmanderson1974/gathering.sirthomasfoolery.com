@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +25,9 @@ func listsTestRouter() *gin.Engine {
 	r.DELETE("/events/:eventId/lists/:listId", middleware.AuthRequired(), deleteEventList)
 	r.POST("/events/:eventId/lists/:listId/items", middleware.AuthRequired(), addEventListItem)
 	r.PUT("/events/:eventId/lists/:listId/items/:itemId", middleware.AuthRequired(), editEventListItem)
+	r.PUT("/events/:eventId/lists/:listId/items/:itemId/checked", middleware.AuthRequired(), setEventListItemChecked)
 	r.DELETE("/events/:eventId/lists/:listId/items/:itemId", middleware.AuthRequired(), deleteEventListItem)
+	r.GET("/events/:eventId/lists", middleware.AuthRequired(), getEventLists)
 	return r
 }
 
@@ -338,5 +341,251 @@ func TestLists_ItemAuthorNamesResolveAtReadTime(t *testing.T) {
 	// The stored snapshot is left alone — resolution is read-time only.
 	if lists := readEventLists(t, eventId); lists[0].Items[0].AuthorName != "Test User" {
 		t.Error("read-time resolution rewrote the stored snapshot")
+	}
+}
+
+// itemsByText indexes a list's items for assertions that don't care about
+// position.
+func itemsByText(items []models.EventListItem) map[string]models.EventListItem {
+	byText := make(map[string]models.EventListItem, len(items))
+	for _, item := range items {
+		byText[item.Text] = item
+	}
+	return byText
+}
+
+// Nesting end to end: three levels are allowed, the fourth is refused, and an
+// unknown parent is a 404 rather than a silently top-level item.
+func TestLists_NestedItems(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "lists-nest@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := listsTestRouter()
+	cookie := loginAs(t, h, ownerId.Hex())
+	list := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"text"}`)
+	itemsPath := "/events/" + eventId.Hex() + "/lists/" + list.Id.Hex() + "/items"
+
+	root := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Mains"}`)
+	if root.ParentId != nil {
+		t.Errorf("a top-level item got a parent: %+v", root)
+	}
+	child := addItemFor(t, h, eventId, list.Id, cookie,
+		`{"text":"Hotdogs","parentId":"`+root.Id.Hex()+`"}`)
+	if child.ParentId == nil || *child.ParentId != root.Id {
+		t.Fatalf("child's parent = %v, want %s", child.ParentId, root.Id.Hex())
+	}
+	grandchild := addItemFor(t, h, eventId, list.Id, cookie,
+		`{"text":"Mustard","parentId":"`+child.Id.Hex()+`"}`)
+
+	// A fourth level is where it stops.
+	w := do(h, http.MethodPost, itemsPath, `{"text":"Dijon","parentId":"`+grandchild.Id.Hex()+`"}`, cookie)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("4th level: got %d, want 400 (body: %s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), errListTooDeep) {
+		t.Errorf("4th level error = %s, want %s", w.Body.String(), errListTooDeep)
+	}
+
+	// A parent that isn't there is a 404, not a top-level item.
+	w = do(h, http.MethodPost, itemsPath,
+		`{"text":"Orphan","parentId":"`+primitive.NewObjectID().Hex()+`"}`, cookie)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("unknown parent: got %d, want 404 (body: %s)", w.Code, w.Body.String())
+	}
+
+	stored := itemsByText(readEventLists(t, eventId)[0].Items)
+	if len(stored) != 3 {
+		t.Fatalf("stored %d items, want 3: %+v", len(stored), stored)
+	}
+	if stored["Mustard"].ParentId == nil || *stored["Mustard"].ParentId != child.Id {
+		t.Errorf("grandchild's parent did not persist: %+v", stored["Mustard"])
+	}
+}
+
+// Deleting an item takes its subtree with it — including children someone else
+// added — and leaves everything beside it alone.
+func TestLists_DeleteCascadesToTheSubtree(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "lists-cascade-owner@example.test")
+	guestId := insertTestUser(t, models.RoleGuest, "lists-cascade-guest@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := listsTestRouter()
+	ownerCookie := loginAs(t, h, ownerId.Hex())
+	guestCookie := loginAs(t, h, guestId.Hex())
+
+	list := createListFor(t, h, eventId, ownerCookie, `{"name":"Menu","kind":"text"}`)
+	root := addItemFor(t, h, eventId, list.Id, ownerCookie, `{"text":"Mains"}`)
+	child := addItemFor(t, h, eventId, list.Id, ownerCookie,
+		`{"text":"Hotdogs","parentId":"`+root.Id.Hex()+`"}`)
+	// Someone else's item, nested under the one about to be deleted.
+	addItemFor(t, h, eventId, list.Id, guestCookie,
+		`{"text":"Mustard","parentId":"`+child.Id.Hex()+`"}`)
+	// A sibling that must survive.
+	addItemFor(t, h, eventId, list.Id, ownerCookie,
+		`{"text":"Salad","parentId":"`+root.Id.Hex()+`"}`)
+
+	itemPath := "/events/" + eventId.Hex() + "/lists/" + list.Id.Hex() + "/items/" + child.Id.Hex()
+	if w := do(h, http.MethodDelete, itemPath, "", ownerCookie); w.Code != http.StatusOK {
+		t.Fatalf("delete: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+
+	stored := itemsByText(readEventLists(t, eventId)[0].Items)
+	if len(stored) != 2 {
+		t.Fatalf("stored %d items, want 2 (Mains + Salad): %+v", len(stored), stored)
+	}
+	if _, ok := stored["Mustard"]; ok {
+		t.Error("the guest's nested item survived its parent being deleted")
+	}
+	if _, ok := stored["Salad"]; !ok {
+		t.Error("a sibling was deleted along with the subtree")
+	}
+
+	// Still idempotent.
+	if w := do(h, http.MethodDelete, itemPath, "", ownerCookie); w.Code != http.StatusOK {
+		t.Errorf("re-delete: got %d, want 200", w.Code)
+	}
+}
+
+// Anyone signed in may tick a box, both directions are attributed, and only the
+// last change is kept.
+func TestLists_CheckAndUncheck(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "lists-check-owner@example.test")
+	guestId := insertTestUser(t, models.RoleGuest, "lists-check-guest@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := listsTestRouter()
+	ownerCookie := loginAs(t, h, ownerId.Hex())
+	guestCookie := loginAs(t, h, guestId.Hex())
+
+	list := createListFor(t, h, eventId, ownerCookie, `{"name":"Jobs","kind":"checklist"}`)
+	item := addItemFor(t, h, eventId, list.Id, ownerCookie, `{"text":"Bring ice"}`)
+	checkedPath := "/events/" + eventId.Hex() + "/lists/" + list.Id.Hex() +
+		"/items/" + item.Id.Hex() + "/checked"
+
+	// Untouched: no state at all, so the UI renders nothing rather than
+	// "unchecked by" someone who never saw it.
+	if stored := readEventLists(t, eventId)[0].Items[0]; stored.Checked || stored.CheckedBy != nil {
+		t.Fatalf("a new item carries checklist state: %+v", stored)
+	}
+
+	// A guest — the lowest role — may tick it.
+	if w := do(h, http.MethodPut, checkedPath, `{"checked":true}`, guestCookie); w.Code != http.StatusOK {
+		t.Fatalf("guest check: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+	stored := readEventLists(t, eventId)[0].Items[0]
+	if !stored.Checked || stored.CheckedBy == nil || *stored.CheckedBy != guestId {
+		t.Fatalf("check did not record the guest: %+v", stored)
+	}
+	if stored.CheckedByName != "Test User" || stored.CheckedAt == 0 {
+		t.Errorf("check did not stamp name and time: %+v", stored)
+	}
+
+	// Unchecking is a state change too, credited to whoever did it.
+	if w := do(h, http.MethodPut, checkedPath, `{"checked":false}`, ownerCookie); w.Code != http.StatusOK {
+		t.Fatalf("owner uncheck: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+	stored = readEventLists(t, eventId)[0].Items[0]
+	if stored.Checked {
+		t.Error("uncheck did not clear the checked flag")
+	}
+	if stored.CheckedBy == nil || *stored.CheckedBy != ownerId {
+		t.Errorf("uncheck kept the previous person: %+v", stored)
+	}
+
+	// Re-applying the same state is success, not a 404 — nothing was modified.
+	if w := do(h, http.MethodPut, checkedPath, `{"checked":false}`, ownerCookie); w.Code != http.StatusOK {
+		t.Errorf("re-uncheck: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+// The checkbox belongs to checklists. Offering it on a text list would imply a
+// state the UI has nowhere to show.
+func TestLists_CheckRejectsANonChecklist(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "lists-check-kind@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := listsTestRouter()
+	cookie := loginAs(t, h, ownerId.Hex())
+
+	list := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"text"}`)
+	item := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Hotdogs"}`)
+
+	w := do(h, http.MethodPut,
+		"/events/"+eventId.Hex()+"/lists/"+list.Id.Hex()+"/items/"+item.Id.Hex()+"/checked",
+		`{"checked":true}`, cookie)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("check on a text list: got %d, want 400 (body: %s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), errNotChecklist) {
+		t.Errorf("error = %s, want %s", w.Body.String(), errNotChecklist)
+	}
+}
+
+// The cheap refresh: the lists alone, names resolved, without paying for the
+// whole event.
+func TestLists_GetListsEndpoint(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "lists-get-owner@example.test")
+	checkerId := insertTestUser(t, models.RoleGuest, "lists-get-checker@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := listsTestRouter()
+	ownerCookie := loginAs(t, h, ownerId.Hex())
+	checkerCookie := loginAs(t, h, checkerId.Hex())
+	listsPath := "/events/" + eventId.Hex() + "/lists"
+
+	if w := do(h, http.MethodGet, listsPath, "", nil); w.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous read: got %d, want 401", w.Code)
+	}
+
+	// An event with no lists answers [], not null, so the client can splice the
+	// result in without a nil check.
+	w := do(h, http.MethodGet, listsPath, "", ownerCookie)
+	if w.Code != http.StatusOK {
+		t.Fatalf("empty read: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+	if body := strings.TrimSpace(w.Body.String()); body != "[]" {
+		t.Errorf("empty read body = %s, want []", body)
+	}
+
+	list := createListFor(t, h, eventId, ownerCookie, `{"name":"Jobs","kind":"checklist"}`)
+	item := addItemFor(t, h, eventId, list.Id, ownerCookie, `{"text":"Bring ice"}`)
+	if w := do(h, http.MethodPut,
+		"/events/"+eventId.Hex()+"/lists/"+list.Id.Hex()+"/items/"+item.Id.Hex()+"/checked",
+		`{"checked":true}`, checkerCookie); w.Code != http.StatusOK {
+		t.Fatalf("check: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+
+	// Both names follow a nickname change, as they do through getEvent.
+	if _, err := db.UsersCollection.UpdateByID(context.Background(), checkerId,
+		bson.M{"$set": bson.M{"nickname": "Barkeep"}}); err != nil {
+		t.Fatalf("set nickname: %v", err)
+	}
+
+	// A guest reads the same shape as the planner.
+	w = do(h, http.MethodGet, listsPath, "", checkerCookie)
+	if w.Code != http.StatusOK {
+		t.Fatalf("read: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+	var lists []models.EventList
+	if err := json.Unmarshal(w.Body.Bytes(), &lists); err != nil {
+		t.Fatalf("decode: %v (body: %s)", err, w.Body.String())
+	}
+	if len(lists) != 1 || len(lists[0].Items) != 1 {
+		t.Fatalf("got %+v, want one list with one item", lists)
+	}
+	got := lists[0].Items[0]
+	if got.AuthorName != "Test User" {
+		t.Errorf("author name = %q", got.AuthorName)
+	}
+	if !got.Checked || got.CheckedByName != "Barkeep" {
+		t.Errorf("checked state did not resolve: %+v", got)
+	}
+	if lists[0].Kind != models.ListKindChecklist {
+		t.Errorf("kind = %q, want checklist", lists[0].Kind)
 	}
 }

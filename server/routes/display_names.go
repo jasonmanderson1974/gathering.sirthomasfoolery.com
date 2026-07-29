@@ -89,10 +89,14 @@ func eventDisplayNameIds(
 	}
 	for _, list := range lists {
 		for _, item := range list.Items {
-			if item.UserId.IsZero() {
-				continue
+			if !item.UserId.IsZero() {
+				add(item.UserId.Hex())
 			}
-			add(item.UserId.Hex())
+			// Whoever last ticked the box is displayed alongside the author, so
+			// their name has to follow a nickname change the same way.
+			if item.CheckedBy != nil && !item.CheckedBy.IsZero() {
+				add(item.CheckedBy.Hex())
+			}
 		}
 	}
 	return ids
@@ -156,22 +160,44 @@ func resolvePollVoteNames(polls []models.Poll, users map[string]models.User) {
 	}
 }
 
-// resolveListItemNames overwrites each list item's serialized author name with
-// the account's current DisplayName. Items whose author no longer resolves keep
-// their stored snapshot.
+// resolveListItemNames overwrites each list item's serialized author name — and
+// the name of whoever last ticked its checkbox — with those accounts' current
+// DisplayName. Ids that no longer resolve keep their stored snapshot.
 func resolveListItemNames(lists []models.EventList, users map[string]models.User) {
 	for listIdx := range lists {
 		items := lists[listIdx].Items
 		for itemIdx := range items {
-			user, ok := users[items[itemIdx].UserId.Hex()]
-			if !ok {
+			if user, ok := users[items[itemIdx].UserId.Hex()]; ok {
+				if name := user.DisplayName(); name != "" {
+					items[itemIdx].AuthorName = name
+				}
+			}
+			checkedBy := items[itemIdx].CheckedBy
+			if checkedBy == nil {
 				continue
 			}
-			if name := user.DisplayName(); name != "" {
-				items[itemIdx].AuthorName = name
+			if user, ok := users[checkedBy.Hex()]; ok {
+				if name := user.DisplayName(); name != "" {
+					items[itemIdx].CheckedByName = name
+				}
 			}
 		}
 	}
+}
+
+// resolveListDisplayNames is the lists-only slice of resolveEventDisplayNames,
+// for the endpoint that returns the lists without the rest of the event. One
+// batched lookup, no per-responder queries.
+func resolveListDisplayNames(lists []models.EventList) {
+	ids := eventDisplayNameIds(nil, nil, nil, lists)
+	if len(ids) == 0 {
+		return
+	}
+	users := db.GetUsersByIds(ids)
+	if len(users) == 0 {
+		return
+	}
+	resolveListItemNames(lists, users)
 }
 
 // resolveEventDisplayNames applies all four in one pass over one lookup.

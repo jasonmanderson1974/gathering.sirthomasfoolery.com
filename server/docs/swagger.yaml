@@ -336,10 +336,10 @@ definitions:
         type: array
       kind:
         description: |-
-          Kind is ListKindText or ListKindLocation, fixed when the list is created.
+          Kind is one of the ListKind constants, fixed when the list is created.
           A location list feeds its input through the Google address lookup and
           renders each item as a maps link; it stores the same plain string either
-          way, matching Event.Location.
+          way, matching Event.Location. A checklist gives every item a checkbox.
         type: string
       name:
         type: string
@@ -350,8 +350,32 @@ definitions:
         type: string
       authorName:
         type: string
+      checked:
+        description: |-
+          Checklist state, meaningful only on a ListKindChecklist list. All four are
+          absent until someone first ticks the box, and from then on they are always
+          written together — so Checked=false alongside a CheckedByName renders
+          "Unchecked by Bart", while an item nobody has touched renders nothing.
+          Only the last change is kept; there is deliberately no history.
+
+          omitempty on the bool is safe because the write is a literal bson.M $set
+          (struct tags don't apply to it), so an uncheck really does store false.
+        type: boolean
+      checkedAt:
+        type: integer
+      checkedBy:
+        type: string
+      checkedByName:
+        type: string
       createdAt:
         type: integer
+      parentId:
+        description: |-
+          ParentId is nil for a top-level item. A POINTER, not a bare ObjectID:
+          omitempty can't omit a [12]byte array, so a zero id would serialize as 24
+          zeros and read back as a real parent. Items written before nesting existed
+          have no field at all, which decodes to nil — hence no migration.
+        type: string
       text:
         type: string
       userId:
@@ -1545,6 +1569,30 @@ paths:
       tags:
       - events
   /events/{eventId}/lists:
+    get:
+      consumes:
+      - application/json
+      description: 'The cheap refresh: getEvent resolves a user per availability response
+        and per sign-up response before it ever reaches the lists, which is far too
+        much work to see one new entry appear.'
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.EventList'
+            type: array
+      summary: Returns just the shared lists on an event, display names resolved
+      tags:
+      - events
     post:
       consumes:
       - application/json
@@ -1646,12 +1694,14 @@ paths:
         name: listId
         required: true
         type: string
-      - description: Item text
+      - description: Item text, optionally nested under an existing item
         in: body
         name: payload
         required: true
         schema:
           properties:
+            parentId:
+              type: string
             text:
               type: string
           type: object
@@ -1669,6 +1719,8 @@ paths:
     delete:
       consumes:
       - application/json
+      description: The right to delete an item is the right to delete its subtree,
+        so a reply-like child added by someone else goes with its parent.
       parameters:
       - description: Event ID
         in: path
@@ -1690,7 +1742,8 @@ paths:
       responses:
         "200":
           description: OK
-      summary: Deletes a list item (own, or any when the caller is a member or above)
+      summary: Deletes a list item and everything nested under it (own, or any when
+        the caller is a member or above)
       tags:
       - events
     put:
@@ -1727,6 +1780,46 @@ paths:
         "200":
           description: OK
       summary: Edits one of the caller's own list items
+      tags:
+      - events
+  /events/{eventId}/lists/{listId}/items/{itemId}/checked:
+    put:
+      consumes:
+      - application/json
+      description: Open to every signed-in user, guests included — the same reasoning
+        as adding an item. Only the last person to change the state is recorded; there
+        is no history.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: List ID
+        in: path
+        name: listId
+        required: true
+        type: string
+      - description: Item ID
+        in: path
+        name: itemId
+        required: true
+        type: string
+      - description: New checked state
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            checked:
+              type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Ticks or unticks a checklist item
       tags:
       - events
   /events/{eventId}/mentionables:
