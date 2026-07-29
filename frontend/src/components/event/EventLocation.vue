@@ -61,7 +61,7 @@
 
 <script>
 import { mapActions } from "vuex"
-import { isPhone, put } from "@/utils"
+import { isPhone, mapsSearchUrl, put } from "@/utils"
 import LocationInput from "@/components/LocationInput.vue"
 
 /**
@@ -96,9 +96,7 @@ export default {
       return this.event.location && !this.isEditing
     },
     mapsUrl() {
-      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-        this.event.location ?? ""
-      )}`
+      return mapsSearchUrl(this.event.location)
     },
   },
 

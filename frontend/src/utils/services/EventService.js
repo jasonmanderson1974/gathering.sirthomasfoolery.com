@@ -86,3 +86,36 @@ export const deletePoll = (eventId, pollId) => {
 export const votePoll = (eventId, pollId, payload) => {
   return post(`/events/${eventId}/polls/${pollId}/vote`, payload)
 }
+
+// --- Shared lists (F13/F14) ---
+// The planner owns the lists; everyone signed in owns what they put on them.
+
+/** Create a list (planner/admin). payload: {name, kind: "text"|"location"} */
+export const createList = (eventId, payload) => {
+  return post(`/events/${eventId}/lists`, payload)
+}
+
+/** Rename a list (planner/admin). payload: {name} */
+export const renameList = (eventId, listId, payload) => {
+  return patch(`/events/${eventId}/lists/${listId}`, payload)
+}
+
+/** Delete a list and everything on it (planner/admin). */
+export const deleteList = (eventId, listId) => {
+  return _delete(`/events/${eventId}/lists/${listId}`)
+}
+
+/** Add an item to a list (any signed-in user). payload: {text} */
+export const addListItem = (eventId, listId, payload) => {
+  return post(`/events/${eventId}/lists/${listId}/items`, payload)
+}
+
+/** Edit one of your own items. payload: {text} */
+export const editListItem = (eventId, listId, itemId, payload) => {
+  return put(`/events/${eventId}/lists/${listId}/items/${itemId}`, payload)
+}
+
+/** Delete an item (own, or any if you're a member or above). */
+export const deleteListItem = (eventId, listId, itemId) => {
+  return _delete(`/events/${eventId}/lists/${listId}/items/${itemId}`)
+}

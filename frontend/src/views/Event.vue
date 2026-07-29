@@ -157,17 +157,35 @@
             @signUpForBlock="initiateSignUpFlow"
           />
 
-          <!-- Discussion thread (C7) -->
-          <div v-if="!isSettingSpecificTimes" class="tw-mx-4">
-            <EventComments
-              :event="event"
-              @add-comment="onAddComment"
-              @edit-comment="onEditComment"
-              @delete-comment="onDeleteComment"
-              @tag-thread="onTagThread"
-              @set-thread-members-only="onSetThreadMembersOnly"
-              @untag-thread="onUntagThread"
-            />
+          <!-- Discussion thread (C7) alongside the shared lists (F14). Two
+               columns from lg up; below that the lists stack under the
+               discussion. -->
+          <div
+            v-if="!isSettingSpecificTimes"
+            class="tw-mx-4 lg:tw-flex lg:tw-items-start lg:tw-gap-6"
+          >
+            <div class="tw-min-w-0 lg:tw-w-2/3">
+              <EventComments
+                :event="event"
+                @add-comment="onAddComment"
+                @edit-comment="onEditComment"
+                @delete-comment="onDeleteComment"
+                @tag-thread="onTagThread"
+                @set-thread-members-only="onSetThreadMembersOnly"
+                @untag-thread="onUntagThread"
+              />
+            </div>
+            <div class="tw-min-w-0 lg:tw-w-1/3">
+              <EventLists
+                :event="event"
+                @create-list="onCreateList"
+                @rename-list="onRenameList"
+                @delete-list="onDeleteList"
+                @add-item="onAddListItem"
+                @edit-item="onEditListItem"
+                @delete-item="onDeleteListItem"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -239,6 +257,7 @@ import EventLocation from "@/components/event/EventLocation.vue"
 import GatheringRsvp from "@/components/event/GatheringRsvp.vue"
 import EventComments from "@/components/event/EventComments.vue"
 import EventPolls from "@/components/event/EventPolls.vue"
+import EventLists from "@/components/event/EventLists.vue"
 import {
   setRsvp,
   clearRsvp,
@@ -251,6 +270,12 @@ import {
   createPoll,
   deletePoll,
   votePoll,
+  createList,
+  renameList,
+  deleteList,
+  addListItem,
+  editListItem,
+  deleteListItem,
 } from "@/utils/services/EventService"
 import pluginMessagesMixin from "@/components/event/pluginMessagesMixin"
 export default {
@@ -281,6 +306,7 @@ export default {
     GatheringRsvp,
     EventComments,
     EventPolls,
+    EventLists,
   },
 
   data: () => ({
@@ -572,6 +598,62 @@ export default {
         await this.refreshEvent()
       } catch (err) {
         this.showError("Could not save your vote. Please try again.")
+      }
+    },
+
+    /** Shared lists (F14): persist then refresh, like polls and comments. */
+    async onCreateList(payload) {
+      const id = this.event.shortId ?? this.event._id
+      try {
+        await createList(id, payload)
+        await this.refreshEvent()
+      } catch (err) {
+        this.showError("Could not create the list. Please try again.")
+      }
+    },
+    async onRenameList({ listId, payload }) {
+      const id = this.event.shortId ?? this.event._id
+      try {
+        await renameList(id, listId, payload)
+        await this.refreshEvent()
+      } catch (err) {
+        this.showError("Could not rename the list. Please try again.")
+      }
+    },
+    async onDeleteList(listId) {
+      const id = this.event.shortId ?? this.event._id
+      try {
+        await deleteList(id, listId)
+        await this.refreshEvent()
+      } catch (err) {
+        this.showError("Could not delete the list. Please try again.")
+      }
+    },
+    async onAddListItem({ listId, payload }) {
+      const id = this.event.shortId ?? this.event._id
+      try {
+        await addListItem(id, listId, payload)
+        await this.refreshEvent()
+      } catch (err) {
+        this.showError("Could not add that entry. Please try again.")
+      }
+    },
+    async onEditListItem({ listId, itemId, payload }) {
+      const id = this.event.shortId ?? this.event._id
+      try {
+        await editListItem(id, listId, itemId, payload)
+        await this.refreshEvent()
+      } catch (err) {
+        this.showError("Could not save that entry. Please try again.")
+      }
+    },
+    async onDeleteListItem({ listId, itemId }) {
+      const id = this.event.shortId ?? this.event._id
+      try {
+        await deleteListItem(id, listId, itemId)
+        await this.refreshEvent()
+      } catch (err) {
+        this.showError("Could not remove that entry. Please try again.")
       }
     },
 

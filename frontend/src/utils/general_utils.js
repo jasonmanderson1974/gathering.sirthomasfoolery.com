@@ -323,6 +323,19 @@ export const monogram = (user) => {
   return email ? email.charAt(0).toUpperCase() : "?"
 }
 
+/**
+ * A Google Maps search link for a free-text venue or address.
+ *
+ * Locations are stored as the text the user typed or picked — no place id, no
+ * coordinates — so the link is a search rather than a pin. Shared by the
+ * event's own location and by the items on a location list, which is why it
+ * lives here instead of in either component.
+ */
+export const mapsSearchUrl = (location) =>
+  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    location ?? ""
+  )}`
+
 export const prefersStartOnMonday = () => {
   let defaultStartOnMonday = false
   try {
