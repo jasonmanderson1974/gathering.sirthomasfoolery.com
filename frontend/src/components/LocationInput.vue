@@ -1,5 +1,6 @@
 <template>
   <v-combobox
+    ref="field"
     :value="value"
     :items="items"
     :loading="loading"
@@ -77,6 +78,16 @@ export default {
   },
 
   methods: {
+    /**
+     * Focus the field, so a caller can keep the cursor here across a re-render
+     * the way it would with a plain v-text-field. Without this a parent holding
+     * a ref to this component has nothing to call — `autofocus` only fires on
+     * mount, which is no use to a composer that stays put (see EventLists).
+     */
+    focus() {
+      this.$refs.field?.focus()
+    },
+
     queueLookup(query) {
       if (!isPlacesEnabled()) return
       clearTimeout(this.debounceTimer)

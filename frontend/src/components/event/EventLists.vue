@@ -246,6 +246,7 @@
             >
               <LocationInput
                 v-if="isLocationList(list)"
+                ref="childInput"
                 v-model="childText"
                 dense
                 hide-details
@@ -256,6 +257,7 @@
               />
               <v-text-field
                 v-else
+                ref="childInput"
                 v-model="childText"
                 dense
                 hide-details
@@ -293,6 +295,7 @@
         >
           <LocationInput
             v-if="isLocationList(list)"
+            :ref="`addInput-${list._id}`"
             :value="newItemText[list._id] || ''"
             dense
             hide-details
@@ -302,6 +305,7 @@
           />
           <v-text-field
             v-else
+            :ref="`addInput-${list._id}`"
             :value="newItemText[list._id] || ''"
             dense
             hide-details
@@ -437,6 +441,12 @@ export default {
     // per-list drafts need, for no gain when only one composer is ever open.
     addingChildOf: null,
     childText: "",
+    // Where to put the cursor once the refetch that follows an add has landed:
+    // `{ type: "add", listId }` or `{ type: "child" }`, or null for nowhere.
+    // Adding is the one action people do several times in a row — "Beer ⏎ chips
+    // ⏎ ice ⏎" — and every add round-trips through the server and re-renders
+    // from new data, which is what would otherwise drop the cursor.
+    pendingFocus: null,
     // Mirrors the server's caps (routes/event_lists.go) so the field stops at
     // the same point the API would truncate.
     maxNameLength: 100,
@@ -505,6 +515,13 @@ export default {
       if (!this.expandedLists.includes(created._id)) {
         this.expandedLists.push(created._id)
       }
+    },
+
+    // An add is emitted, persisted and refetched, so the composer only settles
+    // once the parent stops refreshing. Watching the TRANSITION back to false is
+    // what makes this land after the new rows have rendered rather than during.
+    refreshing(now, before) {
+      if (before && !now) this.applyPendingFocus()
     },
   },
 
@@ -601,11 +618,36 @@ export default {
       this.$set(this.newItemText, listId, value)
     },
 
+    /**
+     * Put the cursor back where the last add came from, once the row it created
+     * has arrived.
+     *
+     * A v-for collects refs as an array even where only one element can match,
+     * hence the unwrap. Every step is optional-chained: the composer's list may
+     * have been collapsed, or the whole list deleted by someone else, while the
+     * add was in flight — in which case there is simply nothing to focus, and
+     * doing nothing is the right answer.
+     */
+    applyPendingFocus() {
+      const pending = this.pendingFocus
+      if (!pending) return
+      this.pendingFocus = null
+      this.$nextTick(() => {
+        const ref =
+          pending.type === "child"
+            ? this.$refs.childInput
+            : this.$refs[`addInput-${pending.listId}`]
+        const target = Array.isArray(ref) ? ref[0] : ref
+        target?.focus?.()
+      })
+    },
+
     submitItem(list) {
       const text = (this.newItemText[list._id] || "").trim()
       if (!text) return
       this.$emit("add-item", { listId: list._id, payload: { text } })
       this.$set(this.newItemText, list._id, "")
+      this.pendingFocus = { type: "add", listId: list._id }
     },
 
     startChild(item) {
@@ -618,7 +660,14 @@ export default {
     cancelChild() {
       this.addingChildOf = null
       this.childText = ""
+      // Closing the composer withdraws its claim on the cursor, but not one the
+      // main add field may have staked in the meantime.
+      if (this.pendingFocus?.type === "child") this.pendingFocus = null
     },
+    // Deliberately does NOT cancelChild(): the composer stays open on the same
+    // parent so a run of sub-entries can be typed without reaching for the
+    // "add sub-entry" button between each one. Esc and Cancel are what close
+    // it, and collapsing the list still closes it via toggleList.
     submitChild(list) {
       const text = this.childText.trim()
       if (!text) return
@@ -626,7 +675,8 @@ export default {
         listId: list._id,
         payload: { text, parentId: this.addingChildOf },
       })
-      this.cancelChild()
+      this.childText = ""
+      this.pendingFocus = { type: "child" }
     },
 
     startEdit(item) {
