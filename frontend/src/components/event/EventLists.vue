@@ -93,11 +93,34 @@
         <!-- Entries (only while the list is open). Rendered from a flat list of
              precomputed rows rather than a recursive component, so the tree
              building itself is a pure function with tests. -->
-        <div v-if="isExpanded(list._id)" class="tw-mt-2 tw-space-y-1">
+        <draggable
+          v-if="isExpanded(list._id)"
+          :list="rowsOf(list)"
+          group="event-list-items"
+          draggable=".list-row"
+          :delay="200"
+          :delay-on-touch-only="true"
+          :disabled="refreshing"
+          :data-list-id="list._id"
+          class="tw-mt-2 tw-min-h-[2rem] tw-space-y-1"
+          @start="onDragStart"
+          @end="onDragEnd"
+        >
+          <!-- In the header slot, not among the rows: it must not count as a
+               drop position, and an empty list still has to be a target. -->
+          <template #header>
+            <div
+              v-if="!itemsOf(list).length"
+              class="tw-px-2 tw-text-sm tw-text-parchment-dim"
+            >
+              Nothing here yet — add the first.
+            </div>
+          </template>
           <div
             v-for="row in rowsOf(list)"
             :key="row.item._id"
-            :class="`tw-rounded tw-px-2 tw-py-1 hover:tw-bg-brass/10 ${
+            :data-item-id="row.item._id"
+            :class="`list-row tw-rounded tw-px-2 tw-py-1 hover:tw-bg-brass/10 ${
               indentClass(row.depth)
             }`"
           >
@@ -279,14 +302,7 @@
               </div>
             </div>
           </div>
-
-          <div
-            v-if="!itemsOf(list).length"
-            class="tw-px-2 tw-text-sm tw-text-parchment-dim"
-          >
-            Nothing here yet — add the first.
-          </div>
-        </div>
+        </draggable>
 
         <!-- Add an entry: open to everyone -->
         <div
@@ -384,11 +400,14 @@
 <script>
 import { mapGetters, mapState } from "vuex"
 import { mapsSearchUrl } from "@/utils"
+import draggable from "vuedraggable"
 import LocationInput from "@/components/LocationInput.vue"
 import {
   flattenListItems,
   canAddChild,
   checkStateLabel,
+  orderBetween,
+  resolveDrop,
 } from "@/components/event/eventLists"
 
 /**
@@ -406,6 +425,7 @@ export default {
   name: "EventLists",
 
   components: {
+    draggable,
     LocationInput,
   },
 
@@ -447,6 +467,9 @@ export default {
     // ⏎ ice ⏎" — and every add round-trips through the server and re-renders
     // from new data, which is what would otherwise drop the cursor.
     pendingFocus: null,
+    // The entry being dragged, if any. Its subtree is hidden for the duration
+    // so the whole thing travels as one row — see rowsOf.
+    draggingItemId: null,
     // Mirrors the server's caps (routes/event_lists.go) so the field stops at
     // the same point the API would truncate.
     maxNameLength: 100,
@@ -461,6 +484,7 @@ export default {
     "add-item",
     "edit-item",
     "delete-item",
+    "move-item",
     "toggle-item-checked",
   ],
 
@@ -567,7 +591,16 @@ export default {
     // The tree, flattened to rows with a depth. Built in a pure module so the
     // nesting rules are testable — nothing inside a .vue file is.
     rowsOf(list) {
-      return flattenListItems(this.itemsOf(list), this.collapsedItemIds)
+      return flattenListItems(this.itemsOf(list), this.collapsedIdsForRender())
+    },
+    // The entry being dragged is collapsed on top of whatever the viewer has
+    // collapsed themselves, and only for the duration of the drag: its subtree
+    // follows the ghost as one row instead of being left behind, and the drop
+    // indices stay in step with what is on screen. The viewer's own collapse
+    // state is never written to.
+    collapsedIdsForRender() {
+      if (!this.draggingItemId) return this.collapsedItemIds
+      return [...this.collapsedItemIds, this.draggingItemId]
     },
     // Static classes, not a computed `tw-pl-${n}`: Tailwind purges on literal
     // source text, so a built-up class name emits no CSS at all.
@@ -677,6 +710,74 @@ export default {
       })
       this.childText = ""
       this.pendingFocus = { type: "child" }
+    },
+
+    onDragStart(evt) {
+      this.draggingItemId = evt?.item?.dataset?.itemId ?? null
+    },
+
+    /**
+     * Turn a drop into a move (F18).
+     *
+     * vuedraggable has already moved the row in the DOM and spliced the
+     * throwaway rows array it was handed; neither is the truth. The truth is
+     * what comes back from the refetch, so this only has to work out where the
+     * row was released and say so.
+     *
+     * The rows are rebuilt here rather than read off the last render, with the
+     * dragged entry still collapsed, so the indices Sortable reported are
+     * measured against exactly the rows they were computed from.
+     */
+    onDragEnd(evt) {
+      const collapsed = this.collapsedIdsForRender()
+      this.draggingItemId = null
+
+      const sourceListId = evt?.from?.dataset?.listId
+      const targetListId = evt?.to?.dataset?.listId
+      const itemId = evt?.item?.dataset?.itemId
+      if (!sourceListId || !targetListId || !itemId) return
+
+      // A refresh can land mid-drag and take a list with it. A drop with
+      // nowhere to come from or go to is simply dropped: the refetch already
+      // showed what is really there.
+      const sourceList = this.lists.find((l) => l._id === sourceListId)
+      const targetList = this.lists.find((l) => l._id === targetListId)
+      if (!sourceList || !targetList) return
+
+      const draggedItem = this.itemsOf(sourceList).find(
+        (i) => i._id === itemId
+      )
+      if (!draggedItem) return
+
+      const sameList = sourceListId === targetListId
+      const sourceRows = flattenListItems(this.itemsOf(sourceList), collapsed)
+      const targetRows = sameList
+        ? sourceRows
+        : flattenListItems(this.itemsOf(targetList), collapsed)
+
+      // The *Draggable* indices, not evt.oldIndex/newIndex: those count every
+      // element in the container, and the empty-state header is one of them.
+      // These count only what matches the `draggable` selector, which is
+      // exactly the rows resolveDrop is given.
+      const { parentId, prevOrder, nextOrder } = resolveDrop({
+        sourceRows,
+        targetRows,
+        oldIndex: evt.oldDraggableIndex ?? evt.oldIndex,
+        newIndex: evt.newDraggableIndex ?? evt.newIndex,
+        sameList,
+        draggedItem,
+      })
+
+      const payload = {
+        targetListId,
+        order: orderBetween(prevOrder, nextOrder),
+      }
+      // Only sent for a reorder among siblings the entry already has; the
+      // server refuses any other parentId, which is what stops a drag from
+      // nesting an entry deeper.
+      if (parentId) payload.parentId = parentId
+
+      this.$emit("move-item", { listId: sourceListId, itemId, payload })
     },
 
     startEdit(item) {

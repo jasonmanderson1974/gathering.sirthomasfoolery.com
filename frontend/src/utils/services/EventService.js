@@ -155,3 +155,20 @@ export const setListItemChecked = (eventId, listId, itemId, checked) => {
     checked,
   })
 }
+
+/**
+ * Reposition an item, within its list or onto another one (F17).
+ *
+ * Takes the same right as deleting it, since a move is a delete and a re-add:
+ * a member may move anyone's entry. The item brings its subtree with it.
+ *
+ * payload: {targetListId, order, parentId?}. `order` is computed by the caller
+ * — only the client knows where the drop landed — via orderBetween in
+ * components/event/eventLists.js. `parentId` may name ONLY the item's existing
+ * parent, for a reorder among its siblings on the same list; anything else is
+ * refused with `invalid-item-move`, because a move never nests an entry under a
+ * new parent.
+ */
+export const moveListItem = (eventId, listId, itemId, payload) => {
+  return put(`/events/${eventId}/lists/${listId}/items/${itemId}/move`, payload)
+}

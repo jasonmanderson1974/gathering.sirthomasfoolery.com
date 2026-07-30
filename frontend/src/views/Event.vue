@@ -190,6 +190,7 @@
                 @add-item="onAddListItem"
                 @edit-item="onEditListItem"
                 @delete-item="onDeleteListItem"
+                @move-item="onMoveListItem"
                 @toggle-item-checked="onToggleListItemChecked"
               />
             </div>
@@ -282,6 +283,7 @@ import {
   addListItem,
   editListItem,
   deleteListItem,
+  moveListItem,
   setListItemChecked,
 } from "@/utils/services/EventService"
 import pluginMessagesMixin from "@/components/event/pluginMessagesMixin"
@@ -680,6 +682,23 @@ export default {
         await this.refreshLists()
       } catch (err) {
         this.showError("Could not remove that entry. Please try again.")
+      }
+    },
+
+    /**
+     * Persist a drag (F18). The refetch is what makes the new arrangement real:
+     * vuedraggable has already moved the row in the DOM, so a failure here has
+     * to be corrected by the truth coming back from the server rather than by
+     * putting the row back by hand.
+     */
+    async onMoveListItem({ listId, itemId, payload }) {
+      const id = this.event.shortId ?? this.event._id
+      try {
+        await moveListItem(id, listId, itemId, payload)
+        await this.refreshLists()
+      } catch (err) {
+        this.showError("Could not move that entry. Please try again.")
+        await this.refreshLists()
       }
     },
 
