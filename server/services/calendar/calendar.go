@@ -54,7 +54,7 @@ type CalendarEventsWithError struct {
 
 // Returns a map mapping email to the calendar events associated with that email, and an error if there was an error fetching events for that email
 func GetUsersCalendarEvents(user *models.User, accounts models.Set[string], timeMin time.Time, timeMax time.Time) (map[string]CalendarEventsWithError, bool) {
-	auth.RefreshUserTokenIfNecessary(user, accounts)
+	refreshFailures := auth.RefreshUserTokenIfNecessary(user, accounts)
 
 	returnAllAccounts := len(accounts) == 0
 	editedCalendarAccounts := false
@@ -67,10 +67,23 @@ func GetUsersCalendarEvents(user *models.User, accounts models.Set[string], time
 	// Get calendar lists
 	numCalendarListRequests := 0
 	for calendarAccountKey, account := range user.CalendarAccounts {
-		calendarProvider := GetCalendarProvider(account)
-
 		// Get secondary account calendars
 		if _, ok := accounts[calendarAccountKey]; ok || returnAllAccounts {
+			// This account's token is expired and could not be renewed, so the
+			// fetch below is a guaranteed 401 whose message says nothing about
+			// why. Report the refresh error in the slot the 401 would have
+			// filled — the caller already surfaces a per-account error here
+			// (that's what the branch further down exists for) — and skip the
+			// round trip (H5).
+			if err, failed := refreshFailures[calendarAccountKey]; failed {
+				calendarEventsMap[calendarAccountKey] = CalendarEventsWithError{
+					CalendarEvents: make([]models.CalendarEvent, 0),
+					Error:          err,
+				}
+				continue
+			}
+
+			calendarProvider := GetCalendarProvider(account)
 			go GetCalendarListAsync(calendarAccountKey, &calendarProvider, calendarListChan)
 			numCalendarListRequests++
 

@@ -210,10 +210,30 @@ func RefreshAccessTokenAsync(email string, accountAuth *models.OAuth2CalendarAut
 	c <- RefreshAccessTokenData{tokenResponse, email, calendarType, nil}
 }
 
+// asRefreshError unwraps the `*interface{}` the async wrapper carries. It is an
+// interface rather than an error only because a recovered panic is untyped;
+// everything off the normal failure path already is an error, and keeping it one
+// preserves the OAuth reason B8 went to the trouble of producing.
+func asRefreshError(v interface{}) error {
+	if err, ok := v.(error); ok {
+		return err
+	}
+	return fmt.Errorf("%v", v)
+}
+
 // If access token has expired, get a new token for the primary account as well as all other calendar accounts, update the user object, and save it to the database
 // `accounts` specifies for which accounts to refresh access tokens. If `accounts` is nil or empty, then update tokens for all accounts
-func RefreshUserTokenIfNecessary(u *models.User, accounts models.Set[string]) {
+//
+// Returns the accounts whose refresh FAILED, keyed by calendar account key, with
+// the reason. An account that needed no refresh, or refreshed cleanly, is absent.
+// A key that is present means the access token still on that account is expired
+// and could not be renewed, so a call made with it can only come back as an
+// opaque provider 401 — callers are expected to report the reason here instead
+// (H5). Logging still happens either way; the return exists so the caller can
+// stop, not merely so the failure is recorded.
+func RefreshUserTokenIfNecessary(u *models.User, accounts models.Set[string]) map[string]error {
 	refreshTokenChan := make(chan RefreshAccessTokenData)
+	failures := make(map[string]error)
 	numAccountsToUpdate := 0
 
 	// If `accounts` is nil, then update tokens for all accounts
@@ -234,23 +254,29 @@ func RefreshUserTokenIfNecessary(u *models.User, accounts models.Set[string]) {
 	}
 
 	// Update access tokens as responses are received
+	numAccountsRefreshed := 0
 	for i := 0; i < numAccountsToUpdate; i++ {
 		res := <-refreshTokenChan
-
-		// Log rather than swallow: a refresh that keeps failing (revoked consent,
-		// expired refresh token) is invisible from the outside — the user just
-		// sees an account with no events — so the reason needs to land somewhere.
-		if res.Error != nil {
-			logger.StdErr.Printf("failed to refresh access token for %s (%s): %v", res.Email, res.CalendarType, *res.Error)
-			continue
-		}
-
-		accessTokenExpireDate := utils.GetAccessTokenExpireDate(res.TokenResponse.ExpiresIn)
 
 		calendarAccountKey := utils.ActualCalendarAccountMapKey(u, res.Email, res.CalendarType)
 		if calendarAccountKey == "" {
 			calendarAccountKey = utils.GetCalendarAccountKey(res.Email, res.CalendarType)
 		}
+
+		// Log rather than swallow: a refresh that keeps failing (revoked consent,
+		// expired refresh token) is invisible from the outside — the user just
+		// sees an account with no events — so the reason needs to land somewhere.
+		// It is also returned, so the caller can stop instead of calling with a
+		// token it now knows is dead.
+		if res.Error != nil {
+			logger.StdErr.Printf("failed to refresh access token for %s (%s): %v", res.Email, res.CalendarType, *res.Error)
+			failures[calendarAccountKey] = asRefreshError(*res.Error)
+			continue
+		}
+
+		numAccountsRefreshed++
+		accessTokenExpireDate := utils.GetAccessTokenExpireDate(res.TokenResponse.ExpiresIn)
+
 		if calendarAccount, ok := u.CalendarAccounts[calendarAccountKey]; ok {
 			calendarAccount.OAuth2CalendarAuth.AccessToken = models.EncryptedString(res.TokenResponse.AccessToken)
 			calendarAccount.OAuth2CalendarAuth.AccessTokenExpireDate = primitive.NewDateTimeFromTime(accessTokenExpireDate)
@@ -258,8 +284,11 @@ func RefreshUserTokenIfNecessary(u *models.User, accounts models.Set[string]) {
 		}
 	}
 
-	// Update user object if accounts were updated
-	if numAccountsToUpdate > 0 {
+	// Update user object if a token actually changed. Counting *attempts* here
+	// meant an all-failed round (revoked consent, provider outage) still wrote
+	// the document back unchanged — a pointless write on the one path where
+	// every account is already known to be broken.
+	if numAccountsRefreshed > 0 {
 		// Only the refreshed access tokens changed. Writing the whole user
 		// document back would revert anything edited while the refresh was in
 		// flight — the lost-update pattern A16 fixed for events.
@@ -269,6 +298,8 @@ func RefreshUserTokenIfNecessary(u *models.User, accounts models.Set[string]) {
 			logger.StdErr.Println("failed to persist refreshed access tokens:", err)
 		}
 	}
+
+	return failures
 }
 
 func getCredentialsFromCalendarType(calendarType models.CalendarType) (string, string) {
