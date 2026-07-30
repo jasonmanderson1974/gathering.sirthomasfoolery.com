@@ -51,6 +51,26 @@ func TestGetResponsesMap_DuplicateUserIdLastWins(t *testing.T) {
 	}
 }
 
+// A row whose `response` field is absent unmarshals to a nil pointer. Keying it
+// into the map panicked every caller that dereferences the values (F12), so it
+// is dropped instead — the surrounding rows still come through.
+func TestGetResponsesMap_SkipsNilResponse(t *testing.T) {
+	good := &models.Response{Name: "good"}
+	got := getResponsesMap([]models.EventResponse{
+		{UserId: "legacy", Response: nil},
+		{UserId: "good", Response: good},
+	})
+	if len(got) != 1 {
+		t.Fatalf("len: got %d, want 1 (the nil row should be dropped)", len(got))
+	}
+	if _, ok := got["legacy"]; ok {
+		t.Fatal("nil response was keyed into the map")
+	}
+	if got["good"] != good {
+		t.Fatal("the non-nil response should still be present")
+	}
+}
+
 func TestFindResponse_Found(t *testing.T) {
 	target := &models.Response{Name: "target"}
 	responses := []models.EventResponse{

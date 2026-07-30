@@ -745,9 +745,17 @@ func stripSensitiveUserFields(user *models.User) {
 }
 
 // Helper function to get all responses as a map (for backward compatibility)
+//
+// Rows whose `response` field is absent are skipped rather than keyed to a nil:
+// every write path sets Response, so a nil only comes from a legacy or
+// hand-edited document, and letting one through panicked every caller that
+// dereferences the map's values (F12).
 func getResponsesMap(responses []models.EventResponse) map[string]*models.Response {
 	result := make(map[string]*models.Response)
 	for _, resp := range responses {
+		if resp.Response == nil {
+			continue
+		}
 		result[resp.UserId] = resp.Response
 	}
 	return result

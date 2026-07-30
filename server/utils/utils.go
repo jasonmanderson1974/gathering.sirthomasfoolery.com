@@ -198,10 +198,16 @@ func GetPrimaryAccountKey(user *models.User) string {
 }
 
 // ConvertEventToOldFormat converts an event's responses from ResponsesList to ResponsesMap format
-// for backward compatibility with older code
+// for backward compatibility with older code.
+//
+// A row with no `response` field is skipped, for the same reason getResponsesMap
+// skips it (F12): it would otherwise serialize as a null the clients dereference.
 func ConvertEventToOldFormat(event *models.Event, eventResponses []models.EventResponse) {
 	responsesMap := make(map[string]*models.Response)
 	for _, resp := range eventResponses {
+		if resp.Response == nil {
+			continue
+		}
 		responsesMap[resp.UserId] = resp.Response
 	}
 	event.ResponsesMap = responsesMap
