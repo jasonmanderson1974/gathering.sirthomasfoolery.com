@@ -907,8 +907,8 @@ The sequencing that got there is at the bottom.
     only to write `featureFlagsLoaded`, state with **no readers anywhere**, from a watcher
     gating on `this.$posthog` being truthy — which the stub always was. The whole chain went.
     `signUpFormEnabled` is kept: `NewDialog` still reads it (and, as before, nothing sets it).
-    **Superseded 2026-07-30** — it is now hardcoded `true` (`5ae6901`), like its two siblings, so
-    the sign-up-sheet feature is live rather than dark. See the note below.
+    **Superseded 2026-07-30** — the flag and the whole sign-up-sheet feature were removed
+    (`cc002d1`). See the note below.
     Two methods that existed only to report analytics (`trackTimezoneChange`,
     `trackExportCsvClick`) went with their template bindings.
   - **The half-hour timezone symptom was worse than written.** The finding called it an
@@ -955,8 +955,10 @@ The sequencing that got there is at the bottom.
   `date_utils` split itself — both of which want the app running, per A11's caveat.
 
   **What the mixin pass found.** NewEvent 937→585, NewSignUp 776→417 (761 lines deleted for 50
-  added), against `src/mixins/newEventForm.js` (348) and a pure `src/components/newEventDates.js`
-  (122) + 18 tests. It is a factory like `calendarOptionSync`, taking a *function* of default
+  added), against `src/mixins/newEventForm.js` and a pure `src/components/newEventDates.js` (122)
+  + 18 tests. **NewSignUp was deleted outright later the same day** (see the sign-up note below),
+  so the mixin now has one consumer and its factory generality is gone (`154cc3b`); NewEvent sits
+  at 531 lines, which is what the split was for. It is a factory like `calendarOptionSync`, taking a *function* of default
   overrides so `startOnMonday` can read `localStorage` per instance; it seeds `data()` and
   `reset()` from that one source. Three field lists drive what used to be hand-written parallel
   code: `contactsFields` (the OAuth round-trip), `trackedFields` (the unsaved-changes check),
@@ -998,25 +1000,30 @@ The sequencing that got there is at the bottom.
   which shrinks the real split surface to ~32 exports. Heed A11's caveat: verify splits with
   the app running, not blind.
 
-### Sign-up sheets switched on (2026-07-30, `5ae6901`) — not a backlog item, recorded here
+### Sign-up sheets REMOVED (2026-07-30, `cc002d1`) — not a backlog item, recorded here
 
-Done at the user's request while closing G2, after the mixin work turned up that the feature was
-half-dead. Worth knowing because it changes what the app offers:
+Switched on and then removed the same day, both at the user's request. The middle step is only
+worth knowing because the reasoning is easy to get wrong twice:
 
-- **A "sign up" here is a sign-up _sheet_** — an event with `isSignUpForm: true`, where people
-  claim time slots. It is unrelated to account registration, which is the allowlist/OTP gate in
-  `ACCESS_CONTROL_PLAN.md`. The names invite exactly the wrong inference; don't repeat it.
-- **`signUpFormEnabled` was initialised `false` and never set** — its mutation was PostHog-driven
-  and lost its caller in G1 — so the tab never rendered and no sheet could be created through the
-  UI, while the *edit* path stayed live. Now hardcoded `true`, matching `daysOnlyEnabled` and
-  `overlayAvailabilitiesEnabled`; the flag stays as the off switch.
-- **Two things the dead path was hiding**, both fixed: NewSignUp never declared `folderId` nor
-  called `setEventFolder`, so a sheet created from inside a folder landed at the top level
-  (`folderId` now lives in the shared mixin, since NewDialog passes it to both forms); and the
-  **dates-only** sheet — now reachable for the first time — is the path whose `type` came from the
-  non-existent `eventTypes.SIGNUP`, fixed one commit earlier in `dc1d133`.
-- The downstream slot lifecycle (owner draws blocks, a member joins one) already worked and is
-  covered by the throwaway `verify_phase4_slot.js`; only the creation path was ever dark.
+- **A "sign up" here was a sign-up _sheet_** — an event with `isSignUpForm: true`, carrying named
+  blocks (name + time range + capacity) that people claimed slots in, with a waitlist past
+  capacity. **It was never account registration**, which is the allowlist/OTP gate in
+  `ACCESS_CONTROL_PLAN.md` and is untouched. The names invite exactly the wrong inference — it was
+  drawn twice in one session. If something here reads like "signup", check which one it means.
+- **It was half-dead when found:** `signUpFormEnabled` was initialised `false` and never set (its
+  mutation was PostHog-driven and lost its caller in G1), so the tab never rendered and no sheet
+  could be created through the UI — while the *edit* path stayed live. Switching it on
+  (`5ae6901`) surfaced a folder bug and made the dates-only sheet reachable, which is the path
+  whose `type` came from the non-existent `eventTypes.SIGNUP` (fixed in `dc1d133`).
+- **Then it was cut entirely**, on the user's decision that the club won't use slot sheets and the
+  feature isn't returning. ~1,335 lines: the components, the `/s/:signUpId` route, the model
+  types, `assignSignUpBlocks`, the db helpers and their tests. Prod held **zero** events with
+  `isSignUpForm`, so nothing was migrated; a legacy document carrying the field is ignored by the
+  model and renders as an ordinary gathering (verified against the one on the dev stack).
+- **Three things fell out as dead once it went:** NewDialog's whole tab mechanism, the `eventOnly`
+  flag that existed only to suppress those tabs, and `HelpDialog.vue`, whose only job was
+  explaining the difference between the two tabs. `newEventForm`'s factory generality went with
+  it (`154cc3b`) — one consumer left, so the parameterisation described nothing.
 
 - [ ] **G3 (was C8) · Web push.** `M` · **P3 — still deferred; reassess value first.**
   **Reconfirmed deferred 2026-07-29** — offered to the user alongside G1/G2 and not taken, so
