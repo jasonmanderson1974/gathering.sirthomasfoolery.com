@@ -56,7 +56,7 @@ export const getISODateString = (date, utc = false) => {
 }
 
 /** Returns a string representing date range from date1 to date2, i.e. "5/14 - 5/27" */
-export const getDateRangeString = (date1, date2, utc = false) => {
+const getDateRangeString = (date1, date2, utc = false) => {
   date1 = new Date(date1)
   date2 = new Date(date2)
 
@@ -116,58 +116,6 @@ export const getDateWithTimezone = (date) => {
   }
 
   return date
-}
-
-/** Returns a new date object with the given date (e.g. 5/2/2022) and the specified time (e.g. "11:30") */
-export const getDateWithTime = (date, timeString) => {
-  date = new Date(date)
-
-  const { hours, minutes } = splitTime(timeString)
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-    hours,
-    minutes
-  )
-}
-
-/** Returns a new date object with the given date (e.g. 5/2/2022) and the specified timeNum (e.g. 11.5) */
-export const getDateWithTimeNum = (date, timeNum, utc = false) => {
-  date = new Date(date)
-
-  const hours = parseInt(timeNum)
-  const minutes = (timeNum - hours) * 60
-  if (!utc) {
-    return new Date(
-      date.getFullYear(),
-      date.getMonth(),
-      date.getDate(),
-      hours,
-      minutes
-    )
-  } else {
-    return new Date(
-      Date.UTC(
-        date.getUTCFullYear(),
-        date.getUTCMonth(),
-        date.getUTCDate(),
-        hours,
-        minutes
-      )
-    )
-  }
-}
-
-/** Returns a date object from the given mongodb objectId */
-export const dateFromObjectId = function (objectId) {
-  return new Date(parseInt(objectId.substring(0, 8), 16) * 1000)
-}
-
-/** Takes a time string (e.g. 13:30) and splits it into hours and minutes, returning an object of the form { hours, minutes } */
-export const splitTime = (timeString) => {
-  const [hours, minutes] = timeString.split(":")
-  return { hours: parseInt(hours), minutes: parseInt(minutes) }
 }
 
 /** Takes a timeNum (e.g. 9.5) and splits it into hours and minutes, returning an object of the form { hours, minutes } */
@@ -367,19 +315,6 @@ export const dateToTimeNum = (date, utc = false) => {
   return date.getHours() + date.getMinutes() / 60
 }
 
-/** Clamps the date to the given time, type can either be "upper" or "lower" */
-export const clampDateToTimeNum = (date, timeNum, type) => {
-  const diff = dateToTimeNum(date) - timeNum
-  if (type === "upper" && diff < 0) {
-    return getDateWithTimeNum(date, timeNum)
-  } else if (type === "lower" && diff > 0) {
-    return getDateWithTimeNum(date, timeNum)
-  }
-
-  // Return original date
-  return date
-}
-
 /** Returns negative if date1 < date2, positive if date2 > date1, and 0 if date1 == date2 */
 export const dateCompare = (date1, date2) => {
   date1 = new Date(date1)
@@ -393,49 +328,6 @@ export const isDateBetween = (date, startDate, endDate) => {
   startDate = new Date(startDate).getTime()
   endDate = new Date(endDate).getTime()
   return date >= startDate && date <= endDate
-}
-
-/** Returns the number of days in the given month */
-export const getDaysInMonth = (month, year) => {
-  return new Date(year, month, 0).getDate()
-}
-
-/** returns -1 if a is before b, 1 if a is after b, 0 otherwise */
-export const compareDateDay = (a, b) => {
-  a = new Date(a)
-  b = new Date(b)
-  if (a.getFullYear() !== b.getFullYear()) {
-    return a.getFullYear() - b.getFullYear()
-  } else if (a.getMonth() !== b.getMonth()) {
-    return a.getMonth() - b.getMonth()
-  } else {
-    return a.getDate() - b.getDate()
-  }
-}
-
-/**
-Returns whether the given timeNum is between date1 and date2 
-such that date1.getHour() <= timeNum <= date2.getHour(), accounting 
-for the possibility that date1 and date2 might be on separate days
-*/
-export const isTimeNumBetweenDates = (timeNum, date1, date2) => {
-  const hour1 = date1.getHours()
-  const hour2 = date2.getHours()
-
-  if (hour1 <= hour2) {
-    return hour1 <= timeNum && timeNum <= hour2
-  } else {
-    return (
-      (hour1 <= timeNum && timeNum < 24) || (0 <= timeNum && timeNum <= hour2)
-    )
-  }
-}
-
-/** Returns whether date is in between startDate and startDate + duration (in hours) */
-export const isDateInRange = (date, startDate, duration) => {
-  const endDate = new Date(startDate)
-  endDate.setHours(endDate.getHours() + duration)
-  return startDate <= date && date <= endDate
 }
 
 /** Converts a utc time int to a local time int based on the timezoneOffset */
@@ -472,64 +364,6 @@ export const convertToUTC = (dateTimeString, timezoneValue) => {
   }
 }
 
-/** Checks if a date/time falls within an event's date and time range
- * @param {Date|string} dateTime - The date/time to check (in UTC)
- * @param {Date[]} eventDates - Array of event dates (in UTC)
- * @param {number} eventStartTime - Event start time in hours (e.g., 9 for 9am UTC)
- * @param {number} eventDuration - Event duration in hours
- * @returns {boolean} - Whether the date/time is within the event's range
- */
-export const isTimeWithinEventRange = (
-  dateTime,
-  eventDates,
-  eventStartTime,
-  eventDuration
-) => {
-  const slotDate = new Date(dateTime)
-  const slotDateOnly = new Date(
-    slotDate.getUTCFullYear(),
-    slotDate.getUTCMonth(),
-    slotDate.getUTCDate()
-  )
-
-  // Check if slot's date matches any event date
-  let matchingEventDate = null
-  for (const eventDate of eventDates) {
-    const eventDateObj = new Date(eventDate)
-    const eventDateOnly = new Date(
-      eventDateObj.getUTCFullYear(),
-      eventDateObj.getUTCMonth(),
-      eventDateObj.getUTCDate()
-    )
-    if (slotDateOnly.getTime() === eventDateOnly.getTime()) {
-      matchingEventDate = eventDateObj
-      break
-    }
-  }
-
-  if (!matchingEventDate) {
-    return false
-  }
-
-  // Check if slot's time falls within event's time range for this date
-  const eventStartDateTime = new Date(matchingEventDate)
-  eventStartDateTime.setUTCHours(Math.floor(eventStartTime))
-  eventStartDateTime.setUTCMinutes((eventStartTime % 1) * 60)
-
-  const eventEndDateTime = new Date(eventStartDateTime)
-  eventEndDateTime.setUTCHours(
-    eventEndDateTime.getUTCHours() + Math.floor(eventDuration)
-  )
-  eventEndDateTime.setUTCMinutes(
-    eventEndDateTime.getUTCMinutes() + (eventDuration % 1) * 60
-  )
-
-  return (
-    slotDate.getTime() >= eventStartDateTime.getTime() &&
-    slotDate.getTime() <= eventEndDateTime.getTime()
-  )
-}
-
 /** Converts an array of UTC date slots to ISO string format in a specified timezone
  * @param {Array<Date|string|number>} slots - Array of UTC date slots (can be Date objects, ISO strings, or timestamps)
  * @param {string|null} timezoneValue - IANA timezone name (e.g., "America/Los_Angeles"). If not provided, returns UTC (YYYY-MM-DDTHH:mm:ssZ)
@@ -557,13 +391,6 @@ export const convertUTCSlotsToLocalISO = (slots, timezoneValue = null) => {
       return new Date(slot).toISOString()
     }
   })
-}
-
-/** Returns a string representing the current timezone */
-export const getCurrentTimezone = () => {
-  return new Date()
-    .toLocaleTimeString("en-us", { timeZoneName: "short" })
-    .split(" ")[2]
 }
 
 /** Returns the preferred locale of the user
@@ -693,7 +520,7 @@ export const splitTimeBlocksByDay = (
 }
 
 /** Takes an array of time blocks and returns a new array separated by day and with hoursOffset and hoursLength properties */
-export const processTimeBlocks = (
+const processTimeBlocks = (
   dates,
   duration,
   timeBlocks,
@@ -899,7 +726,7 @@ export const getCalendarAccountKey = (email, calendarType) => {
   return `${keyPart}_${calendarType}`
 }
 
-export const stdTimezoneOffset = (date) => {
+const stdTimezoneOffset = (date) => {
   const jan = new Date(date.getFullYear(), 0, 1)
   const jul = new Date(date.getFullYear(), 6, 1)
   return Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset())
