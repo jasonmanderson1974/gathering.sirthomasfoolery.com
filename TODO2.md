@@ -24,9 +24,14 @@
 > The feature track is therefore re-opened for exactly these two items. The user intends to
 > split them across the two machines (F17 backend on one, F18 frontend on the other — F18's
 > drag slice is the only part that blocks on F17).
-> **F17 landed the same day** (`b818f7d4`, `6dddde66`, `c8073db0`) — so **F18 is now entirely
-> unblocked, drag slice included**. The cross-list `$pull`+`$push` question F17 was carrying is
-> answered: Mongo accepts it in one update, no fallback needed.
+> **F17 and F18 both landed the same day** — F17 in `b818f7d4`, `6dddde66`, `c8073db0`; F18 in
+> `a618f12a`, `9fa1ffc6`, `b7ee3312`, `6073f9e8`. Both ended up on one machine, since the other
+> had not started F18. The cross-list `$pull`+`$push` question F17 was carrying is answered:
+> Mongo accepts it in one update, no fallback needed. **Lists v3 is therefore complete in the
+> repo, and the feature track is closed again** — but two things are still outstanding and
+> neither is code: the `20260730_list_item_order` migration must be **run on prod after the
+> deploy**, and the whole of F18 is **unverified in a browser** (local login is unwired), so
+> drag, touch, the confirm dialogs and the phone sizing all want a pass by hand once live.
 >
 > **Worth reading if you are picking up an old finding:** two of the three H items closed on
 > 2026-07-30 were described *wrongly* by the entries that recorded them, and neither error was
@@ -836,10 +841,41 @@ won't-do. See their entries. The sequencing that got there is at the bottom.
     400; full target list → 400; missing item / missing target list → 404. Swagger regen
     (`swag init --parseDependency --parseInternal`, CLI pinned @v1.16.1).
 
-- [ ] **F18 · Lists v3 frontend: rapid entry, drag with drop resolution, confirm dialogs,
-  phone targets.** `L` · **P1** — needs F17 **for the drag slice only**; the other three slices
-  have no backend dependency and can start immediately on the second machine. Planned
-  2026-07-30; decisions in the Lists v3 block above. Four slices, reviewable separately:
+- [x] **F18 · Lists v3 frontend: rapid entry, drag with drop resolution, confirm dialogs,
+  phone targets.** `L` · **P1** — needed F17 for the drag slice. Planned 2026-07-30; decisions
+  in the Lists v3 block above. **DONE 2026-07-30** in the four slice commits the plan called
+  for: `a618f12a` (rapid entry), `9fa1ffc6` (drag), `b7ee3312` (confirm dialogs), `6073f9e8`
+  (phone targets). Built on the same machine as F17 in the end — the other machine hadn't
+  started. Built as planned; what is worth knowing:
+  - **Sortable's `evt.newIndex` is NOT the index the rows are numbered by.** It counts every
+    element in the container, and the empty-state header slot is one; `newDraggableIndex`
+    counts only what matches the `draggable` selector, which is exactly the rows `resolveDrop`
+    resolves against. The clamp in `resolveDrop` happened to mask the difference for the one
+    case it arises in today (an empty list), so this would have been a latent bug the moment
+    anything else was added to the container. Verified by reading
+    `node_modules/sortablejs/Sortable.js` — `_dispatchEvent` carries both, and `index(el,
+    selector)` filters only for the Draggable variant.
+  - **vuedraggable restores the DOM it moved** (`onDragAdd` removes the node, `onDragRemove`
+    re-inserts it) before `@end` fires, and its `updateProperty` header-offset adjustment is
+    dead code in v2.24.3 — never called. So the row visibly snaps back for one round trip
+    before the refetch renders it in its new place. Accepted deliberately: the restore is what
+    keeps Vue's patching sound, and correctness beats smoothness. Not binding `:list` at all
+    would skip the restore and look smoother, but leaves Sortable's DOM mutation in place under
+    Vue's vnodes — don't.
+  - **Comments got the confirm dialog too**, slightly beyond the planned "name the snippet":
+    `deleteComment` (`routes/comments.go`) cascades a thread root to its replies exactly as an
+    entry cascades to its sub-entries, so warning about one and not the other would have been
+    an odd gap. `describeCommentDeletion` lives in `commentThreads.js`, beside the other
+    comment helpers, not in `eventLists.js`.
+  - Phone sizing uses an object binding (`:class="{ 'tw-gap-2': phone }"`) beside the static
+    class rather than an interpolated template string, so desktop output really is unchanged
+    rather than gaining a trailing space.
+  - **Nothing here has been exercised in a browser.** Login is unwired locally (CLAUDE.md), so
+    drag, touch, the dialogs and the phone sizing are all unverified by hand — the pure helpers
+    are tested (37 new vitest cases across `resolveDrop`, `orderBetween`, the sibling-group
+    sort, `countDescendants` and the three `describe*` helpers), and the rest waits on a
+    post-deploy check.
+  The original plan follows, for the record:
   - **Slice 1 — rapid entry (no deps).** Nothing in `EventLists.vue` manages focus today; the
     main composer *probably* survives the refetch re-render (v-for keyed by stable `list._id`,
     Vue patches in place) but the sub-entry composer is destroyed by `submitChild` →
@@ -1505,12 +1541,9 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
 8. ~~**F9** (the mention composer + rendering).~~ **Done 2026-07-29** (`b9633400`) — the
    feature track is complete.
 9. ~~**F10** close-out.~~ **Done 2026-07-29.**
-10. ~~**F17**~~ **→ F18** (Lists v3: order+move backend → the four UX slices). Queued
-    2026-07-30; **F17 done the same day**, so the dependency is discharged and **all four F18
-    slices are available, drag included** — the cross-list db test proving the combined
-    $pull+$push update is green. F18 is now a single-machine job with nothing to wait on: all
-    four slices touch `EventLists.vue`, so they are sequential commits wherever it is picked up.
-    The move endpoint F18 calls is
+10. ~~**F17 → F18**~~ (Lists v3: order+move backend → the four UX slices). **Both done
+    2026-07-30**, on one machine rather than the intended two. Nothing left to sequence. The
+    move endpoint F18 calls is
     `PUT /events/:eventId/lists/:listId/items/:itemId/move`, body
     `{targetListId, order, parentId?}` — `order` is a **number the client computes** and 0 is a
     legal value; `parentId` may name **only the item's existing parent**, for a same-list
