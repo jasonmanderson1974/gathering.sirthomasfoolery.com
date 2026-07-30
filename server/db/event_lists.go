@@ -6,8 +6,13 @@
 // request (routes/polls.go), which loses one of two concurrent votes. Polls get
 // away with it because a handful of people vote occasionally; a list says "add
 // your dish" to the whole club at once. Positional array filters keep each
-// append, edit and removal independent of what anyone else is doing to the same
-// list in the same moment.
+// append, edit, removal and move independent of what anyone else is doing to
+// the same list in the same moment.
+//
+// Moving (F17) is the case that most wanted to become a read-modify-write, and
+// does not: fractional ordering means repositioning an item writes that item
+// alone, and even a cross-list move — which does have to carry the subtree it
+// was read with — stays a single update combining a $pull with a $push.
 package db
 
 import (
@@ -126,4 +131,78 @@ func SetEventListItemChecked(
 		return false, err
 	}
 	return res.MatchedCount > 0, nil
+}
+
+// SetEventListItemOrder repositions an item among its existing siblings (F17).
+//
+// The narrowest of the three move shapes: nothing but the moved item's order
+// changes, so a reorder cannot disturb a neighbour someone is editing in the
+// same moment. Reports MatchedCount, like SetEventListItemChecked — dropping an
+// item back exactly where it started modifies nothing and is still a success.
+func SetEventListItemOrder(eventId, listId, itemId primitive.ObjectID, order float64) (bool, error) {
+	res, err := EventsCollection.UpdateByID(context.Background(), eventId,
+		bson.M{"$set": bson.M{"lists.$[l].items.$[i].order": order}},
+		arrayFilterOptions(bson.M{"l._id": listId}, bson.M{"i._id": itemId}),
+	)
+	if err != nil {
+		return false, err
+	}
+	return res.MatchedCount > 0, nil
+}
+
+// FlattenEventListItemToTopLevel drops an item out of its parent and places it
+// at the given order, in one update.
+//
+// The $set and $unset are combined deliberately: an item that had lost its
+// parent but not yet gained its position — or the reverse — would render in the
+// wrong place for as long as the gap lasted. Its children are untouched and
+// follow it, since they point at it and not at its old parent.
+func FlattenEventListItemToTopLevel(eventId, listId, itemId primitive.ObjectID, order float64) (bool, error) {
+	res, err := EventsCollection.UpdateByID(context.Background(), eventId,
+		bson.M{
+			"$set":   bson.M{"lists.$[l].items.$[i].order": order},
+			"$unset": bson.M{"lists.$[l].items.$[i].parentId": ""},
+		},
+		arrayFilterOptions(bson.M{"l._id": listId}, bson.M{"i._id": itemId}),
+	)
+	if err != nil {
+		return false, err
+	}
+	return res.MatchedCount > 0, nil
+}
+
+// MoveEventListItems moves a subtree from one list to another on the same event,
+// atomically (F17).
+//
+// The whole move is ONE update: a $pull removing the ids from the source list
+// and a $push adding the caller-built structs to the destination, under two
+// array filters. Both lists live in the same event document, so there is no
+// instant in which the subtree is on both lists or on neither — the same
+// guarantee DeleteEventListItems gives a cascade, extended across lists. The
+// two paths are lexically distinct (`lists.$[src]` vs `lists.$[dst]`), which is
+// what lets Mongo accept them in a single update rather than rejecting them as
+// a conflict.
+//
+// The items are supplied by the caller rather than read here, because only the
+// route knows which of them is the moved root — the one whose parentId and
+// order change — and which are descendants riding along unmodified.
+func MoveEventListItems(
+	eventId, srcListId, dstListId primitive.ObjectID,
+	itemIds []primitive.ObjectID,
+	items []models.EventListItem,
+) (bool, error) {
+	if len(itemIds) == 0 || len(items) == 0 {
+		return false, nil
+	}
+	res, err := EventsCollection.UpdateByID(context.Background(), eventId,
+		bson.M{
+			"$pull": bson.M{"lists.$[src].items": bson.M{"_id": bson.M{"$in": itemIds}}},
+			"$push": bson.M{"lists.$[dst].items": bson.M{"$each": items}},
+		},
+		arrayFilterOptions(bson.M{"src._id": srcListId}, bson.M{"dst._id": dstListId}),
+	)
+	if err != nil {
+		return false, err
+	}
+	return res.ModifiedCount > 0, nil
 }

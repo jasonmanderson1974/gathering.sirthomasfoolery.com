@@ -379,6 +379,10 @@ definitions:
           omitempty can't omit a [12]byte array, so a zero id would serialize as 24
           zeros and read back as a real parent. Items written before nesting existed
           have no field at all, which decodes to nil — hence no migration.
+
+          Set once, when the item is added. A move never points it at a NEW parent,
+          only clears it (F17), so an item's depth can shrink but never grow — which
+          is what keeps routes/event_lists.go's depth check exact.
         type: string
       text:
         type: string
@@ -1786,6 +1790,54 @@ paths:
         "200":
           description: OK
       summary: Ticks or unticks a checklist item
+      tags:
+      - events
+  /events/{eventId}/lists/{listId}/items/{itemId}/move:
+    put:
+      consumes:
+      - application/json
+      description: The right to move an item is the right to delete it, since a move
+        is a delete and a re-add. The item brings everything nested under it. Unless
+        the payload names the item's CURRENT parent for a same-list reorder, the item
+        becomes top-level in its new position — a move never nests an item under a
+        new parent. The client computes `order`; see listItemOrderStep.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: List ID
+        in: path
+        name: listId
+        required: true
+        type: string
+      - description: Item ID
+        in: path
+        name: itemId
+        required: true
+        type: string
+      - description: Destination list, the new order, and optionally the item's current
+          parent to keep it nested
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            order:
+              type: number
+            parentId:
+              type: string
+            targetListId:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Moves a list item to a new position, within its list or onto another
+        (own, or any when the caller is a member or above)
       tags:
       - events
   /events/{eventId}/mentionables:

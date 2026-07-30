@@ -9,6 +9,7 @@
 package routes
 
 import (
+	"math"
 	"net/http"
 	"time"
 
@@ -29,8 +30,11 @@ const (
 	maxItemsPerList   = 100
 	// How many levels of nesting an item may sit at: a top-level item, a child
 	// and a grandchild. Unlike the caps above this one is exact rather than
-	// advisory — an item is never re-parented, so the depth it is written at is
-	// the depth it keeps, and a check against the event as read cannot go stale.
+	// advisory, because an item's depth can never GROW: it is fixed when the
+	// item is added, and the only thing that changes it afterwards is a move,
+	// which either keeps it or flattens it to zero (see validateMoveParent). A
+	// check against the event as read therefore cannot go stale in the
+	// direction that would matter.
 	maxListItemDepth = 3
 	// The gap left between adjacent items' Order values (F17). Ordering is
 	// fractional rather than a 0,1,2,... reindex so that moving an item writes
@@ -59,6 +63,7 @@ const (
 	errListFull         = "list-full"
 	errListTooDeep      = "list-depth-exceeded"
 	errNotChecklist     = "not-a-checklist"
+	errInvalidMove      = "invalid-item-move"
 )
 
 // listViewer is the caller's identity as it bears on lists. Kept as a plain
@@ -176,8 +181,10 @@ func findListItem(list *models.EventList, itemId string) (*models.EventListItem,
 // both this and the frontend treat it as top-level rather than hiding it.
 //
 // The walk is bounded by the item count so that malformed data terminates. This
-// code cannot produce a cycle (a parent is chosen from items that already
-// exist, and nothing is ever re-parented), but a hand-edited document could.
+// code cannot produce a cycle — a parent is chosen from items that already
+// exist, and the only operation that changes an item's parent afterwards is a
+// move, which clears it rather than pointing it somewhere new — but a
+// hand-edited document could.
 func listItemDepth(list *models.EventList, item *models.EventListItem) int {
 	depth := 0
 	current := item
@@ -215,6 +222,44 @@ func maxOrderInList(list *models.EventList) float64 {
 		}
 	}
 	return highest
+}
+
+// validateMoveParent reports whether a move may keep the parent the payload
+// asks for. Extracted from the handler so the rule is testable without a
+// request, since it is the invariant the whole depth model rests on.
+//
+// A move may name a parent ONLY to say "leave me where I am in the tree and
+// just reorder me among my siblings" — same list, same parent. Every other move
+// flattens the item to the top level. So a move either preserves an item's
+// depth exactly or drops it to zero: DEPTH ONLY EVER SHRINKS.
+//
+// That is what keeps addEventListItem's depth check exact rather than advisory.
+// If a move could re-parent an item downward, a parent's depth could grow
+// between the read that checked it and the write that used it, and a subtree
+// could be pushed past maxListItemDepth by two people acting at once.
+func validateMoveParent(item *models.EventListItem, payloadParentId string, sameList bool) bool {
+	if payloadParentId == "" {
+		return true // flattening to the top level is always allowed
+	}
+	if !sameList || item.ParentId == nil {
+		return false
+	}
+	return item.ParentId.Hex() == payloadParentId
+}
+
+// collectListItems resolves ids to the item structs on a list, preserving the
+// order of the ids. Ids that are not on the list are skipped.
+func collectListItems(list *models.EventList, ids []primitive.ObjectID) []models.EventListItem {
+	items := make([]models.EventListItem, 0, len(ids))
+	for _, id := range ids {
+		for i := range list.Items {
+			if list.Items[i].Id == id {
+				items = append(items, list.Items[i])
+				break
+			}
+		}
+	}
+	return items
 }
 
 // collectDescendantIds returns rootId together with every item nested beneath
@@ -469,9 +514,11 @@ func addEventListItem(c *gin.Context) {
 		return
 	}
 
-	// Nesting, when asked for. The depth check is exact rather than advisory:
-	// nothing is ever re-parented, so a parent's depth cannot change under us
-	// between this read and the write below.
+	// Nesting, when asked for. The depth check is exact rather than advisory: a
+	// parent's depth cannot GROW under us between this read and the write below,
+	// since a move only ever preserves an item's depth or flattens it to zero.
+	// The worst a concurrent move can do is make this check stricter than it
+	// needed to be.
 	var parentId *primitive.ObjectID
 	if payload.ParentId != "" {
 		parent, parentFound := findListItem(list, payload.ParentId)
@@ -604,6 +651,153 @@ func deleteEventListItem(c *gin.Context) {
 	if _, err := db.DeleteEventListItems(event.Id, list.Id, itemIds); err != nil {
 		logger.StdErr.Println(err)
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+// @Summary Moves a list item to a new position, within its list or onto another (own, or any when the caller is a member or above)
+// @Description The right to move an item is the right to delete it, since a move is a delete and a re-add. The item brings everything nested under it. Unless the payload names the item's CURRENT parent for a same-list reorder, the item becomes top-level in its new position — a move never nests an item under a new parent. The client computes `order`; see listItemOrderStep.
+// @Tags events
+// @Accept json
+// @Produce json
+// @Param eventId path string true "Event ID"
+// @Param listId path string true "List ID"
+// @Param itemId path string true "Item ID"
+// @Param payload body object{targetListId=string,order=number,parentId=string} true "Destination list, the new order, and optionally the item's current parent to keep it nested"
+// @Success 200
+// @Router /events/{eventId}/lists/{listId}/items/{itemId}/move [put]
+func moveEventListItem(c *gin.Context) {
+	payload := struct {
+		TargetListId string `json:"targetListId" binding:"required"`
+		// A POINTER with binding:"required", for the same reason Checked is one:
+		// a bare float64 would fail the binding on 0, and 0 is exactly what a
+		// drop at the top of a migrated list computes.
+		Order *float64 `json:"order" binding:"required"`
+		// Optional, and only ever the item's existing parent — see
+		// validateMoveParent.
+		ParentId string `json:"parentId"`
+	}{}
+	if err := c.Bind(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
+		return
+	}
+
+	// The client computes the order, so it is the client that could send
+	// nonsense. JSON cannot even encode NaN or ±Inf, but an order that is not a
+	// real number would poison every later comparison in the sibling group, and
+	// the check costs nothing. Any finite value is fair game: order carries no
+	// privilege, and by design any mover may place an item anywhere.
+	if math.IsNaN(*payload.Order) || math.IsInf(*payload.Order, 0) {
+		c.JSON(http.StatusBadRequest, responses.Error{Error: errInvalidMove})
+		return
+	}
+
+	event, _, viewer, ok := loadListContext(c)
+	if !ok {
+		return
+	}
+	list, found := findEventList(event, c.Param("listId"))
+	if !found {
+		c.JSON(http.StatusNotFound, responses.Error{Error: errListNotFound})
+		return
+	}
+	// Unlike delete, a move is NOT idempotent when the item has gone: there is
+	// nothing to place, and silently reporting success would leave the mover
+	// looking at an entry that never arrived.
+	item, itemFound := findListItem(list, c.Param("itemId"))
+	if !itemFound {
+		c.JSON(http.StatusNotFound, responses.Error{Error: errListItemNotFound})
+		return
+	}
+	// Moving is delete-and-re-add, so it takes the same right as deleting —
+	// which means a member may tidy anyone's entry into place, not just their
+	// own.
+	if !viewer.canDeleteItem(*item) {
+		c.JSON(http.StatusForbidden, responses.Error{Error: errs.NotAuthorized})
+		return
+	}
+
+	sameList := payload.TargetListId == list.Id.Hex()
+	target, targetFound := findEventList(event, payload.TargetListId)
+	if !targetFound {
+		c.JSON(http.StatusNotFound, responses.Error{Error: errListNotFound})
+		return
+	}
+	if !validateMoveParent(item, payload.ParentId, sameList) {
+		c.JSON(http.StatusBadRequest, responses.Error{Error: errInvalidMove})
+		return
+	}
+
+	itemIds := collectDescendantIds(list, item.Id)
+
+	if sameList {
+		var moveErr error
+		var moved bool
+		if payload.ParentId != "" {
+			// A reorder among the siblings it already has.
+			moved, moveErr = db.SetEventListItemOrder(event.Id, list.Id, item.Id, *payload.Order)
+		} else {
+			moved, moveErr = db.FlattenEventListItemToTopLevel(event.Id, list.Id, item.Id, *payload.Order)
+		}
+		if moveErr != nil {
+			logger.StdErr.Println(moveErr)
+			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+			return
+		}
+		if !moved {
+			// The list or the item went away between the read and the write.
+			c.JSON(http.StatusNotFound, responses.Error{Error: errListItemNotFound})
+			return
+		}
+		c.Status(http.StatusOK)
+		return
+	}
+
+	// Cross-list. Advisory, exactly like the cap on adding: measured against the
+	// event as read, so two simultaneous moves at the boundary can both pass.
+	if len(target.Items)+len(itemIds) > maxItemsPerList {
+		c.JSON(http.StatusBadRequest, responses.Error{Error: errListFull})
+		return
+	}
+
+	// The structs are taken from the event AS READ, and that is where this
+	// feature's accepted races live — the same trade the cascade delete makes:
+	//
+	//   - A text edit or a check landing between this read and the write below
+	//     is lost, because the pre-edit struct is what gets pushed.
+	//   - A child added under this subtree in the same instant is not in
+	//     itemIds, so it stays on the source list and resurfaces there as a
+	//     top-level orphan (flattenListItems renders orphans at the root).
+	//
+	// Both are better than a partially moved subtree, which is what any
+	// multi-write alternative would risk.
+	moving := collectListItems(list, itemIds)
+	if len(moving) == 0 {
+		c.JSON(http.StatusNotFound, responses.Error{Error: errListItemNotFound})
+		return
+	}
+	// Only the root is repositioned — matched by id rather than by position, so
+	// this does not quietly depend on collectDescendantIds returning the root
+	// first. Its descendants keep the parentId and order they had: they compete
+	// only with their own siblings, and that group travels with them intact.
+	for i := range moving {
+		if moving[i].Id == item.Id {
+			moving[i].ParentId = nil
+			moving[i].Order = *payload.Order
+			break
+		}
+	}
+
+	moved, err := db.MoveEventListItems(event.Id, list.Id, target.Id, itemIds, moving)
+	if err != nil {
+		logger.StdErr.Println(err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
+	if !moved {
+		c.JSON(http.StatusNotFound, responses.Error{Error: errListNotFound})
 		return
 	}
 

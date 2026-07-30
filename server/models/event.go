@@ -267,6 +267,10 @@ type EventListItem struct {
 	// omitempty can't omit a [12]byte array, so a zero id would serialize as 24
 	// zeros and read back as a real parent. Items written before nesting existed
 	// have no field at all, which decodes to nil — hence no migration.
+	//
+	// Set once, when the item is added. A move never points it at a NEW parent,
+	// only clears it (F17), so an item's depth can shrink but never grow — which
+	// is what keeps routes/event_lists.go's depth check exact.
 	ParentId *primitive.ObjectID `json:"parentId,omitempty" bson:"parentId,omitempty"`
 	// Order places the item among its SIBLINGS — entries sharing its parentId
 	// compete only with each other. Fractional on purpose (see

@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"sirtom/server/db"
 	"sirtom/server/middleware"
 	"sirtom/server/models"
@@ -26,6 +28,7 @@ func listsTestRouter() *gin.Engine {
 	r.POST("/events/:eventId/lists/:listId/items", middleware.AuthRequired(), addEventListItem)
 	r.PUT("/events/:eventId/lists/:listId/items/:itemId", middleware.AuthRequired(), editEventListItem)
 	r.PUT("/events/:eventId/lists/:listId/items/:itemId/checked", middleware.AuthRequired(), setEventListItemChecked)
+	r.PUT("/events/:eventId/lists/:listId/items/:itemId/move", middleware.AuthRequired(), moveEventListItem)
 	r.DELETE("/events/:eventId/lists/:listId/items/:itemId", middleware.AuthRequired(), deleteEventListItem)
 	r.GET("/events/:eventId/lists", middleware.AuthRequired(), getEventLists)
 	return r
@@ -661,5 +664,303 @@ func TestLists_GetListsEndpoint(t *testing.T) {
 	}
 	if lists[0].Kind != models.ListKindChecklist {
 		t.Errorf("kind = %q, want checklist", lists[0].Kind)
+	}
+}
+
+// movePath builds the move URL for an item.
+func movePath(eventId, listId, itemId primitive.ObjectID) string {
+	return "/events/" + eventId.Hex() + "/lists/" + listId.Hex() +
+		"/items/" + itemId.Hex() + "/move"
+}
+
+// listByName picks a list out of the stored event by name.
+func listByName(t *testing.T, lists []models.EventList, name string) models.EventList {
+	t.Helper()
+	for _, list := range lists {
+		if list.Name == name {
+			return list
+		}
+	}
+	t.Fatalf("list %q is not on the event: %+v", name, lists)
+	return models.EventList{}
+}
+
+// A same-list move either reorders an item among the siblings it already has —
+// naming its current parent — or flattens it to the top level. Both are one
+// targeted write, and neither disturbs anything else on the list.
+func TestLists_MoveWithinAList(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "lists-move-same@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := listsTestRouter()
+	cookie := loginAs(t, h, ownerId.Hex())
+	list := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"text"}`)
+
+	parent := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Mains"}`)
+	first := addItemFor(t, h, eventId, list.Id, cookie,
+		`{"text":"Hotdogs","parentId":"`+parent.Id.Hex()+`"}`)
+	second := addItemFor(t, h, eventId, list.Id, cookie,
+		`{"text":"Burgers","parentId":"`+parent.Id.Hex()+`"}`)
+
+	// Reorder within the parent: Burgers above Hotdogs, parent kept.
+	body := `{"targetListId":"` + list.Id.Hex() + `","order":` +
+		strconv.FormatFloat(first.Order-1, 'f', -1, 64) +
+		`,"parentId":"` + parent.Id.Hex() + `"}`
+	if w := do(h, http.MethodPut, movePath(eventId, list.Id, second.Id), body, cookie); w.Code != http.StatusOK {
+		t.Fatalf("sibling reorder: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+	stored := itemsByText(readEventLists(t, eventId)[0].Items)
+	if stored["Burgers"].Order >= stored["Hotdogs"].Order {
+		t.Errorf("reorder did not take: Burgers %v, Hotdogs %v",
+			stored["Burgers"].Order, stored["Hotdogs"].Order)
+	}
+	if stored["Burgers"].ParentId == nil || *stored["Burgers"].ParentId != parent.Id {
+		t.Errorf("a sibling reorder lost the parent: %+v", stored["Burgers"])
+	}
+	if stored["Hotdogs"].Order != first.Order {
+		t.Errorf("reordering one sibling rewrote another: %+v", stored["Hotdogs"])
+	}
+
+	// Naming no parent flattens it out of the subtree.
+	body = `{"targetListId":"` + list.Id.Hex() + `","order":9999}`
+	if w := do(h, http.MethodPut, movePath(eventId, list.Id, first.Id), body, cookie); w.Code != http.StatusOK {
+		t.Fatalf("flatten: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+	stored = itemsByText(readEventLists(t, eventId)[0].Items)
+	if stored["Hotdogs"].ParentId != nil {
+		t.Errorf("flatten left the parentId in place: %+v", stored["Hotdogs"])
+	}
+	if stored["Hotdogs"].Order != 9999 {
+		t.Errorf("flatten did not set the order: %+v", stored["Hotdogs"])
+	}
+}
+
+// THE cross-list proof: one update carrying a $pull off the source list and a
+// $push onto the destination. Mongo has to accept both paths in a single update
+// for the subtree to move atomically — if it ever rejects the combination this
+// is the test that says so, and F18's drag depends on it.
+//
+// The moved root is flattened and repositioned; everything under it keeps the
+// parentId and order it had, because those are relative to a group travelling
+// with it.
+func TestLists_MoveAcrossListsCarriesTheSubtree(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "lists-move-cross@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := listsTestRouter()
+	cookie := loginAs(t, h, ownerId.Hex())
+	src := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"text"}`)
+	dst := createListFor(t, h, eventId, cookie, `{"name":"Drinks","kind":"text"}`)
+
+	stay := addItemFor(t, h, eventId, src.Id, cookie, `{"text":"Salad"}`)
+	root := addItemFor(t, h, eventId, src.Id, cookie, `{"text":"Mains"}`)
+	child := addItemFor(t, h, eventId, src.Id, cookie,
+		`{"text":"Hotdogs","parentId":"`+root.Id.Hex()+`"}`)
+	grandchild := addItemFor(t, h, eventId, src.Id, cookie,
+		`{"text":"Mustard","parentId":"`+child.Id.Hex()+`"}`)
+	// Something already on the destination, to prove the $push appends rather
+	// than replaces.
+	existing := addItemFor(t, h, eventId, dst.Id, cookie, `{"text":"Beer"}`)
+
+	body := `{"targetListId":"` + dst.Id.Hex() + `","order":512}`
+	if w := do(h, http.MethodPut, movePath(eventId, src.Id, root.Id), body, cookie); w.Code != http.StatusOK {
+		t.Fatalf("cross-list move: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+
+	lists := readEventLists(t, eventId)
+	after := itemsByText(listByName(t, lists, "Menu").Items)
+	moved := itemsByText(listByName(t, lists, "Drinks").Items)
+
+	if len(after) != 1 || after["Salad"].Id != stay.Id {
+		t.Errorf("source list should hold only Salad, has: %+v", after)
+	}
+	if len(moved) != 4 {
+		t.Fatalf("destination should hold 4 entries, has %d: %+v", len(moved), moved)
+	}
+	if moved["Beer"].Id != existing.Id {
+		t.Errorf("the $push disturbed what was already there: %+v", moved)
+	}
+	if moved["Mains"].ParentId != nil {
+		t.Errorf("the moved root did not flatten: %+v", moved["Mains"])
+	}
+	if moved["Mains"].Order != 512 {
+		t.Errorf("the moved root's order = %v, want 512", moved["Mains"].Order)
+	}
+	if moved["Hotdogs"].ParentId == nil || *moved["Hotdogs"].ParentId != root.Id {
+		t.Errorf("a descendant lost its parent: %+v", moved["Hotdogs"])
+	}
+	if moved["Mustard"].ParentId == nil || *moved["Mustard"].ParentId != child.Id {
+		t.Errorf("a grandchild lost its parent: %+v", moved["Mustard"])
+	}
+	if moved["Hotdogs"].Order != child.Order || moved["Mustard"].Order != grandchild.Order {
+		t.Errorf("descendants' orders were rewritten: %+v", moved)
+	}
+}
+
+// Moving is delete-and-re-add, so it takes the delete right: a member may move
+// anyone's entry, an unrelated guest may move nobody's but their own.
+func TestLists_MovePermissions(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "lists-move-owner@example.test")
+	guestId := insertTestUser(t, models.RoleGuest, "lists-move-guest@example.test")
+	otherGuestId := insertTestUser(t, models.RoleGuest, "lists-move-guest2@example.test")
+	memberId := insertTestUser(t, models.RoleMember, "lists-move-member@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := listsTestRouter()
+
+	ownerCookie := loginAs(t, h, ownerId.Hex())
+	guestCookie := loginAs(t, h, guestId.Hex())
+	otherGuestCookie := loginAs(t, h, otherGuestId.Hex())
+	memberCookie := loginAs(t, h, memberId.Hex())
+
+	list := createListFor(t, h, eventId, ownerCookie, `{"name":"Menu","kind":"text"}`)
+	item := addItemFor(t, h, eventId, list.Id, guestCookie, `{"text":"Hotdogs"}`)
+	path := movePath(eventId, list.Id, item.Id)
+	body := `{"targetListId":"` + list.Id.Hex() + `","order":2048}`
+
+	if w := do(h, http.MethodPut, path, body, otherGuestCookie); w.Code != http.StatusForbidden {
+		t.Fatalf("unrelated guest move: got %d, want 403 (body: %s)", w.Code, w.Body.String())
+	}
+	if w := do(h, http.MethodPut, path, body, guestCookie); w.Code != http.StatusOK {
+		t.Fatalf("author moves their own: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+	if w := do(h, http.MethodPut, path, body, memberCookie); w.Code != http.StatusOK {
+		t.Fatalf("member moves another's: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+// The refusals: a parent that isn't the item's own, a destination that is full,
+// and things that are not there at all.
+func TestLists_MoveRejections(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "lists-move-reject@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := listsTestRouter()
+	cookie := loginAs(t, h, ownerId.Hex())
+	list := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"text"}`)
+
+	parent := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Mains"}`)
+	stray := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Salad"}`)
+	child := addItemFor(t, h, eventId, list.Id, cookie,
+		`{"text":"Hotdogs","parentId":"`+parent.Id.Hex()+`"}`)
+
+	cases := []struct {
+		name   string
+		itemId primitive.ObjectID
+		listId primitive.ObjectID
+		body   string
+		want   int
+		errStr string
+	}{
+		{
+			"a parent that is not the item's own",
+			child.Id, list.Id,
+			`{"targetListId":"` + list.Id.Hex() + `","order":1,"parentId":"` + stray.Id.Hex() + `"}`,
+			http.StatusBadRequest, errInvalidMove,
+		},
+		{
+			"a top-level item may not acquire a parent",
+			stray.Id, list.Id,
+			`{"targetListId":"` + list.Id.Hex() + `","order":1,"parentId":"` + parent.Id.Hex() + `"}`,
+			http.StatusBadRequest, errInvalidMove,
+		},
+		{
+			"an item that is not there",
+			primitive.NewObjectID(), list.Id,
+			`{"targetListId":"` + list.Id.Hex() + `","order":1}`,
+			http.StatusNotFound, errListItemNotFound,
+		},
+		{
+			"a destination list that is not there",
+			stray.Id, list.Id,
+			`{"targetListId":"` + primitive.NewObjectID().Hex() + `","order":1}`,
+			http.StatusNotFound, errListNotFound,
+		},
+		{
+			"a source list that is not there",
+			stray.Id, primitive.NewObjectID(),
+			`{"targetListId":"` + list.Id.Hex() + `","order":1}`,
+			http.StatusNotFound, errListNotFound,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := do(h, http.MethodPut, movePath(eventId, tc.listId, tc.itemId), tc.body, cookie)
+			if w.Code != tc.want {
+				t.Fatalf("got %d, want %d (body: %s)", w.Code, tc.want, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), tc.errStr) {
+				t.Errorf("error = %s, want %s", w.Body.String(), tc.errStr)
+			}
+		})
+	}
+}
+
+// The destination's cap counts the whole incoming subtree, so a move cannot
+// smuggle a list past maxItemsPerList the way a single add never could.
+func TestLists_MoveIntoAFullListIsRefused(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "lists-move-full@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := listsTestRouter()
+	cookie := loginAs(t, h, ownerId.Hex())
+	src := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"text"}`)
+	dst := createListFor(t, h, eventId, cookie, `{"name":"Drinks","kind":"text"}`)
+
+	item := addItemFor(t, h, eventId, src.Id, cookie, `{"text":"Mains"}`)
+
+	// Fill the destination to the cap by writing straight to Mongo — going
+	// through the endpoint maxItemsPerList times would dominate the test's
+	// runtime for no extra coverage.
+	full := make([]models.EventListItem, maxItemsPerList)
+	for i := range full {
+		full[i] = models.EventListItem{Id: primitive.NewObjectID(), Text: "filler", UserId: ownerId}
+	}
+	_, err := db.EventsCollection.UpdateByID(context.Background(), eventId,
+		bson.M{"$set": bson.M{"lists.$[l].items": full}},
+		options.Update().SetArrayFilters(options.ArrayFilters{
+			Filters: []interface{}{bson.M{"l._id": dst.Id}},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("seed a full list: %v", err)
+	}
+
+	body := `{"targetListId":"` + dst.Id.Hex() + `","order":1}`
+	w := do(h, http.MethodPut, movePath(eventId, src.Id, item.Id), body, cookie)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("move into a full list: got %d, want 400 (body: %s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), errListFull) {
+		t.Errorf("error = %s, want %s", w.Body.String(), errListFull)
+	}
+	if items := listByName(t, readEventLists(t, eventId), "Menu").Items; len(items) != 1 {
+		t.Errorf("a refused move still left the source list: %+v", items)
+	}
+}
+
+// An order of 0 is a real position — a drop at the top of a migrated list —
+// so the binding must accept it rather than treating it as a missing field.
+func TestLists_MoveAcceptsAZeroOrder(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "lists-move-zero@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := listsTestRouter()
+	cookie := loginAs(t, h, ownerId.Hex())
+	list := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"text"}`)
+	item := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Mains"}`)
+
+	body := `{"targetListId":"` + list.Id.Hex() + `","order":0}`
+	if w := do(h, http.MethodPut, movePath(eventId, list.Id, item.Id), body, cookie); w.Code != http.StatusOK {
+		t.Fatalf("zero order: got %d, want 200 (body: %s)", w.Code, w.Body.String())
+	}
+	if stored := readEventLists(t, eventId)[0].Items[0]; stored.Order != 0 {
+		t.Errorf("stored order = %v, want 0", stored.Order)
 	}
 }

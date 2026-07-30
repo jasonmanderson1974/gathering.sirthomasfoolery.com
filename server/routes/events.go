@@ -73,6 +73,7 @@ func InitEvents(router *gin.RouterGroup) {
 	authed.POST("/:eventId/lists/:listId/items", addEventListItem)
 	authed.PUT("/:eventId/lists/:listId/items/:itemId", editEventListItem)
 	authed.PUT("/:eventId/lists/:listId/items/:itemId/checked", setEventListItemChecked)
+	authed.PUT("/:eventId/lists/:listId/items/:itemId/move", moveEventListItem)
 	authed.DELETE("/:eventId/lists/:listId/items/:itemId", deleteEventListItem)
 }
 

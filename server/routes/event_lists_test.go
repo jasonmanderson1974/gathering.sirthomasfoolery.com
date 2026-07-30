@@ -424,3 +424,61 @@ func TestMaxOrderInListLeavesRoomToAppend(t *testing.T) {
 		}
 	}
 }
+
+// The rule the depth model rests on: a move may name a parent only to say
+// "reorder me among the siblings I already have". Anything else flattens the
+// item, so depth can shrink but never grow.
+func TestValidateMoveParent(t *testing.T) {
+	parent := primitive.NewObjectID()
+	other := primitive.NewObjectID()
+	child := models.EventListItem{Id: primitive.NewObjectID(), ParentId: &parent}
+	topLevel := models.EventListItem{Id: primitive.NewObjectID()}
+
+	cases := []struct {
+		name          string
+		item          models.EventListItem
+		payloadParent string
+		sameList      bool
+		want          bool
+	}{
+		{"no parent named, same list — flattens", child, "", true, true},
+		{"no parent named, other list — flattens", child, "", false, true},
+		{"already top-level, none named", topLevel, "", true, true},
+		{"keeps its own parent on the same list", child, parent.Hex(), true, true},
+		{"someone else's parent", child, other.Hex(), true, false},
+		{"its own parent, but onto another list", child, parent.Hex(), false, false},
+		{"a top-level item may not acquire a parent", topLevel, parent.Hex(), true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := validateMoveParent(&tc.item, tc.payloadParent, tc.sameList)
+			if got != tc.want {
+				t.Errorf("validateMoveParent = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// The subtree handed to the $push is resolved from the event as read, in the id
+// order collectDescendantIds produced, and ids that are no longer on the list
+// are simply skipped rather than pushing a zero-valued item.
+func TestCollectListItems(t *testing.T) {
+	root := primitive.NewObjectID()
+	child := primitive.NewObjectID()
+	absent := primitive.NewObjectID()
+	list := &models.EventList{Items: []models.EventListItem{
+		{Id: child, Text: "Hotdogs"},
+		{Id: root, Text: "Mains"},
+	}}
+
+	got := collectListItems(list, []primitive.ObjectID{root, child, absent})
+	if len(got) != 2 {
+		t.Fatalf("collected %d items, want 2: %+v", len(got), got)
+	}
+	if got[0].Text != "Mains" || got[1].Text != "Hotdogs" {
+		t.Errorf("id order was not preserved: %+v", got)
+	}
+	if len(collectListItems(list, nil)) != 0 {
+		t.Error("no ids should collect nothing")
+	}
+}

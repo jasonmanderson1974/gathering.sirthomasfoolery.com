@@ -1643,6 +1643,69 @@
                 }
             }
         },
+        "/events/{eventId}/lists/{listId}/items/{itemId}/move": {
+            "put": {
+                "description": "The right to move an item is the right to delete it, since a move is a delete and a re-add. The item brings everything nested under it. Unless the payload names the item's CURRENT parent for a same-list reorder, the item becomes top-level in its new position — a move never nests an item under a new parent. The client computes `order`; see listItemOrderStep.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Moves a list item to a new position, within its list or onto another (own, or any when the caller is a member or above)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "List ID",
+                        "name": "listId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Item ID",
+                        "name": "itemId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Destination list, the new order, and optionally the item's current parent to keep it nested",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "order": {
+                                    "type": "number"
+                                },
+                                "parentId": {
+                                    "type": "string"
+                                },
+                                "targetListId": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
         "/events/{eventId}/mentionables": {
             "get": {
                 "description": "Members and above get everyone on the roll; guests get only the people already visible to them on this event (respondents, RSVPs, poll voters, and the authors of comments they can read).",
@@ -3729,7 +3792,7 @@
                     "type": "number"
                 },
                 "parentId": {
-                    "description": "ParentId is nil for a top-level item. A POINTER, not a bare ObjectID:\nomitempty can't omit a [12]byte array, so a zero id would serialize as 24\nzeros and read back as a real parent. Items written before nesting existed\nhave no field at all, which decodes to nil — hence no migration.",
+                    "description": "ParentId is nil for a top-level item. A POINTER, not a bare ObjectID:\nomitempty can't omit a [12]byte array, so a zero id would serialize as 24\nzeros and read back as a real parent. Items written before nesting existed\nhave no field at all, which decodes to nil — hence no migration.\n\nSet once, when the item is added. A move never points it at a NEW parent,\nonly clears it (F17), so an item's depth can shrink but never grow — which\nis what keeps routes/event_lists.go's depth check exact.",
                     "type": "string"
                 },
                 "text": {

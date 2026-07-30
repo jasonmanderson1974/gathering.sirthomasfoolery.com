@@ -61,6 +61,7 @@ var eventRoutes = []struct {
 	{http.MethodPost, "/api/events/abc/lists/l1/items", false},
 	{http.MethodPut, "/api/events/abc/lists/l1/items/i1", false},
 	{http.MethodPut, "/api/events/abc/lists/l1/items/i1/checked", false},
+	{http.MethodPut, "/api/events/abc/lists/l1/items/i1/move", false},
 	{http.MethodDelete, "/api/events/abc/lists/l1/items/i1", false},
 }
 
