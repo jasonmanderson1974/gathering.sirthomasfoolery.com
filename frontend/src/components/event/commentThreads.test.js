@@ -4,6 +4,7 @@ import {
   replyCount,
   replyCountLabel,
   threadTitle,
+  describeCommentDeletion,
 } from "./commentThreads"
 
 const comment = (id, overrides = {}) => ({
@@ -147,5 +148,43 @@ describe("threadTitle", () => {
     expect(threadTitle("")).toBe("")
     expect(threadTitle(undefined)).toBe("")
     expect(threadTitle(null)).toBe("")
+  })
+})
+
+describe("describeCommentDeletion", () => {
+  it("quotes the comment", () => {
+    const got = describeCommentDeletion({ text: "Bring cake" })
+    expect(got.title).toBe('Delete "Bring cake"?')
+    expect(got.body).toBe("")
+  })
+
+  it("warns that a thread takes its replies", () => {
+    const got = describeCommentDeletion(
+      { text: "Venue ideas", isThread: true },
+      3
+    )
+    expect(got.body).toContain("3 replies")
+    expect(got.body).toContain("other people")
+  })
+
+  it("says reply, singular, for one", () => {
+    const got = describeCommentDeletion({ text: "x", isThread: true }, 1)
+    expect(got.body).toContain("1 reply")
+  })
+
+  it("gives a thread with no replies no body", () => {
+    expect(describeCommentDeletion({ text: "x", isThread: true }, 0).body).toBe("")
+  })
+
+  it("falls back when the comment has no text", () => {
+    expect(describeCommentDeletion({ text: "" }).title).toBe(
+      "Delete this comment?"
+    )
+  })
+
+  it("truncates a long comment", () => {
+    const got = describeCommentDeletion({ text: "z".repeat(300) })
+    expect(got.title.length).toBeLessThan(100)
+    expect(got.title).toContain("…")
   })
 })

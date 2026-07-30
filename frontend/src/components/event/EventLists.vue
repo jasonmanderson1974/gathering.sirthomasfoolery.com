@@ -82,7 +82,7 @@
                 x-small
                 class="tw-text-red"
                 title="Delete list"
-                @click.stop="$emit('delete-list', list._id)"
+                @click.stop="askDeleteList(list)"
               >
                 <v-icon small>mdi-delete</v-icon>
               </v-btn>
@@ -250,12 +250,7 @@
                       ? 'Remove entry and its sub-entries'
                       : 'Remove entry'
                   "
-                  @click="
-                    $emit('delete-item', {
-                      listId: list._id,
-                      itemId: row.item._id,
-                    })
-                  "
+                  @click="askDeleteItem(list, row.item)"
                 >
                   <v-icon small>mdi-close</v-icon>
                 </v-btn>
@@ -394,6 +389,14 @@
         Add list
       </v-btn>
     </template>
+
+    <ConfirmDeleteDialog
+      :value="!!pendingDelete"
+      :title="pendingDelete ? pendingDelete.title : ''"
+      :body="pendingDelete ? pendingDelete.body : ''"
+      @input="onConfirmDialogInput"
+      @confirm="confirmDelete"
+    />
   </div>
 </template>
 
@@ -402,12 +405,15 @@ import { mapGetters, mapState } from "vuex"
 import { mapsSearchUrl } from "@/utils"
 import draggable from "vuedraggable"
 import LocationInput from "@/components/LocationInput.vue"
+import ConfirmDeleteDialog from "@/components/general/ConfirmDeleteDialog.vue"
 import {
   flattenListItems,
   canAddChild,
   checkStateLabel,
   orderBetween,
   resolveDrop,
+  describeListDeletion,
+  describeItemDeletion,
 } from "@/components/event/eventLists"
 
 /**
@@ -425,6 +431,7 @@ export default {
   name: "EventLists",
 
   components: {
+    ConfirmDeleteDialog,
     draggable,
     LocationInput,
   },
@@ -470,6 +477,11 @@ export default {
     // The entry being dragged, if any. Its subtree is hidden for the duration
     // so the whole thing travels as one row — see rowsOf.
     draggingItemId: null,
+    // The deletion waiting to be confirmed: the dialog's wording plus the emit
+    // to make if it is. Null when the dialog is shut. Holding the emit itself
+    // means the dialog stays ignorant of what it is deleting, and both kinds of
+    // deletion — a whole list, one entry — go through the same path.
+    pendingDelete: null,
     // Mirrors the server's caps (routes/event_lists.go) so the field stops at
     // the same point the API would truncate.
     maxNameLength: 100,
@@ -710,6 +722,38 @@ export default {
       })
       this.childText = ""
       this.pendingFocus = { type: "child" }
+    },
+
+    // Deleting a list takes every entry on it; deleting an entry takes its
+    // sub-entries, other people's included. Neither used to ask.
+    askDeleteList(list) {
+      const { title, body } = describeListDeletion(list)
+      this.pendingDelete = {
+        title,
+        body,
+        event: "delete-list",
+        payload: list._id,
+      }
+    },
+    askDeleteItem(list, item) {
+      const { title, body } = describeItemDeletion(this.itemsOf(list), item._id)
+      this.pendingDelete = {
+        title,
+        body,
+        event: "delete-item",
+        payload: { listId: list._id, itemId: item._id },
+      }
+    },
+    // The dialog reports its own dismissal — Esc, or the backdrop — the same
+    // way it reports Cancel.
+    onConfirmDialogInput(open) {
+      if (!open) this.pendingDelete = null
+    },
+    confirmDelete() {
+      const pending = this.pendingDelete
+      this.pendingDelete = null
+      if (!pending) return
+      this.$emit(pending.event, pending.payload)
     },
 
     onDragStart(evt) {

@@ -25,7 +25,7 @@
             x-small
             class="tw-flex-none tw-text-red"
             title="Delete poll"
-            @click="$emit('delete-poll', poll._id)"
+            @click="askDeletePoll(poll)"
           >
             <v-icon small>mdi-delete</v-icon>
           </v-btn>
@@ -137,11 +137,20 @@
         Add poll
       </v-btn>
     </template>
+
+    <ConfirmDeleteDialog
+      :value="!!pendingDelete"
+      :title="pendingDelete ? pendingDelete.title : ''"
+      :body="pendingDelete ? pendingDelete.body : ''"
+      @input="onConfirmDialogInput"
+      @confirm="confirmDelete"
+    />
   </div>
 </template>
 
 <script>
 import { mapState } from "vuex"
+import ConfirmDeleteDialog from "@/components/general/ConfirmDeleteDialog.vue"
 
 /**
  * Venue / activity polls on an event (C6). Presentational: reads event.polls,
@@ -153,6 +162,8 @@ import { mapState } from "vuex"
 export default {
   name: "EventPolls",
 
+  components: { ConfirmDeleteDialog },
+
   props: {
     event: { type: Object, required: true },
   },
@@ -162,6 +173,9 @@ export default {
     newTitle: "",
     newAllowMultiple: false,
     newOptions: ["", ""],
+    // The poll awaiting confirmation, with the wording for it. Null when the
+    // dialog is shut.
+    pendingDelete: null,
   }),
 
   emits: ["create-poll", "delete-poll", "vote-poll"],
@@ -197,6 +211,34 @@ export default {
   },
 
   methods: {
+    // Deleting a poll takes everyone's votes with it, which is the part that
+    // isn't obvious from a bin icon.
+    askDeletePoll(poll) {
+      const title = poll.title ?? ""
+      const voters = new Set()
+      for (const option of poll.options ?? []) {
+        for (const id of Object.keys(option.votes ?? {})) voters.add(id)
+      }
+      this.pendingDelete = {
+        title: `Delete "${title.length > 80 ? `${title.slice(0, 79)}…` : title}"?`,
+        body: voters.size
+          ? `This removes the poll and the ${voters.size} ${
+              voters.size === 1 ? "vote" : "votes"
+            } cast on it.`
+          : "No one has voted on this poll yet.",
+        pollId: poll._id,
+      }
+    },
+    onConfirmDialogInput(open) {
+      if (!open) this.pendingDelete = null
+    },
+    confirmDelete() {
+      const pending = this.pendingDelete
+      this.pendingDelete = null
+      if (!pending) return
+      this.$emit("delete-poll", pending.pollId)
+    },
+
     voteCount(option) {
       return Object.keys(option.votes ?? {}).length
     },

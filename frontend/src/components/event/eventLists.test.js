@@ -7,6 +7,9 @@ import {
   ORDER_STEP,
   orderBetween,
   resolveDrop,
+  countDescendants,
+  describeListDeletion,
+  describeItemDeletion,
 } from "./eventLists"
 
 const item = (id, parentId = null, overrides = {}) => ({
@@ -460,5 +463,95 @@ describe("resolveDrop", () => {
     })
 
     expect(got.parentId).toBe(null)
+  })
+})
+
+describe("countDescendants", () => {
+  const tree = [
+    item("mains"),
+    item("hotdogs", "mains"),
+    item("mustard", "hotdogs"),
+    item("salad", "mains"),
+    item("drinks"),
+  ]
+
+  it("counts the whole subtree, not just direct children", () => {
+    expect(countDescendants(tree, "mains")).toBe(3)
+  })
+
+  it("counts one level", () => {
+    expect(countDescendants(tree, "hotdogs")).toBe(1)
+  })
+
+  it("counts nothing for a leaf", () => {
+    expect(countDescendants(tree, "drinks")).toBe(0)
+    expect(countDescendants(tree, "mustard")).toBe(0)
+  })
+
+  it("terminates on a cycle", () => {
+    const cyclic = [item("a", "b"), item("b", "a")]
+    expect(countDescendants(cyclic, "a")).toBe(1)
+  })
+
+  it("survives an empty or missing list", () => {
+    expect(countDescendants([], "a")).toBe(0)
+    expect(countDescendants(undefined, "a")).toBe(0)
+  })
+})
+
+describe("describeListDeletion", () => {
+  it("names the list and counts what goes with it", () => {
+    const got = describeListDeletion({ name: "Menu", items: [item("a"), item("b")] })
+    expect(got.title).toBe('Delete "Menu"?')
+    expect(got.body).toBe("This removes the list and its 2 entries.")
+  })
+
+  it("says entry, singular, for one", () => {
+    const got = describeListDeletion({ name: "Menu", items: [item("a")] })
+    expect(got.body).toBe("This removes the list and its 1 entry.")
+  })
+
+  it("says so when the list is empty", () => {
+    expect(describeListDeletion({ name: "Menu", items: [] }).body).toBe(
+      "This list is empty."
+    )
+  })
+
+  it("truncates a very long name", () => {
+    const got = describeListDeletion({ name: "x".repeat(200), items: [] })
+    expect(got.title.length).toBeLessThan(100)
+    expect(got.title).toContain("…")
+  })
+})
+
+describe("describeItemDeletion", () => {
+  const tree = [
+    item("mains", null, { text: "Mains" }),
+    item("hotdogs", "mains", { text: "Hotdogs" }),
+    item("mustard", "hotdogs", { text: "Mustard" }),
+  ]
+
+  it("names the entry and warns about the subtree", () => {
+    const got = describeItemDeletion(tree, "mains")
+    expect(got.title).toBe('Delete "Mains"?')
+    expect(got.body).toContain("2 sub-entries")
+    expect(got.body).toContain("other people")
+  })
+
+  it("says sub-entry, singular, for one", () => {
+    expect(describeItemDeletion(tree, "hotdogs").body).toContain("1 sub-entry")
+  })
+
+  it("gives a leaf no body at all", () => {
+    const got = describeItemDeletion(tree, "mustard")
+    expect(got.title).toBe('Delete "Mustard"?')
+    expect(got.body).toBe("")
+  })
+
+  it("truncates long entry text", () => {
+    const long = [item("x", null, { text: "y".repeat(200) })]
+    const got = describeItemDeletion(long, "x")
+    expect(got.title.length).toBeLessThan(100)
+    expect(got.title).toContain("…")
   })
 })

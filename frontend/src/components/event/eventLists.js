@@ -80,6 +80,86 @@ export const flattenListItems = (items, collapsedIds = []) => {
 export const canAddChild = (depth) => depth < MAX_ITEM_DEPTH - 1
 
 /**
+ * How many entries hang below this one, at any depth.
+ *
+ * Walks parentId downwards rather than trusting a nesting cap, and is
+ * cycle-safe for the same reason flattenListItems is: the app cannot produce a
+ * cycle, but a hand-edited document could, and counting must not hang.
+ */
+export const countDescendants = (items, itemId) => {
+  const all = items ?? []
+  const childrenOf = new Map()
+  for (const item of all) {
+    const parentId = item.parentId ?? null
+    if (!childrenOf.has(parentId)) childrenOf.set(parentId, [])
+    childrenOf.get(parentId).push(item)
+  }
+
+  const seen = new Set([itemId])
+  let frontier = [itemId]
+  let count = 0
+  while (frontier.length) {
+    const next = []
+    for (const id of frontier) {
+      for (const child of childrenOf.get(id) ?? []) {
+        if (seen.has(child._id)) continue
+        seen.add(child._id)
+        next.push(child._id)
+        count++
+      }
+    }
+    frontier = next
+  }
+  return count
+}
+
+/** Entry text, cut short so a long address can still sit in a dialog title. */
+const truncate = (text, limit = 80) => {
+  const value = text ?? ""
+  return value.length > limit ? `${value.slice(0, limit - 1)}…` : value
+}
+
+/**
+ * Title and body for deleting a whole list.
+ *
+ * The count is the point: a list header gives no sign of how much is inside it
+ * when collapsed, and deleting one takes every entry with it.
+ */
+export const describeListDeletion = (list) => {
+  const count = (list?.items ?? []).length
+  const title = `Delete "${truncate(list?.name)}"?`
+  if (count === 0) {
+    return { title, body: "This list is empty." }
+  }
+  return {
+    title,
+    body: `This removes the list and its ${count} ${
+      count === 1 ? "entry" : "entries"
+    }.`,
+  }
+}
+
+/**
+ * Title and body for deleting one entry.
+ *
+ * A body only when there is something to warn about — deleting an entry takes
+ * everything nested under it, including sub-entries other people added, and
+ * that is the part worth a sentence. A leaf entry gets no body at all.
+ */
+export const describeItemDeletion = (items, itemId) => {
+  const item = (items ?? []).find((i) => i._id === itemId)
+  const title = `Delete "${truncate(item?.text)}"?`
+  const count = countDescendants(items, itemId)
+  if (count === 0) return { title, body: "" }
+  return {
+    title,
+    body: `This also removes its ${count} ${
+      count === 1 ? "sub-entry" : "sub-entries"
+    }, including any added by other people.`,
+  }
+}
+
+/**
  * The gap left between adjacent entries' order values. Mirrors
  * listItemOrderStep in routes/event_lists.go — the server stamps this on an
  * add, and the client computes every other position from it, because only the

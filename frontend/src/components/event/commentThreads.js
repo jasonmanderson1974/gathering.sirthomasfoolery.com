@@ -58,3 +58,23 @@ export const replyCountLabel = (count) => {
   if (count === 0) return "No replies yet"
   return count === 1 ? "1 reply" : `${count} replies`
 }
+
+/**
+ * Title and body for deleting a comment (F18).
+ *
+ * A thread root takes its replies with it — see deleteComment in
+ * routes/comments.go — and other people wrote those, so that is the part worth
+ * saying out loud. A plain comment gets no body.
+ */
+export const describeCommentDeletion = (comment, replies = 0) => {
+  const text = comment?.text ?? ""
+  const snippet = text.length > 80 ? `${text.slice(0, 79)}…` : text
+  const title = snippet ? `Delete "${snippet}"?` : "Delete this comment?"
+  if (!comment?.isThread || replies === 0) return { title, body: "" }
+  return {
+    title,
+    body: `This also removes its ${replies} ${
+      replies === 1 ? "reply" : "replies"
+    }, including any written by other people.`,
+  }
+}

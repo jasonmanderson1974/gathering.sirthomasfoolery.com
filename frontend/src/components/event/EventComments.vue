@@ -180,6 +180,14 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <ConfirmDeleteDialog
+      :value="!!pendingDelete"
+      :title="pendingDelete ? pendingDelete.title : ''"
+      :body="pendingDelete ? pendingDelete.body : ''"
+      @input="onConfirmDialogInput"
+      @confirm="confirmDelete"
+    />
   </div>
 </template>
 
@@ -188,11 +196,13 @@ import { mapGetters, mapState } from "vuex"
 import dayjs from "dayjs"
 import CommentRow from "@/components/event/CommentRow.vue"
 import MentionTextarea from "@/components/event/MentionTextarea.vue"
+import ConfirmDeleteDialog from "@/components/general/ConfirmDeleteDialog.vue"
 import {
   groupComments,
   replyCount,
   replyCountLabel,
   threadTitle,
+  describeCommentDeletion,
 } from "@/components/event/commentThreads"
 import { flattenMentions } from "@/components/event/mentionText"
 
@@ -211,7 +221,7 @@ import { flattenMentions } from "@/components/event/mentionText"
 export default {
   name: "EventComments",
 
-  components: { CommentRow, MentionTextarea },
+  components: { CommentRow, MentionTextarea, ConfirmDeleteDialog },
 
   props: {
     event: { type: Object, required: true },
@@ -230,6 +240,9 @@ export default {
     expandedThreads: [],
     replyText: {},
     tagDialog: false,
+    // The comment awaiting confirmation, with the wording for it. Null when
+    // the dialog is shut.
+    pendingDelete: null,
     tagTarget: null,
     tagMembersOnly: false,
   }),
@@ -347,8 +360,22 @@ export default {
       this.$emit("edit-comment", { commentId: comment._id, payload: { text } })
       this.cancelEdit()
     },
+    // Deleting a thread root takes every reply with it, so the confirmation
+    // names what is going rather than asking about "this comment".
     remove(comment) {
-      this.$emit("delete-comment", { commentId: comment._id })
+      this.pendingDelete = {
+        ...describeCommentDeletion(comment, this.repliesFor(comment._id).length),
+        commentId: comment._id,
+      }
+    },
+    onConfirmDialogInput(open) {
+      if (!open) this.pendingDelete = null
+    },
+    confirmDelete() {
+      const pending = this.pendingDelete
+      this.pendingDelete = null
+      if (!pending) return
+      this.$emit("delete-comment", { commentId: pending.commentId })
     },
 
     openTagDialog(comment) {
