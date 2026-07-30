@@ -16,7 +16,6 @@ var Db *mongo.Database
 var EventsCollection *mongo.Collection
 var UsersCollection *mongo.Collection
 var DailyUserLogCollection *mongo.Collection
-var FriendRequestsCollection *mongo.Collection
 var EventResponsesCollection *mongo.Collection
 var FoldersCollection *mongo.Collection
 var FolderEventsCollection *mongo.Collection
@@ -46,7 +45,6 @@ func Init() func() {
 	EventsCollection = Db.Collection("events")
 	UsersCollection = Db.Collection("users")
 	DailyUserLogCollection = Db.Collection("dailyuserlogs")
-	FriendRequestsCollection = Db.Collection("friendrequests")
 	EventResponsesCollection = Db.Collection("eventResponses")
 	FoldersCollection = Db.Collection("folders")
 	FolderEventsCollection = Db.Collection("folderEvents")

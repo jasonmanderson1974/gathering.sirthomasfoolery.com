@@ -172,20 +172,6 @@ func addMonthsClamped(t time.Time, n int) time.Time {
 	return time.Date(first.Year(), first.Month(), d, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())
 }
 
-// RecurrenceLabel is a short human label for a frequency (used in emails / logs).
-func RecurrenceLabel(f RecurrenceFrequency) string {
-	switch f {
-	case RecurrenceWeekly:
-		return "weekly"
-	case RecurrenceBiweekly:
-		return "every 2 weeks"
-	case RecurrenceMonthly:
-		return "monthly"
-	default:
-		return ""
-	}
-}
-
 // RSVP to a confirmed gathering (paired with ScheduledEvent). Stored on the
 // Event as a map keyed by guest name or signed-in user id, mirroring
 // SignUpResponses.

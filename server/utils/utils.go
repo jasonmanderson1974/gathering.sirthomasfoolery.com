@@ -1,13 +1,8 @@
 package utils
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -19,18 +14,9 @@ import (
 )
 
 // Returns whether running on production server
-func IsRelease() bool {
+func isRelease() bool {
 	mode := os.Getenv("GIN_MODE")
 	return mode == "release"
-}
-
-func PrintJson(s interface{}) {
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		logger.StdErr.Panicln(err)
-	}
-
-	fmt.Println(string(data))
 }
 
 func ParseJWT(jwt string) sjwt.Claims {
@@ -69,14 +55,14 @@ func GetAccessTokenExpireDate(expiresIn int) time.Time {
 }
 
 // Returns the ISO date string for the given date
-func GetDateString(date time.Time) string {
+func getDateString(date time.Time) string {
 	s, _ := date.UTC().MarshalText()
 	return string(s)[:10]
 }
 
 // Returns a time object with the given date and a time string in the form of "00:00:00"
 func GetDateAtTime(date time.Time, timeString string) time.Time {
-	utcDateString := GetDateString(date)
+	utcDateString := getDateString(date)
 	newDate, err := time.Parse(time.RFC3339, fmt.Sprintf("%sT%sZ", utcDateString, timeString))
 	if err != nil {
 		logger.StdErr.Panicln(err)
@@ -84,35 +70,10 @@ func GetDateAtTime(date time.Time, timeString string) time.Time {
 	return newDate
 }
 
-// Escapes regex for a string
-func EscapeRegExp(str string) string {
-	check := regexp.MustCompile(`([.*+?^${}()|[\]\\])`)
-	return check.ReplaceAllString(str, "\\${1}")
-}
-
-// Returns the correct client id given the token origin
-func GetClientIdFromTokenOrigin(tokenOrigin models.TokenOriginType) string {
-	switch tokenOrigin {
-	case models.ANDROID:
-		return os.Getenv("ANDROID_CLIENT_ID")
-	case models.IOS:
-		return os.Getenv("IOS_CLIENT_ID")
-	default:
-		return os.Getenv("CLIENT_ID")
-	}
-}
-
-// Prints the http response as a string
-func PrintHttpResponse(resp *http.Response) {
-	body, _ := io.ReadAll(resp.Body)
-	logger.StdOut.Println(string(body))
-	resp.Body = io.NopCloser(bytes.NewBuffer(body))
-}
-
 // Returns the correct base url, based on whether we're on dev or prod
 func GetBaseUrl() string {
 	var baseUrl string
-	if IsRelease() {
+	if isRelease() {
 		baseUrl = "https://gathering.sirthomasfoolery.com"
 	} else {
 		baseUrl = "http://localhost:8080"
@@ -186,15 +147,6 @@ func ActualCalendarAccountMapKey(user *models.User, ident string, calendarType m
 		}
 	}
 	return ""
-}
-
-func GetPrimaryAccountKey(user *models.User) string {
-	// Before primary account key was added, primary account was always the user's google calendar
-	if user.PrimaryAccountKey == nil {
-		return ActualCalendarAccountMapKey(user, user.Email, models.GoogleCalendarType)
-	}
-
-	return *user.PrimaryAccountKey
 }
 
 // ConvertEventToOldFormat converts an event's responses from ResponsesList to ResponsesMap format
