@@ -9,6 +9,7 @@
 package routes
 
 import (
+	"encoding/json"
 	"math"
 	"net/http"
 	"time"
@@ -672,9 +673,15 @@ func moveEventListItem(c *gin.Context) {
 	payload := struct {
 		TargetListId string `json:"targetListId" binding:"required"`
 		// A POINTER with binding:"required", for the same reason Checked is one:
-		// a bare float64 would fail the binding on 0, and 0 is exactly what a
-		// drop at the top of a migrated list computes.
-		Order *float64 `json:"order" binding:"required"`
+		// a bare value would fail the binding on 0, and 0 is exactly what a drop
+		// at the top of a migrated list computes.
+		//
+		// json.Number rather than float64, so the literal arrives here verbatim.
+		// A float64 field makes the DECODER the thing that refuses an order it
+		// cannot hold (1e999), which happens before this handler runs and
+		// answers with a message naming a Go struct field instead of this
+		// route's own error code.
+		Order *json.Number `json:"order" binding:"required"`
 		// Optional, and only ever the item's existing parent — see
 		// validateMoveParent.
 		ParentId string `json:"parentId"`
@@ -685,11 +692,13 @@ func moveEventListItem(c *gin.Context) {
 	}
 
 	// The client computes the order, so it is the client that could send
-	// nonsense. JSON cannot even encode NaN or ±Inf, but an order that is not a
-	// real number would poison every later comparison in the sibling group, and
-	// the check costs nothing. Any finite value is fair game: order carries no
-	// privilege, and by design any mover may place an item anywhere.
-	if math.IsNaN(*payload.Order) || math.IsInf(*payload.Order, 0) {
+	// nonsense, and an order that is not a real number would poison every later
+	// comparison in the sibling group. Float64 refuses a literal outside what a
+	// float64 can represent, in either direction; the NaN/Inf check covers what
+	// it would otherwise let through. Any finite value is fair game: order
+	// carries no privilege, and by design any mover may place an item anywhere.
+	order, orderErr := payload.Order.Float64()
+	if orderErr != nil || math.IsNaN(order) || math.IsInf(order, 0) {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: errInvalidMove})
 		return
 	}
@@ -737,9 +746,9 @@ func moveEventListItem(c *gin.Context) {
 		var moved bool
 		if payload.ParentId != "" {
 			// A reorder among the siblings it already has.
-			moved, moveErr = db.SetEventListItemOrder(event.Id, list.Id, item.Id, *payload.Order)
+			moved, moveErr = db.SetEventListItemOrder(event.Id, list.Id, item.Id, order)
 		} else {
-			moved, moveErr = db.FlattenEventListItemToTopLevel(event.Id, list.Id, item.Id, *payload.Order)
+			moved, moveErr = db.FlattenEventListItemToTopLevel(event.Id, list.Id, item.Id, order)
 		}
 		if moveErr != nil {
 			logger.StdErr.Println(moveErr)
@@ -785,7 +794,7 @@ func moveEventListItem(c *gin.Context) {
 	for i := range moving {
 		if moving[i].Id == item.Id {
 			moving[i].ParentId = nil
-			moving[i].Order = *payload.Order
+			moving[i].Order = order
 			break
 		}
 	}

@@ -869,6 +869,22 @@ func TestLists_MoveRejections(t *testing.T) {
 			http.StatusBadRequest, errInvalidMove,
 		},
 		{
+			// An order too large for a float64. The literal has to reach the
+			// handler for this to answer with the route's own code — a float64
+			// payload field would have the DECODER refuse it first, with a
+			// message naming a Go struct field.
+			"an order larger than a float64 can hold",
+			stray.Id, list.Id,
+			`{"targetListId":"` + list.Id.Hex() + `","order":1e999}`,
+			http.StatusBadRequest, errInvalidMove,
+		},
+		{
+			"an order smaller than a float64 can hold",
+			stray.Id, list.Id,
+			`{"targetListId":"` + list.Id.Hex() + `","order":-1e999}`,
+			http.StatusBadRequest, errInvalidMove,
+		},
+		{
 			"an item that is not there",
 			primitive.NewObjectID(), list.Id,
 			`{"targetListId":"` + list.Id.Hex() + `","order":1}`,
@@ -944,8 +960,10 @@ func TestLists_MoveIntoAFullListIsRefused(t *testing.T) {
 	}
 }
 
-// An order of 0 is a real position — a drop at the top of a migrated list —
-// so the binding must accept it rather than treating it as a missing field.
+// An order of 0 is a real position — a drop at the top of a migrated list — so
+// the binding must accept it rather than treating it as a missing field, which
+// is what the payload's Order field being a POINTER buys. A negative order is
+// just as real: repeated drops at the top march downwards.
 func TestLists_MoveAcceptsAZeroOrder(t *testing.T) {
 	requireDB(t)
 
@@ -956,11 +974,14 @@ func TestLists_MoveAcceptsAZeroOrder(t *testing.T) {
 	list := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"text"}`)
 	item := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Mains"}`)
 
-	body := `{"targetListId":"` + list.Id.Hex() + `","order":0}`
-	if w := do(h, http.MethodPut, movePath(eventId, list.Id, item.Id), body, cookie); w.Code != http.StatusOK {
-		t.Fatalf("zero order: got %d, want 200 (body: %s)", w.Code, w.Body.String())
-	}
-	if stored := readEventLists(t, eventId)[0].Items[0]; stored.Order != 0 {
-		t.Errorf("stored order = %v, want 0", stored.Order)
+	for _, order := range []string{"0", "-1024"} {
+		body := `{"targetListId":"` + list.Id.Hex() + `","order":` + order + `}`
+		if w := do(h, http.MethodPut, movePath(eventId, list.Id, item.Id), body, cookie); w.Code != http.StatusOK {
+			t.Fatalf("order %s: got %d, want 200 (body: %s)", order, w.Code, w.Body.String())
+		}
+		want, _ := strconv.ParseFloat(order, 64)
+		if stored := readEventLists(t, eventId)[0].Items[0]; stored.Order != want {
+			t.Errorf("stored order = %v, want %v", stored.Order, want)
+		}
 	}
 }

@@ -28,10 +28,22 @@
 > `a618f12a`, `9fa1ffc6`, `b7ee3312`, `6073f9e8`. Both ended up on one machine, since the other
 > had not started F18. The cross-list `$pull`+`$push` question F17 was carrying is answered:
 > Mongo accepts it in one update, no fallback needed. **Lists v3 is therefore complete in the
-> repo, and the feature track is closed again** — but two things are still outstanding and
+> repo, and the feature track is closed again** — ~~but two things are still outstanding and
 > neither is code: the `20260730_list_item_order` migration must be **run on prod after the
 > deploy**, and the whole of F18 is **unverified in a browser** (local login is unwired), so
-> drag, touch, the confirm dialogs and the phone sizing all want a pass by hand once live.
+> drag, touch, the confirm dialogs and the phone sizing all want a pass by hand once live.~~
+> **Both are now done (2026-07-30, VM-adjacent machine).** Deployed at `ccd75ab1`; the
+> migration ran against prod (2 events, 5 lists, 51 entries) and a second dry run reported
+> nothing left to renumber, confirming idempotency on live data. A structural sweep of every
+> real list — 8 lists, 60 items, 17 sibling groups — found no ordering violations. F18 was
+> verified live by `/root/tools/browser/verify_f18_prod.js` (49 checks, twice clean): drag
+> within and across lists, the 200ms touch-hold (a 40ms swipe does not reorder, a 450ms hold
+> does), all four confirm dialogs with their wording and both buttons, and the phone tap
+> targets at 28px against the desktop's 20px. **One defect found and fixed in the pass:** the
+> move endpoint answered a non-finite `order` with Go's decoder message instead of
+> `invalid-item-move`, because a `float64` payload field let the decoder refuse `1e999` before
+> the handler ran — the field is now a `json.Number`, so the guard is reachable and the route
+> answers with its own code. Covered by two cases in `TestLists_MoveRejections`.
 >
 > **Worth reading if you are picking up an old finding:** two of the three H items closed on
 > 2026-07-30 were described *wrongly* by the entries that recorded them, and neither error was
@@ -964,6 +976,15 @@ won't-do. See their entries. The sequencing that got there is at the bottom.
     standing headless harnesses cover login/smoke; extend to the Lists tab only if cheap).
     Dry-run the migration against the local Mongo the integration tests seed. Remember the
     dev-container rebuild rule before trusting any harness run.
+  - **Done 2026-07-30 post-deploy** via `/root/tools/browser/verify_f18_prod.js` (49 checks,
+    two clean runs) — the drag and touch paths are driven with real pointer input, so this is
+    the hand pass rather than a substitute for it. Four harness lessons, all recorded in the
+    Playwright memory: the event page **never reports "stable"** to Playwright, so ordinary
+    `.click()` times out and `force: true` silently clicks the backdrop mid-animation — use a
+    `domClick` that dispatches on the element, and keep real input for the drags alone; lists
+    render **collapsed**, so `data-list-id` does not exist until a list is opened; a row's
+    delete button is `title="Remove entry"`, not "Delete"; and a **thread renders collapsed**,
+    so its Delete link does not exist until the header is clicked.
 
 - [x] **F16 · Lists v2 frontend: the tabbed band, the tree, the checkboxes.** `L` · **P1** —
   needs F15. **DONE 2026-07-29** (`165756b3` plumbing, `fa0615ee` tabs, `f698432b` tree +
