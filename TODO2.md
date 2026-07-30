@@ -24,6 +24,9 @@
 > The feature track is therefore re-opened for exactly these two items. The user intends to
 > split them across the two machines (F17 backend on one, F18 frontend on the other — F18's
 > drag slice is the only part that blocks on F17).
+> **F17 landed the same day** (`b818f7d4`, `6dddde66`, `c8073db0`) — so **F18 is now entirely
+> unblocked, drag slice included**. The cross-list `$pull`+`$push` question F17 was carrying is
+> answered: Mongo accepts it in one update, no fallback needed.
 >
 > **Worth reading if you are picking up an old finding:** two of the three H items closed on
 > 2026-07-30 were described *wrongly* by the entries that recorded them, and neither error was
@@ -723,9 +726,32 @@ won't-do. See their entries. The sequencing that got there is at the bottom.
     list, nickname resolving at read time without writing back; the GET (401 anonymous, resolved
     names signed in, `[]` not `null` when empty). Swagger regen.
 
-- [ ] **F17 · Lists v3 backend: fractional item order, the move endpoint, the order migration.**
+- [x] **F17 · Lists v3 backend: fractional item order, the move endpoint, the order migration.**
   `M` · **P1** — no F-deps (extends F15). Planned 2026-07-30 (Fable session); decisions in the
-  Lists v3 block above. Blocks only F18's drag slice.
+  Lists v3 block above. **DONE 2026-07-30** in the three commits the plan called for:
+  `b818f7d4` (order field + stamping on add), `6dddde66` (the move endpoint), `c8073db0` (the
+  migration). Built as planned. What is worth knowing:
+  - **The cross-list `$pull`+`$push` in ONE update works** — this was the plan's one flagged
+    unknown, with a push-then-pull fallback held in reserve. Mongo accepts both paths in a single
+    update because they are lexically distinct and both lists live in the same event document, so
+    the subtree move is genuinely atomic and **the fallback was not needed**.
+    `TestLists_MoveAcrossListsCarriesTheSubtree` is the proof and has teeth: a rejection surfaces
+    as a 500 and fails the test. **F18's drag slice is unblocked.**
+  - **`Order` binds as `*float64`, not `float64`** — not in the plan, and it would have been a
+    live bug. `binding:"required"` fails on a bare `0`, and 0 is exactly what a drop at the top of
+    a migrated list computes. Same trap the existing `Checked *bool` documents.
+    `TestLists_MoveAcceptsAZeroOrder` pins it.
+  - Swagger regen and the `models.EventListItem` docs change happened in commit 1, not commit 2 as
+    planned — the model changed there, so the docs had to follow. The db-level "add assigns
+    increasing order" test moved to commit 1 for the same reason.
+  - `maxOrderInList` takes the true maximum rather than flooring at 0, so a list dragged entirely
+    into negative territory still appends above its last entry.
+  - The migration takes `-dry-run` and reads `MONGODB_URI`, unlike the frozen scripts around it,
+    because it had to be rehearsed locally. Verified against seeded legacy / already-ordered /
+    part-migrated lists, including a second pass writing nothing. `scripts/README.md` records it
+    as the one exception to "do not re-run". **Still to run on prod, right after the F17 deploy.**
+  - Also confirmed: `go build ./...` fails on the stale `scripts/` the same way `go test ./...`
+    does. CLAUDE.md documents the exclusion for test but not for build.
   - **Ordering: fractional `float64`, not integer reindexing.** New field on `EventListItem`
     (`models/event.go:263-288`): `Order float64` with `json:"order" bson:"order"` — **no
     `omitempty` on either tag**. "Drop at the top of a migrated list" legitimately computes
@@ -1479,14 +1505,16 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
 8. ~~**F9** (the mention composer + rendering).~~ **Done 2026-07-29** (`b9633400`) — the
    feature track is complete.
 9. ~~**F10** close-out.~~ **Done 2026-07-29.**
-10. **F17 → F18** (Lists v3: order+move backend → the four UX slices). Queued 2026-07-30.
-    Intended split: **F17 on one machine, F18 on the other** — F18's slices 1/3/4 (focus,
-    confirm dialogs, phone targets) have no backend dependency and can land first; slice 2
-    (drag) waits on F17's move endpoint, and specifically on the cross-list db test proving
-    the combined $pull+$push update. The two items touch disjoint files (F17 is all
-    `server/`, F18 all `frontend/`), so the machines cannot conflict — just sync before
-    starting and pull often; all F18 slices touch `EventLists.vue`, so they are sequential
-    commits on whichever machine takes F18.
+10. ~~**F17**~~ **→ F18** (Lists v3: order+move backend → the four UX slices). Queued
+    2026-07-30; **F17 done the same day**, so the dependency is discharged and **all four F18
+    slices are available, drag included** — the cross-list db test proving the combined
+    $pull+$push update is green. F18 is now a single-machine job with nothing to wait on: all
+    four slices touch `EventLists.vue`, so they are sequential commits wherever it is picked up.
+    The move endpoint F18 calls is
+    `PUT /events/:eventId/lists/:listId/items/:itemId/move`, body
+    `{targetListId, order, parentId?}` — `order` is a **number the client computes** and 0 is a
+    legal value; `parentId` may name **only the item's existing parent**, for a same-list
+    sibling reorder, and anything else 400s with `invalid-item-move`.
 
 **What's left, and nothing here is urgent:** ~~**F11** and **F12**~~ and ~~**G1**~~ are done
 (2026-07-29), as is **G2's** free half, and ~~**H2**/**H3**~~ went as one deletion batch the
