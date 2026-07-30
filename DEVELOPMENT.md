@@ -266,6 +266,34 @@ Set `CHROME_PATH` if yours is not on `PATH`.
 
 Remember to delete the seeded documents afterwards.
 
+### Live production verification (`verify_f9_prod.js`)
+
+A third, heavier check sits beside them: `frontend/scripts/verify_f9_prod.js`
+drives the **deployed** site to prove the @mention composer and rendering (F9)
+actually work there — the picker opening/filtering/inserting, the token
+surviving the round trip to a real `mentions` entry, the name rendering instead
+of the markup, thread headers flattening, mobile.
+
+It writes only to a throwaway gathering it creates and deletes in a `finally`
+(the delete is itself asserted), and the one mention it writes names the
+signed-in account — `mentionRecipients` drops a comment's own author, so the run
+mails nobody. Keep both properties if you copy it as a template for the next
+feature.
+
+Unlike the two checks above it uses **Playwright**, which is deliberately not a
+dependency here, so run it from a box that has one plus a signed-in production
+storage state (`prod_login.js`, kept out of the repo because it reads OTPs from
+prod Mongo):
+
+```bash
+NODE_PATH=/path/to/playwright/node_modules \
+  PROD_STATE=/path/to/prod_state.json \
+  node frontend/scripts/verify_f9_prod.js     # 35 checks, non-zero on failure
+```
+
+`PROD_BASE` overrides the target and `SHOT_DIR` (default: the OS temp dir) is
+where its two screenshots land.
+
 ## CI (GitHub Actions)
 
 - **`backend-ci.yml`** — on `server/**` changes: `go build` + **`go vet`** +
