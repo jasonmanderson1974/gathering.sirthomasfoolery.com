@@ -9,11 +9,15 @@
 > small-club utility over scale. All event access requires sign-in (E3); roles are
 > superAdmin > admin > member > guest.
 >
-> **Status: FEATURE TRACK COMPLETE (2026-07-29).** F1–F16 have all landed and F10's close-out
-> sweep is done — swag regenerated (no drift), the full backend suite, `go vet` and
-> golangci-lint green, frontend lint + 167 unit tests + build green, and both headless
-> harnesses passing. What remains in this file is deliberately-deferred P3 work: **F11** and
-> **F12**, Part G, and the opportunistic **H5–H9**. History below.
+> **Status: FEATURE TRACK COMPLETE (2026-07-29); F11, F12, G1 and G2's free part landed the
+> same day.** F1–F16 have all landed, and the P3 tail that was deliberately deferred is now
+> mostly done too — **F11** (RSVP half; poll voters closed as won't-do), **F12**, **G1** in
+> full, and **G2's** dead-export prune. Verified green: swag regenerated (no drift), full
+> backend suite + `go vet` + golangci-lint (0 issues), frontend lint + **181** unit tests +
+> production build, and both headless harnesses 5/5 **against a rebuilt dev stack** — see the
+> note under "Workflow rules" about why that rebuild matters. What remains: **G2's** actual
+> splits, **G3** and **G4** (both reconfirmed deferred/parked by the user), and the
+> opportunistic **H5–H9**. History below.
 >
 > F1, H1, F2, F3, F4 and F5 landed 2026-07-28 (`0b5f2272`, `80a20905`,
 > `719cb4b8`, `0a9f450d`, `6c281faf`, F5 this commit); F6, H4, H6 and H7 landed 2026-07-29 — see
@@ -89,8 +93,9 @@ far too few to justify a realtime layer this app has never had.
 ## PART F — Feature track (P1 unless noted)
 
 Each item is independently green-deployable to trunk (new fields `omitempty`, endpoints additive,
-UI reads defensively). **Everything here is done except F11 and F12**, both P3 and both left
-open deliberately — see their entries. The sequencing that got there is at the bottom.
+UI reads defensively). **Everything here is done**, F11 and F12 included as of 2026-07-29 —
+F11 scoped to its RSVP half, with the poll-voter half closed as won't-do. See their entries.
+The sequencing that got there is at the bottom.
 
 - [x] **F1 · OTP code visible/copyable from the Android email notification.** `S`
   **DONE 2026-07-28** (`0b5f2272`). Built as planned, with one correction: `buildOtpEmailBody`
@@ -522,25 +527,38 @@ open deliberately — see their entries. The sequencing that got there is at the
   - Seeded harness documents (3 users, 3 allowlist rows, the event and its comments) deleted
     afterwards, per DEVELOPMENT.md.
 
-- [ ] **F11 · Avatars on the RSVP and poll-voter rosters.** `M` · **P3** — deliberately left out
-  of F5 (user's call, 2026-07-28), not an oversight. Both rosters are comma-joined text
-  (`"Going: Bart, Ada (+1)"` — `GatheringRsvp.vue:65-75`, `EventPolls.vue:61-67`), so this is a
-  presentation change, not a component swap:
-  - RSVPs are the cheap half: attach `slimUserForDisplay(user)` to each `Rsvp` in
-    `resolveEventDisplayNames` (`routes/display_names.go` already batches exactly this lookup),
-    then rewrite the roster into avatar+name rows per status group.
-  - Poll votes are the expensive half: `Votes map[string]string` stores a bare display name per
-    voter key, so voters can only be rendered with an avatar after a stored-shape change
-    (`{name, user}`), which drags in the write path and legacy rows. Probably not worth it.
+- [x] **F11 · Avatars on the RSVP roster.** `M` · **P3**
+  **DONE 2026-07-29** (`2d8678d6`). **Scoped to the RSVP half on the user's call** — the
+  poll-voter half is closed as won't-do, not deferred (see below). The RSVP half built as
+  planned:
+  - `Rsvp.User` mirrors `Comment.Author`, including **`bson:"-"`, which is load-bearing here**
+    and was not in the plan: the RSVP write path `$set`s the whole `rsvps` map from the
+    in-memory struct, so an untagged field would be persisted and then go stale. Pinned by its
+    own test (`TestRsvpUserIsNeverPersisted`).
+  - No PII change — `slimUserForDisplay` clears the email unconditionally, so the attached
+    account carries none regardless of the `collectEmails` gate.
+  - The monogram-from-name fallback for legacy name-keyed rows was already inline in
+    `CommentRow`; it is now `userFromDisplayName` in `general_utils` and shared by both.
+  - Verified in a browser against a seeded fixture, not just unit tests: account row renders
+    avatar + "Harness Check (+1)", guest row falls back to a monogram with no `<img>`.
+    (At 22px `UserAvatarContent` renders ONE initial by design, not two.)
+  - **Poll votes: won't-do.** `Votes map[string]string` stores a bare display name per voter
+    key, so an avatar there needs a stored-shape change (`{name, user}`) that drags in the write
+    path and legacy rows — not worth it for a voter roster. Reopen only if the vote shape
+    changes for some other reason.
 
-- [ ] **F12 · `getEvent` nil-derefs on an event response with no `response` field.** `S` · **P3** —
-  `routes/events.go:534` does `response.User = user` without checking `response != nil`, and
-  `getResponsesMap` happily yields a nil for a row whose `response` is absent. **Not reachable
-  through the app** — every write path sets `Response: &response`
-  (`routes/event_responses.go:271,283`) — so this is a guard against legacy or hand-edited rows,
-  found while seeding fixtures for F5. One `if response == nil { continue }` alongside the
-  existing deleted-user branch, plus a DB-gated test. Currently a 500 on the app's hottest
-  endpoint for the whole event, not just the bad row.
+- [x] **F12 · `getEvent` nil-derefs on an event response with no `response` field.** `S` · **P3**
+  **DONE 2026-07-29** (`1b1ad6d3`). Two corrections to the plan:
+  - **Guarded at the source, not at the call site.** The plan said one
+    `if response == nil { continue }` beside the deleted-user branch. `getResponsesMap` and
+    `ConvertEventToOldFormat` skip the nil row instead, so the map never contains one — two
+    lines total, and the invariant holds for any future caller.
+  - **A second caller had the identical bug**, unmentioned in the plan: `getResponses`
+    (`routes/event_responses.go:62`) dereferences `response.Availability` in the same way. The
+    source guard covers it; a call-site guard would not have.
+  - The DB-gated test inserts the bad row as **raw bson**, because the model's `response` tag
+    carries no `omitempty` — marshalling the struct writes an explicit null rather than omitting
+    the key. Confirmed it panics with the guard reverted.
 
 - [x] **F13 · Lists of Lists backend: model, routes, permissions.** `M` · **P1**
   **DONE 2026-07-29** (`c7ad40b4`). Built as planned. Notes:
@@ -873,7 +891,29 @@ open deliberately — see their entries. The sequencing that got there is at the
 
 ## PART G — Carried forward from TODO.md (re-verified 2026-07-28)
 
-- [ ] **G1 (was A22) · Small cleanup batch.** `S` · **P3** — corrections from the re-review:
+- [x] **G1 (was A22) · Small cleanup batch.** `S` · **P3**
+  **DONE 2026-07-29** (`f1a98d67`). All five items done. What differed:
+  - The toggle mixin is a **factory** (`calendarOptionSync(optionName, errorLabel)`), because
+    the option's name is needed three times — the prop, the PATCH body key, and the `update:`
+    event. `CalendarAccount.vue` stayed out of it as planned and got its own local helper.
+  - **PostHog removal stranded more than the call sites.** App.vue's `setFeatureFlags` survived
+    only to write `featureFlagsLoaded`, state with **no readers anywhere**, from a watcher
+    gating on `this.$posthog` being truthy — which the stub always was. The whole chain went.
+    `signUpFormEnabled` is kept: `NewDialog` still reads it (and, as before, nothing sets it).
+    Two methods that existed only to report analytics (`trackTimezoneChange`,
+    `trackExportCsvClick`) went with their template bindings.
+  - **The half-hour timezone symptom was worse than written.** The finding called it an
+    asymmetry in the specific-times computation. It is: a specific-times event matches each cell
+    against stored instants *by timestamp*, and the grid was shifted 30 minutes off them — so a
+    viewer in Kolkata/Kathmandu/Newfoundland got an **entirely empty grid**, not a mislabelled
+    one. Stored instants win; those viewers now correctly see the event's real half-hour local
+    times. Decision extracted to `gridTimeOffset.js` + tests, following the
+    gridGeometry/responseCounts pattern; the flag is scoped so the ordinary grid is untouched by
+    construction, which one test pins.
+  - Error codes are now `errs.Code`. Underlying type stays `string`, so **the JSON on the wire
+    is unchanged**; the two sentinels that wrap a code in `errors.New` need `string()` now.
+
+  Original notes, for reference:
   - Toggle→PATCH duplication is real but the paths were wrong: it's
     `schedule_overlap/WorkingHoursToggle.vue:76-88` + `schedule_overlap/BufferTimeSwitch.vue:65-77`
     (byte-identical modulo identifier) — extract one mixin. **`CalendarAccount.vue` does NOT
@@ -895,7 +935,18 @@ open deliberately — see their entries. The sequencing that got there is at the
     `timeOffset = -0.5`) but **not** in the specific-times computation — that asymmetry is the
     actual bug shape (India/Nepal/Newfoundland).
 
-- [ ] **G2 (was A23) · Split the two remaining giants.** `L` · **P3** — updated numbers:
+- [ ] **G2 (was A23) · Split the two remaining giants.** `L` · **P3**
+  **FREE PART DONE 2026-07-29** (`9831d303`); the splits themselves are still open. The nine
+  zero-caller exports were re-verified repo-wide and deleted — and deleting them **stranded two
+  more** (`splitTime`, `getDateWithTimeNum`), whose only callers were among the nine, so eleven
+  went rather than nine. Three of the internal-only five are unexported
+  (`getDateRangeString`, `processTimeBlocks`, `stdTimezoneOffset`). `date_utils.js` is now
+  **946 lines / 32 exports** (from 1,119 / 46) — the predicted ~32 surface, so the numbers below
+  for the split still stand. **Still to do:** the `ScheduleOverlap.vue` computed block, the
+  `newEventFormMixin` for NewEvent/NewSignUp, and the `date_utils` split itself — all of which
+  want the app running, per A11's caveat.
+
+  Original notes, for reference:
   `ScheduleOverlap.vue` 2,967 lines — the `computed` block (:1270-2265) is **996 lines**, now
   larger than `methods` (464); it's the single biggest extraction target left.
   `Event.vue` 983. `NewEvent.vue` 970 vs `NewSignUp.vue` 845 — **overlap confirmed heavy**
@@ -909,6 +960,8 @@ open deliberately — see their entries. The sequencing that got there is at the
   the app running, not blind.
 
 - [ ] **G3 (was C8) · Web push.** `M` · **P3 — still deferred; reassess value first.**
+  **Reconfirmed deferred 2026-07-29** — offered to the user alongside G1/G2 and not taken, so
+  even the cheap `kill-sw.js` housekeeping below is untouched.
   Premise unchanged (no service worker exists; reintroducing one reverses a deliberate
   removal; email reminders already cover iOS). **New sub-finding:** `kill-sw.js` is
   **not actually served** — it sits at the repo root, not `frontend/public/`, unreferenced by
@@ -918,6 +971,8 @@ open deliberately — see their entries. The sequencing that got there is at the
   `frontend/.eslintrc.cjs:11`'s `serviceworker: true` env + comment are stale.
 
 - [ ] **G4 (was D2) · Mongo DB name `schej-it` — rename is a data migration.** `L` · **P3**
+  **Reconfirmed parked 2026-07-29** — put to the user with G1/G2 and left parked, no runbook
+  written. Unchanged below.
   **Rewritten: this is now Mongo-only.** The GCP Cloud Tasks half of old D2 is gone — the
   entire `services/gcloud/` package was deleted in `49267959` (Listmonk drop); repo-wide grep
   confirms zero `cloudtasks`/`cloud.google.com` references outside `scripts/`. What remains:
@@ -1053,12 +1108,22 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
    feature track is complete.
 9. ~~**F10** close-out.~~ **Done 2026-07-29.**
 
-**What's left, and nothing here is urgent:** **F11** and **F12** (both P3, both deferred on
-purpose); Part G items remain background/P3, same as before; **H5** whenever calendar code is
-next touched; **H6–H9** opportunistic (**H9** is cheapest folded into the next change that
-touches `AvatarEditorDialog.vue`). Deploy is the human's call from the VM-adjacent box —
-`origin/main` is ahead of what's live until then.
+**What's left, and nothing here is urgent:** ~~**F11** and **F12**~~ and ~~**G1**~~ are done
+(2026-07-29), as is **G2's** free half. **G2's** splits stay open and want the app running;
+**G3** and **G4** were put to the user in the same session and deliberately left
+deferred/parked; **H5** whenever calendar code is next touched; **H6–H9** opportunistic
+(**H9** is cheapest folded into the next change that touches `AvatarEditorDialog.vue`).
+Deploy is the human's call from the VM-adjacent box — `origin/main` is ahead of what's live
+until then.
 
 Workflow rules unchanged from `TODO.md`/`CLAUDE.md`: sync before changes, green commits to
 trunk, deploys are human-run from the VM, cold-load signed-out testing after any router/auth
 change (the E3 outage lesson).
+
+**Rebuild the dev containers before trusting a harness run.** `compose.dev.yaml` bakes the
+frontend bundle into the frontend image and the Go binary into the server image; `docker
+compose restart` re-runs the *old* artifacts. During the F11/G1 close-out the harnesses first
+passed 5/5 against a stack that predated every change in them — the give-away was `rsvp.user`
+missing from the API while the nickname re-resolution beside it worked. `docker compose -f
+compose.dev.yaml up -d --build frontend server` (the server also re-registers its static routes
+only at startup, so it needs the restart to see new hashed filenames).

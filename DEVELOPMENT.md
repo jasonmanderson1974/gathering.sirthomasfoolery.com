@@ -266,6 +266,22 @@ Set `CHROME_PATH` if yours is not on `PATH`.
 
 Remember to delete the seeded documents afterwards.
 
+> **Rebuild the containers first, or the run means nothing.** `compose.dev.yaml` bakes the
+> frontend bundle into the frontend image and the Go binary into the server image — `docker
+> compose restart` re-runs the *old* artifacts, and both harnesses will happily report ALL PASS
+> against code that predates your change. Before a pre-deploy run:
+>
+> ```bash
+> docker compose -f compose.dev.yaml up -d --build frontend server
+> ```
+>
+> The server registers a static route per file in `frontend/dist` **at startup**, so it needs
+> restarting even when only the frontend changed — otherwise the new hashed filenames 404.
+> This bit during the F11 close-out: the harnesses passed 5/5 against a stack older than every
+> change in them, and the give-away was an API response missing a newly added field while the
+> code beside it behaved as expected. When a check passes but a hand-inspection of the response
+> disagrees, suspect the image before the code.
+
 ### Live production verification (`verify_f9_prod.js`)
 
 A third, heavier check sits beside them: `frontend/scripts/verify_f9_prod.js`
