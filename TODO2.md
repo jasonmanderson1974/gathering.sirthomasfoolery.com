@@ -18,7 +18,12 @@
 > dev stack** — see the note under "Workflow rules" about why that rebuild matters.
 >
 > **What remains is only what was deliberately set aside:** **G2's** actual splits, and **G3**
-> and **G4** (deferred and parked by the user on 2026-07-29). Nothing is queued.
+> and **G4** (deferred and parked by the user on 2026-07-29). ~~Nothing is queued.~~
+> **2026-07-30: F17/F18 (Lists v3) are queued** — four usability requests from the user, planned
+> and decision-confirmed the same day; see the Lists v3 decisions block and the Part F entries.
+> The feature track is therefore re-opened for exactly these two items. The user intends to
+> split them across the two machines (F17 backend on one, F18 frontend on the other — F18's
+> drag slice is the only part that blocks on F17).
 >
 > **Worth reading if you are picking up an old finding:** two of the three H items closed on
 > 2026-07-30 were described *wrongly* by the entries that recorded them, and neither error was
@@ -95,14 +100,36 @@ far too few to justify a realtime layer this app has never had.
   a refresh icon in the panel's top-right. No `setInterval` — the app has never had one and
   three deliberate triggers cover a 5–7-person work session.
 
+## Confirmed decisions (user, 2026-07-30) — Lists **v3** (F17/F18)
+
+Four usability requests, raised after living with F13–F16: rapid entry, drag-and-drop between
+lists, delete confirmations, phone-sized buttons. Decisions taken 2026-07-30:
+
+- **Enter keeps focus in the *same list's* composer** so `Beer ⏎ chips ⏎ ice ⏎` just works. The
+  same applies to the sub-entry composer: after Enter it **stays open and focused** for the same
+  parent (today it is destroyed on submit); Esc/Cancel still close it.
+- **Full reordering, not append-at-end.** The user explicitly chose the bigger option: a drop
+  lands exactly where released, within a list and across lists. This is what forces server-side
+  ordering (F17) — today display order is array insertion order and there is no move endpoint.
+- **Any entry is draggable.** A dragged entry always brings its own subtree; a dragged
+  sub-entry pops out and becomes **top-level** in the target position. Drag never re-parents
+  *under* a new parent — so depth can only shrink and the add-time depth check stays exact.
+- **Move right = delete right** (author or member+): moving is delete-and-re-add, and it can
+  relocate other people's entries.
+- **Confirm scope: the whole event band.** "Any deletions should prompt for confirmation,
+  naming what is deleted" covers list entries, whole lists, **comments and polls** — none
+  confirm today. One reusable dialog; the pre-existing ad-hoc dialogs elsewhere stay untouched.
+- **Phone-only sizing** (breakpoint xs via the existing `isPhone`): bigger buttons + gaps on the
+  entry-row and list-header clusters. Desktop markup stays byte-identical.
+
 ---
 
 ## PART F — Feature track (P1 unless noted)
 
 Each item is independently green-deployable to trunk (new fields `omitempty`, endpoints additive,
-UI reads defensively). **Everything here is done**, F11 and F12 included as of 2026-07-29 —
-F11 scoped to its RSVP half, with the poll-voter half closed as won't-do. See their entries.
-The sequencing that got there is at the bottom.
+UI reads defensively). **Everything here is done except F17/F18** (Lists v3, queued 2026-07-30) —
+F11 and F12 landed 2026-07-29, F11 scoped to its RSVP half, with the poll-voter half closed as
+won't-do. See their entries. The sequencing that got there is at the bottom.
 
 - [x] **F1 · OTP code visible/copyable from the Android email notification.** `S`
   **DONE 2026-07-28** (`0b5f2272`). Built as planned, with one correction: `buildOtpEmailBody`
@@ -696,6 +723,186 @@ The sequencing that got there is at the bottom.
     list, nickname resolving at read time without writing back; the GET (401 anonymous, resolved
     names signed in, `[]` not `null` when empty). Swagger regen.
 
+- [ ] **F17 · Lists v3 backend: fractional item order, the move endpoint, the order migration.**
+  `M` · **P1** — no F-deps (extends F15). Planned 2026-07-30 (Fable session); decisions in the
+  Lists v3 block above. Blocks only F18's drag slice.
+  - **Ordering: fractional `float64`, not integer reindexing.** New field on `EventListItem`
+    (`models/event.go:263-288`): `Order float64` with `json:"order" bson:"order"` — **no
+    `omitempty` on either tag**. "Drop at the top of a migrated list" legitimately computes
+    `1024 − 1024 = 0` and omitempty would strip it; field *absence* is also how the migration
+    tells pre-F17 items apart. Safe because `InsertEventListItem` pushes the marshaled struct,
+    so every new item carries the field. Order is **sibling-group-relative** (items compete only
+    among entries sharing their `parentId`); display sort is per-group ascending with a
+    **stable array-position tie-break**, so legacy all-zero groups keep today's insertion order.
+    Rationale for fractional: a move writes ONLY the moved item, preserving
+    `db/event_lists.go`'s single-targeted-update invariant (its file header exists to warn
+    against read-modify-write; update its prose to mention move). Integer reindexing would
+    rewrite many siblings per drop.
+  - Step constant `listItemOrderStep = 1024`, mirrored by `ORDER_STEP` in the frontend's
+    `eventLists.js`. Insertion = midpoint `(prev+next)/2`; before-first = `next − 1024`;
+    after-last = `prev + 1024`; empty = `1024`. Negative orders are legal. Precision: from
+    1024-wide gaps, ~60 consecutive drops into the *same* shrinking gap before the midpoint
+    degenerates — unreachable at a 100-item cap; no rebalance path; document the math on the
+    constant.
+  - **Adds stamp order server-side**: `addEventListItem` (`routes/event_lists.go:~454`) already
+    holds the list via `loadListContext`, so it sets `Order = maxOrderInList(list) + 1024` (new
+    pure helper) — no extra read, no API change, and legacy zeros still sort below new adds.
+  - **Move endpoint** `PUT /events/:eventId/lists/:listId/items/:itemId/move`, body
+    `{targetListId (required), order (required float), parentId?}`. The **client computes
+    `order`** — only it knows the drop position; the server validates finite
+    (`math.IsNaN`/`IsInf` → 400; JSON can't encode them but validate anyway — order is not
+    security-sensitive, any mover may place an item anywhere by design). `parentId` is legal
+    **only when it equals the item's current parent AND targetListId == listId** (sibling
+    reorder); anything else → 400, new code `errInvalidMove = "invalid-item-move"`. Otherwise
+    the item flattens to top level. This rule is what keeps F15's depth invariant sound: a move
+    preserves depth exactly or drops it to 0 — **depth only shrinks**. Update the "an item is
+    never re-parented" comments — `grep re-parent` — at `routes/event_lists.go:~30-34`
+    (`maxListItemDepth`), `listItemDepth` (:~166), `addEventListItem` (:~439), and the
+    `models/event.go` ParentId note.
+  - Permission: `canDeleteItem` (author or member+) — the confirmed move-right = delete-right.
+    Handler check order: bind → finite order → `loadListContext` → find source list+item (404
+    `list-item-not-found` — a move is not idempotent-deletable, the user needs feedback) →
+    permission → find target list (404) → parentId rule (400) → advisory target cap
+    `len(target.Items) + len(moved) > maxItemsPerList` → 400 `list-full` (measured as read,
+    advisory, same as add) → db call; `ModifiedCount == 0` → 404 (list vanished between read
+    and write).
+  - **Three write shapes, each ONE `updateOne`** in `db/event_lists.go`:
+    1. `SetEventListItemOrder` — same-list sibling reorder: `$set lists.$[l].items.$[i].order`
+       (clone `UpdateEventListItemText`'s two-filter pattern).
+    2. `FlattenEventListItemToTopLevel` — same-list flatten: `$set` order + `$unset` parentId
+       in one update.
+    3. `MoveEventListItems(eventId, srcListId, dstListId, itemIds, items)` — cross-list:
+       route computes `itemIds = collectDescendantIds(list, item.Id)` (existing, :~192) and
+       builds the moved structs *from the event as read* — root gets `ParentId = nil` + the new
+       `Order`; **descendants keep their ParentId and Order untouched** (they compete only
+       under their parent). One update combining `$pull` on `lists.$[src].items`
+       (`_id $in itemIds`) + `$push $each` on `lists.$[dst].items`, two array filters. Both
+       lists live in the same event doc, so the move is atomic. The paths are lexically
+       distinct so Mongo's update-conflict check should permit the combination — **the
+       cross-list db test is the proof**, and it must land before F18's drag slice depends on
+       it. If Mongo rejects it, fallback is push-then-pull as two updates (comment accepting
+       the tiny both-lists window) — flag to the user if so.
+  - **Accepted races, documented in the handler** (the cascade-delete philosophy): the pushed
+    structs are as-read, so a concurrent text edit or check can be lost by a simultaneous
+    cross-list move; a child added under the subtree in the same instant stays in the old list
+    and reappears there as a top-level orphan (F15 already renders orphans at root). Both beat
+    a partial move. Concurrent drags into the same gap can produce equal orders — benign under
+    the stable tie-break; the next drag of either heals it.
+  - **Migration IS needed**: without it, a drop *between* two legacy zero-order items computes
+    midpoint 0 and the tie-break (moved item `$push`ed at array end) renders it **last** among
+    the ties — visibly wrong. New dated script `server/scripts/20260730_list_item_order/main.go`
+    (model on `20250420_num_responses/`): for each event with lists, for each list containing
+    **at least one item missing the `order` field**, reassign the whole list `(i+1)*1024` by
+    current array order, one `updateOne` per event (read-modify-write is fine in an offline
+    manual script). Header documents rerun safety: fully-migrated lists are never touched. Run
+    on prod right after the F17 deploy. The code tolerates unmigrated data either way (stable
+    ties) — the migration is about drop *precision*, not correctness.
+  - Register the route in `routes/events.go` (:~76 block) — and remember F15's lesson: **add it
+    to the `eventRoutes` table** in `event_auth_gate_test.go` and to `listsTestRouter` in
+    `event_lists_db_test.go`, or the table-coverage test fails (intended).
+  - Tests. Pure (`event_lists_test.go`): `maxOrderInList` (empty / legacy zeros / mixed);
+    extract the parentId rule as `validateMoveParent(item, payloadParentId, sameList)` so it is
+    testable without a request. DB-gated (`event_lists_db_test.go`, existing harness): add
+    assigns increasing order; same-list reorder changes order and keeps parentId; flatten
+    unsets parentId; **cross-list move brings the whole subtree atomically** (root parentId
+    nil, descendants' parentId/order untouched — this is also the $pull+$push proof);
+    permissions (author ✓, member ✓ on another's item, unrelated guest ✗); foreign parentId →
+    400; full target list → 400; missing item / missing target list → 404. Swagger regen
+    (`swag init --parseDependency --parseInternal`, CLI pinned @v1.16.1).
+
+- [ ] **F18 · Lists v3 frontend: rapid entry, drag with drop resolution, confirm dialogs,
+  phone targets.** `L` · **P1** — needs F17 **for the drag slice only**; the other three slices
+  have no backend dependency and can start immediately on the second machine. Planned
+  2026-07-30; decisions in the Lists v3 block above. Four slices, reviewable separately:
+  - **Slice 1 — rapid entry (no deps).** Nothing in `EventLists.vue` manages focus today; the
+    main composer *probably* survives the refetch re-render (v-for keyed by stable `list._id`,
+    Vue patches in place) but the sub-entry composer is destroyed by `submitChild` →
+    `cancelChild()`. Implement the mechanism regardless — it also hardens the main composer:
+    refs `:ref="'addInput-' + list._id"` on both add composers (LocationInput and v-text-field
+    variants) and `ref="childInput"` on the child composer (only one exists at a time). New
+    data `pendingFocus: null` (`{type:'add', listId}` or `{type:'child'}`). `submitItem` arms
+    it after emitting; **`submitChild` stops calling `cancelChild()`** — clears `childText`
+    only, leaves `addingChildOf` set (composer stays mounted for the same parent), arms the
+    flag. Esc/Cancel unchanged; `toggleList`'s collapse cleanup already closes it. A watcher on
+    the `refreshing` prop's **true→false transition** consumes the flag in `$nextTick` and
+    calls `.focus()` (v-for refs collect as one-element arrays in Vue 2; optional-chain every
+    step — a missing ref is a silent no-op). **`LocationInput.vue` has no `focus()` — add one**
+    delegating to its inner field. Known gap, accepted: a *failed* add never toggles
+    `refreshing`, so the flag stays armed until the next refresh — one stray refocus at worst,
+    and it clears on first use.
+  - **Slice 2 — drag (needs F17).** `vuedraggable ^2.24.3` is already a dependency;
+    `Dashboard.vue:91-127` is the reference config. Keep the deliberately non-recursive
+    flat-row rendering. Replace the rows wrapper (`EventLists.vue:~96`) with one `<draggable>`
+    per list over the flat rows: `group="event-list-items"` (shared across lists →
+    cross-list drops), `draggable=".list-row"` (+ that class and `:data-item-id` on each row
+    div), `:delay="200"` `:delay-on-touch-only="true"` (the Dashboard touch idiom),
+    `:disabled="refreshing"`, `:data-list-id="list._id"`, a min-height class so an **empty list
+    is still a drop target**, and the "Nothing here yet" empty-state moved into the draggable's
+    `#header` slot (Dashboard pattern) so it never counts toward drop indices. Bind `:list` to
+    the throwaway computed rows array and **ignore vuedraggable's splice of it** — persistence
+    stays emit → API → `refreshLists()`, and the refetch reconciles (or restores truth on
+    failure).
+    `@start` records `draggingItemId` and merges it **transiently** into the collapse set
+    passed to `flattenListItems` (user collapse state untouched) — the subtree visually follows
+    the ghost and drop indices stay sane. `@end` clears it, resolves the drop, and emits
+    `move-item {listId, itemId, payload: {targetListId, order, parentId?}}`; **ignore the drop
+    entirely** if source or target list no longer resolves in `event.lists` (a refresh landed
+    mid-drag — stale-order drops merely land approximately and the refetch shows truth).
+    **Drop resolution is a pure helper** in `eventLists.js` (vitest env has no jsdom — this is
+    the only way the logic gets tested): `resolveDrop({sourceRows, targetRows, oldIndex,
+    newIndex, sameList, draggedItem})` → `{parentId, prevOrder, nextOrder}`. Semantics: (1) if
+    same-list and the insertion point sits inside the dragged item's current parent's
+    contiguous child block → sibling reorder, parentId kept; (2) otherwise top-level at the
+    **nearest top-level boundary** — prev/next = nearest depth-0 rows (handling the classic
+    same-list splice index shift), parentId null; a release mid-way inside *another* parent's
+    child block resolves to "after that whole subtree" (comment this — pixel position and
+    final render can differ by a few rows there). Then `order = orderBetween(prevOrder,
+    nextOrder)` (second helper: midpoint / ±`ORDER_STEP` / empty-list `ORDER_STEP`;
+    degenerate-midpoint falls back to `prev` — never NaN). `flattenListItems` gains the
+    per-sibling-group **stable sort by `order ?? 0`**. Cross-kind drops (text ↔ checklist ↔
+    places) are allowed — items are kind-agnostic; rendering just gains/loses the checkbox or
+    maps link. Accepted limitation, document: a **collapsed list renders no container and is
+    not a drop target** — expand it first.
+    Plumbing: `EventService.js` lists section gains `moveListItem(eventId, listId, itemId,
+    payload)` via the existing `put`; `Event.vue` gets `@move-item` → `onMoveListItem` beside
+    the other list handlers (:~631-694): call, `refreshLists()`, error snackbar "Could not
+    move that entry."
+  - **Slice 3 — confirm dialogs (no deps).** New reusable
+    `components/general/ConfirmDeleteDialog.vue`: props `value/title/body/confirmLabel`
+    (default "Delete"), emits `input`/`confirm`; markup copies the existing ad-hoc pattern
+    (`EventItem.vue:154-181`, `Dashboard.vue:139-152` — `v-dialog max-width=400`, title, text,
+    Cancel + `text color="error"` confirm). Callers hold the pending target (the
+    `deleteDialog` + `folderToDelete` idiom): **EventLists.vue** — both delete buttons (list
+    header :~80-88, entry row :~220-238) stop emitting directly, set `pendingDelete`, and the
+    dialog's confirm emits the existing `delete-list`/`delete-item` (Event.vue unchanged).
+    Dialog copy from two new pure helpers in `eventLists.js`: `describeListDeletion(list)` →
+    `Delete "Menu"?` / "This removes the list and its 12 entries." (singular/plural/zero), and
+    `describeItemDeletion(items, itemId)` → names the entry text (truncate ~80 chars) plus
+    "and its N sub-entries" when cascading — needs `countDescendants(items, itemId)`
+    (parentId BFS, cycle-safe like `flattenListItems`). **EventComments.vue** (`remove`,
+    :~350) and **EventPolls.vue** (delete btn :~22-31) get the same pattern, naming a
+    truncated comment snippet / the poll title. The pre-existing ad-hoc dialogs elsewhere are
+    explicitly out of scope.
+  - **Slice 4 — phone targets (no deps).** `EventLists.vue` imports `isPhone`
+    (`utils/general_utils.js:65`, breakpoint xs — `$vuetify.breakpoint` is reactive so a
+    `phone` computed works). On the two icon-button clusters — list header and entry row —
+    bind `:x-small="!phone" :small="phone"` per button, keep `<v-icon small>` (bigger button =
+    bigger hit area), add `tw-gap-2` to the `tw-flex tw-flex-none` wrappers when phone.
+    Desktop markup byte-identical.
+  - Tests (vitest, `eventLists.test.js`): sibling-group sort (order respected; legacy zeros
+    keep insertion order; mixed); `orderBetween` (empty/top/bottom/midpoint/degenerate
+    fallback); `resolveDrop` (top/bottom/between top-levels; sibling reorder both directions
+    incl. the splice shift; release inside a foreign subtree → after it; cross-list into an
+    empty list; dragged parent with subtree hidden); `countDescendants` (deep, cycle-safe);
+    both `describe*` helpers (singular/plural/truncation). Run from `frontend/` (the F16
+    stray-vitest lesson). Then `npm run lint` + `npm run build`.
+  - **Verification**: interactive flows (drag incl. touch, rapid entry, dialogs, phone sizing)
+    cannot be clicked locally — login is unwired (CLAUDE.md) — so the F17 db tests are the
+    designed substitute for the authed surface; verify UI by hand post-deploy on prod (the
+    standing headless harnesses cover login/smoke; extend to the Lists tab only if cheap).
+    Dry-run the migration against the local Mongo the integration tests seed. Remember the
+    dev-container rebuild rule before trusting any harness run.
+
 - [x] **F16 · Lists v2 frontend: the tabbed band, the tree, the checkboxes.** `L` · **P1** —
   needs F15. **DONE 2026-07-29** (`165756b3` plumbing, `fa0615ee` tabs, `f698432b` tree +
   checklists). Built as planned, in the three commits the plan called for. Notes:
@@ -1272,6 +1479,14 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
 8. ~~**F9** (the mention composer + rendering).~~ **Done 2026-07-29** (`b9633400`) — the
    feature track is complete.
 9. ~~**F10** close-out.~~ **Done 2026-07-29.**
+10. **F17 → F18** (Lists v3: order+move backend → the four UX slices). Queued 2026-07-30.
+    Intended split: **F17 on one machine, F18 on the other** — F18's slices 1/3/4 (focus,
+    confirm dialogs, phone targets) have no backend dependency and can land first; slice 2
+    (drag) waits on F17's move endpoint, and specifically on the cross-list db test proving
+    the combined $pull+$push update. The two items touch disjoint files (F17 is all
+    `server/`, F18 all `frontend/`), so the machines cannot conflict — just sync before
+    starting and pull often; all F18 slices touch `EventLists.vue`, so they are sequential
+    commits on whichever machine takes F18.
 
 **What's left, and nothing here is urgent:** ~~**F11** and **F12**~~ and ~~**G1**~~ are done
 (2026-07-29), as is **G2's** free half, and ~~**H2**/**H3**~~ went as one deletion batch the
