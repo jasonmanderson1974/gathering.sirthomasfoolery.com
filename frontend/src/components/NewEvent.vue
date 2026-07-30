@@ -354,37 +354,26 @@
 </style>
 
 <script>
-import { post, put, prefersStartOnMonday } from "@/utils"
+import { post, put } from "@/utils"
 import { mapActions } from "vuex"
 import NewEventAdvancedOptions from "./NewEventAdvancedOptions.vue"
 import EmailInput from "./event/EmailInput.vue"
 import DatePicker from "@/components/DatePicker.vue"
 import SlideToggle from "./SlideToggle.vue"
 import LocationInput from "@/components/LocationInput.vue"
-import { getAvailabilityFields, getAvailabilityMode } from "./availabilityModes"
+import { getAvailabilityFields } from "./availabilityModes"
 import AlertText from "@/components/AlertText.vue"
 import OverflowGradient from "@/components/OverflowGradient.vue"
 import { isOwnerlessEvent } from "@/constants"
 import ExpandableSection from "./ExpandableSection.vue"
-import {
-  newEventFormMixin,
-  sharedContactsFields,
-  sharedTrackedFields,
-} from "@/mixins/newEventForm"
+import { newEventFormMixin } from "@/mixins/newEventForm"
 
 export default {
   name: "NewEvent",
 
   emits: ["input"],
 
-  mixins: [
-    newEventFormMixin(() => ({
-      startOnMonday: prefersStartOnMonday(),
-      notificationsEnabled: true,
-      customTimes: false,
-      location: "",
-    })),
-  ],
+  mixins: [newEventFormMixin],
 
   props: {
     isDialogOpen: { type: Boolean, default: false },
@@ -401,20 +390,7 @@ export default {
     OverflowGradient,
   },
 
-  data: () => ({
-    // `timeIncrement` sits outside the mixin's form defaults because `reset()`
-    // deliberately leaves it alone
-    timeIncrement: 15,
-  }),
-
   computed: {
-    contactsFields: () => [...sharedContactsFields, "customTimes", "location"],
-    trackedFields: () => [
-      ...sharedTrackedFields,
-      "customTimes",
-      "timeIncrement",
-      "location",
-    ],
     /** The options shown in the primary availability toggle */
     availabilityModeOptions() {
       const options = [
@@ -538,15 +514,6 @@ export default {
             })
         }
       }
-    },
-
-    /** The half of the populate-from-event pass that only an event form has */
-    updateExtraFieldsFromEvent() {
-      this.customTimes = getAvailabilityMode(this.event).customTimes
-      this.startOnMonday = this.event.startOnMonday
-      this.collectEmails = this.event.collectEmails
-      this.timeIncrement = this.event.timeIncrement ?? 15
-      this.location = this.event.location ?? ""
     },
   },
 
