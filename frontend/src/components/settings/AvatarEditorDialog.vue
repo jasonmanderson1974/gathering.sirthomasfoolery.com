@@ -81,6 +81,7 @@
 
 <script>
 import { mapActions } from "vuex"
+import { avatarSourceError } from "@/utils/general_utils"
 
 /**
  * Crop-and-rotate dialog for a profile photo.
@@ -165,9 +166,38 @@ export default {
       }
 
       const reader = new FileReader()
-      reader.onload = () => this.openWith(reader.result)
+      reader.onload = () => this.openIfLargeEnough(reader.result)
       reader.onerror = () => this.showError("That image could not be read.")
       reader.readAsDataURL(file)
+    },
+
+    /**
+     * Measures the source before the cropper ever sees it, and refuses one too
+     * small to make a sharp 256px square.
+     *
+     * At pick time there is no cropper yet, so `getImageData()` isn't available
+     * — the size has to come from loading the data URL into an Image and
+     * reading naturalWidth/naturalHeight.
+     *
+     * Guarding here rather than at save time is the point (H9): it fails before
+     * the member has spent any effort positioning a crop, and it can say what is
+     * actually wrong. Nothing downstream was catching this — the save-time
+     * "could not be saved" branch below needs getCroppedCanvas() to return
+     * null, which in practice it does not, so a 1x1 or a 2000x10 strip went all
+     * the way through and was stored as a smear.
+     */
+    openIfLargeEnough(dataUrl) {
+      const probe = new Image()
+      probe.onload = () => {
+        const problem = avatarSourceError(probe.naturalWidth, probe.naturalHeight)
+        if (problem) {
+          this.showError(problem)
+          return
+        }
+        this.openWith(dataUrl)
+      }
+      probe.onerror = () => this.showError("That image could not be read.")
+      probe.src = dataUrl
     },
 
     async openWith(dataUrl) {
@@ -212,7 +242,10 @@ export default {
         imageSmoothingQuality: "high",
       })
       if (!canvas) {
-        this.showError("That crop could not be saved. Try adjusting it.")
+        // Kept as a backstop, but reworded: the old text ("Try adjusting it")
+        // named an action that cannot help, and the size case it was assumed to
+        // be catching is now refused at pick time instead.
+        this.showError("That photo could not be prepared. Please try again.")
         return
       }
       // Quality 0.85 matches what the server re-encodes at, so this is not a

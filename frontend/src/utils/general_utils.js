@@ -298,6 +298,48 @@ export const avatarUrl = (user) => {
 export const isOwnAvatarUrl = (url) =>
   typeof url === "string" && url.startsWith(`${serverURL}/users/`)
 
+/** The square the cropper exports and the server stores. */
+export const AVATAR_EXPORT_PX = 256
+
+/**
+ * Why this source image can't make a usable avatar, or null if it can.
+ *
+ * The crop is exported at AVATAR_EXPORT_PX square, and neither the cropper nor
+ * the server ever enlarges beyond what it is given — `getCroppedCanvas` scales
+ * the selection up to fill the export, and the server's box filter only ever
+ * shrinks. So a source whose SHORTEST side is under the export size can only
+ * produce a blown-up, soft square, and the shortest side is what bounds it: the
+ * crop is square, so a 2000x10 strip yields a 10px selection.
+ *
+ * H9: this is the only guard on the way in. The save-time "could not be saved"
+ * branch was assumed to be catching these — it isn't; it never fires. A tiny or
+ * strip-shaped image went all the way through and was stored as a smear.
+ *
+ * Returns a message rather than a boolean so it can name the actual size: the
+ * complaint that sent people in circles was one that didn't say what was wrong.
+ */
+export const avatarSourceError = (width, height) => {
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return "That image could not be read."
+  }
+
+  const shortest = Math.min(width, height)
+  if (shortest < AVATAR_EXPORT_PX) {
+    return (
+      `That image is too small — it's ${width}x${height}, and a photo needs to be ` +
+      `at least ${AVATAR_EXPORT_PX} pixels on its shortest side. A smaller one can ` +
+      `only be blown up, and comes out blurry.`
+    )
+  }
+
+  return null
+}
+
 /**
  * The initials to show when there is no photo.
  *
