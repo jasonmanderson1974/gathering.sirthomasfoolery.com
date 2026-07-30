@@ -963,20 +963,14 @@
 
 <script>
 import {
-  timeNumToTimeText,
   getDateHoursOffset,
   post,
   put,
   isPhone,
-  utcTimeToLocalTime,
-  splitTimeBlocksByDay,
   dateToDowDate,
-  getSpecificTimesDayStarts,
   isTouchEnabled,
   isElementInViewport,
   userPrefers12h,
-  getScheduleTimezoneOffset,
-  getTimezoneReferenceDateForEvent,
   prefersStartOnMonday,
   displayName,
 } from "@/utils"
@@ -986,7 +980,6 @@ import {
   eventTypes,
   isOwnerlessEvent,
   timeTypes,
-  timeslotDurations,
 } from "@/constants"
 import { setScheduledEvent } from "@/utils/services/EventService"
 import { nextScheduleLocation } from "./scheduleLocation"
@@ -1014,11 +1007,12 @@ import currentAvailabilityMixin from "./currentAvailabilityMixin"
 import respondentSelectionMixin from "./respondentSelectionMixin"
 import timeslotStylingMixin from "./timeslotStylingMixin"
 import optionsMixin from "./optionsMixin"
+import calendarDaysMixin from "./calendarDaysMixin"
+import timeGridMixin from "./timeGridMixin"
 import {
   getSpecificTimeBlocks,
   buildSlotToBlockMap,
 } from "./specificTimeBlocks"
-import { gridTimeOffset } from "./gridTimeOffset"
 dayjs.extend(utcPlugin)
 dayjs.extend(timezonePlugin)
 
@@ -1031,6 +1025,8 @@ export default {
     respondentSelectionMixin,
     timeslotStylingMixin,
     optionsMixin,
+    calendarDaysMixin,
+    timeGridMixin,
   ],
   props: {
     event: { type: Object, required: true },
@@ -1198,26 +1194,9 @@ export default {
       if (this.isPhone) return "100%"
       return "13rem"
     },
-    /** Returns the days of the week in the correct order */
-    daysOfWeek() {
-      if (!this.event.daysOnly) {
-        return ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
-      }
-      return !this.startCalendarOnMonday
-        ? ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
-        : ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
-    },
     /** Only allow scheduling when a curScheduledEvent exists */
     allowScheduleEvent() {
       return !!this.curScheduledEvent
-    },
-    /** Returns the availability as an array */
-    availabilityArray() {
-      return [...this.availability].map((item) => new Date(item))
-    },
-    /** Returns the if needed availability as an array */
-    ifNeededArray() {
-      return [...this.ifNeeded].map((item) => new Date(item))
     },
     allowDrag() {
       return (
@@ -1225,303 +1204,6 @@ export default {
         this.state === this.states.SCHEDULE_EVENT ||
         this.state === this.states.SET_SPECIFIC_TIMES
       )
-    },
-    /** Returns an array of calendar events for all of the authUser's enabled calendars, separated by the day they occur on */
-    calendarEventsByDay() {
-      // If this is an example calendar
-      if (this.sampleCalendarEventsByDay) return this.sampleCalendarEventsByDay
-
-      // If the user isn't logged in or is adding availability as a guest
-      if (!this.authUser || this.addingAvailabilityAsGuest) return []
-
-      let events = []
-      let event
-
-      const calendarAccounts = this.authUser.calendarAccounts
-
-      // Adds events from calendar accounts that are enabled
-      for (const id in calendarAccounts) {
-        if (!calendarAccounts[id].enabled) continue
-
-        if (Object.prototype.hasOwnProperty.call(this.calendarEventsMap, id)) {
-          for (const index in this.calendarEventsMap[id].calendarEvents) {
-            event = this.calendarEventsMap[id].calendarEvents[index]
-
-            // Check if we need to update authUser (to get latest subcalendars)
-            const subCalendars = calendarAccounts[id].subCalendars
-            if (!subCalendars || !(event.calendarId in subCalendars)) {
-              // authUser doesn't contain the subCalendar, so push event to events without checking if subcalendar is enabled
-              // and queue the authUser to be refreshed
-              events.push(event)
-              if (!this.hasRefreshedAuthUser) {
-                this.refreshAuthUser()
-              }
-              continue
-            }
-
-            // Push event to events if subcalendar is enabled
-            if (subCalendars[event.calendarId].enabled) {
-              events.push(event)
-            }
-          }
-        }
-      }
-
-      const eventsCopy = JSON.parse(JSON.stringify(events))
-
-      const calendarEventsByDay = splitTimeBlocksByDay(
-        this.event,
-        eventsCopy,
-        this.weekOffset,
-        this.timezoneOffset
-      )
-
-      return calendarEventsByDay
-    },
-    curRespondentsSet() {
-      return new Set(this.curRespondents)
-    },
-
-    /** Returns the max number of people in the curRespondents array available at any given time */
-    curRespondentsMax() {
-      let max = 0
-      if (this.event.daysOnly) {
-        for (const day of this.allDays) {
-          const num = [
-            ...(this.responsesFormatted.get(day.dateObject.getTime()) ??
-              new Set()),
-          ].filter((r) => this.curRespondentsSet.has(r)).length
-
-          if (num > max) max = num
-        }
-      } else {
-        for (let i = 0; i < this.event.dates.length; i++) {
-          const date = new Date(this.event.dates[i])
-          for (const time of this.times) {
-            const num = [
-              ...this.getRespondentsForHoursOffset(date, time.hoursOffset),
-            ].filter((r) => this.curRespondentsSet.has(r)).length
-
-            if (num > max) max = num
-          }
-        }
-      }
-      return max
-    },
-    /** Returns the day offset caused by the timezone offset. If the timezone offset changes the date, dayOffset != 0 */
-    dayOffset() {
-      return Math.floor((this.event.startTime - this.timezoneOffset / 60) / 24)
-    },
-    /** Returns all the days that are encompassed by startDate and endDate */
-    allDays() {
-      const days = []
-      const datesSoFar = new Set()
-
-      const getDateString = (date) => {
-        let dateString = ""
-        let dayString = ""
-        const offsetDate = new Date(date)
-        if (this.isSpecificTimes) {
-          offsetDate.setTime(
-            offsetDate.getTime() - this.timezoneOffset * 60 * 1000
-          )
-        } else {
-          offsetDate.setDate(offsetDate.getDate() + this.dayOffset)
-        }
-        if (this.isSpecificDates) {
-          dateString = `${
-            this.months[offsetDate.getUTCMonth()]
-          } ${offsetDate.getUTCDate()}`
-          dayString = this.daysOfWeek[offsetDate.getUTCDay()]
-        } else if (this.isWeekly) {
-          const tmpDate = dateToDowDate(
-            this.event.dates,
-            offsetDate,
-            this.weekOffset,
-            true
-          )
-
-          dateString = `${
-            this.months[tmpDate.getUTCMonth()]
-          } ${tmpDate.getUTCDate()}`
-          dayString = this.daysOfWeek[tmpDate.getUTCDay()]
-        }
-        return { dateString, dayString }
-      }
-
-      if (
-        this.isSpecificTimes &&
-        (this.state === this.states.SET_SPECIFIC_TIMES ||
-          this.event.times?.length === 0)
-      ) {
-        for (const day of getSpecificTimesDayStarts(
-          this.event.dates,
-          this.curTimezone
-        )) {
-          const { dayString, dateString } = getDateString(day.dateObject)
-          days.push({
-            dayText: dayString,
-            dateString,
-            dateObject: day.dateObject,
-            isConsecutive: day.isConsecutive,
-          })
-        }
-        return days
-      }
-
-      for (let i = 0; i < this.event.dates.length; ++i) {
-        const date = new Date(this.event.dates[i])
-        datesSoFar.add(date.getTime())
-
-        const { dayString, dateString } = getDateString(date)
-        days.push({
-          dayText: dayString,
-          dateString,
-          dateObject: date,
-        })
-      }
-
-      let dayIndex = 0
-      for (let i = 0; i < this.event.dates.length; ++i) {
-        const date = new Date(this.event.dates[i])
-        // See if the date goes into the next day
-        const localStart = new Date(
-          date.getTime() - this.timezoneOffset * 60 * 1000
-        )
-        const localEnd = new Date(
-          date.getTime() +
-            this.event.duration * 60 * 60 * 1000 -
-            this.timezoneOffset * 60 * 1000
-        )
-        const localEndIsMidnight =
-          localEnd.getUTCHours() === 0 && localEnd.getUTCMinutes() === 0
-        if (
-          localStart.getUTCDate() !== localEnd.getUTCDate() &&
-          !localEndIsMidnight
-        ) {
-          // The date goes into the next day. Split the date into two dates
-          let nextDate = new Date(date)
-          nextDate.setUTCDate(nextDate.getUTCDate() + 1)
-          if (!datesSoFar.has(nextDate.getTime())) {
-            datesSoFar.add(nextDate.getTime())
-
-            const { dayString, dateString } = getDateString(nextDate)
-            days.splice(dayIndex + 1, 0, {
-              dayText: dayString,
-              dateString,
-              dateObject: nextDate,
-              excludeTimes: true,
-            })
-            dayIndex++
-          }
-        }
-        dayIndex++
-      }
-
-      let prevDate = null // Stores the prevDate to check if the current date is consecutive to the previous date
-      for (let i = 0; i < days.length; ++i) {
-        let isConsecutive = true
-        if (prevDate) {
-          isConsecutive =
-            prevDate.getTime() ===
-            days[i].dateObject.getTime() - 24 * 60 * 60 * 1000
-        }
-
-        days[i].isConsecutive = isConsecutive
-
-        prevDate = new Date(days[i].dateObject)
-      }
-
-      return days
-    },
-    /** Returns a subset of all days based on the page number */
-    days() {
-      const slice = this.allDays.slice(
-        this.page * this.maxDaysPerPage,
-        (this.page + 1) * this.maxDaysPerPage
-      )
-      slice[0] = { ...slice[0], isConsecutive: true }
-      return slice
-    },
-    /** Returns all the days of the month */
-    monthDays() {
-      const monthDays = []
-      const allDaysSet = new Set(
-        this.allDays.map((d) => d.dateObject.getTime())
-      )
-
-      // Calculate monthIndex and year from event start date and page num
-      const date = new Date(this.event.dates[0])
-      const monthIndex = date.getUTCMonth() + this.page
-      const year = date.getUTCFullYear()
-
-      const lastDayOfPrevMonth = new Date(Date.UTC(year, monthIndex, 0))
-      const lastDayOfCurMonth = new Date(Date.UTC(year, monthIndex + 1, 0))
-
-      // Calculate num days from prev month, cur month, and next month to show
-      const curDate = new Date(lastDayOfPrevMonth)
-      let numDaysFromPrevMonth = 0
-      const numDaysInCurMonth = lastDayOfCurMonth.getUTCDate()
-      const numDaysFromNextMonth = 6 - lastDayOfCurMonth.getUTCDay()
-      const hasDaysFromPrevMonth = !this.startCalendarOnMonday
-        ? lastDayOfPrevMonth.getUTCDay() < 6
-        : lastDayOfPrevMonth.getUTCDay() != 0
-      if (hasDaysFromPrevMonth) {
-        curDate.setUTCDate(
-          curDate.getUTCDate() -
-            (lastDayOfPrevMonth.getUTCDay() -
-              (this.startCalendarOnMonday ? 1 : 0))
-        )
-        numDaysFromPrevMonth = lastDayOfPrevMonth.getUTCDay() + 1
-      } else {
-        curDate.setUTCDate(curDate.getUTCDate() + 1)
-      }
-      curDate.setUTCHours(this.event.startTime)
-
-      // Add all days from prev month, cur month, and next month
-      const totalDays =
-        numDaysFromPrevMonth + numDaysInCurMonth + numDaysFromNextMonth
-      for (let i = 0; i < totalDays; ++i) {
-        // Only include days from the current month
-        if (curDate.getUTCMonth() === lastDayOfCurMonth.getUTCMonth()) {
-          monthDays.push({
-            date: curDate.getUTCDate(),
-            time: curDate.getTime(),
-            dateObject: new Date(curDate),
-            included: allDaysSet.has(curDate.getTime()),
-          })
-        } else {
-          monthDays.push({
-            date: "",
-            time: curDate.getTime(),
-            dateObject: new Date(curDate),
-            included: false,
-          })
-        }
-
-        curDate.setUTCDate(curDate.getUTCDate() + 1)
-      }
-
-      return monthDays
-    },
-    /** Map from datetime to whether that month day is included  */
-    monthDayIncluded() {
-      const includedMap = new Map()
-      for (const monthDay of this.monthDays) {
-        includedMap.set(monthDay.dateObject.getTime(), monthDay.included)
-      }
-      return includedMap
-    },
-    /** Returns the text to show for the current month */
-    curMonthText() {
-      const date = new Date(this.event.dates[0])
-      const monthIndex = date.getUTCMonth() + this.page
-      const year = date.getUTCFullYear()
-      const lastDayOfCurMonth = new Date(Date.UTC(year, monthIndex + 1, 0))
-
-      const monthText = this.months[lastDayOfCurMonth.getUTCMonth()]
-      const yearText = lastDayOfCurMonth.getUTCFullYear()
-      return `${monthText} ${yearText}`
     },
     defaultState() {
       // Either the heatmap or the best_times state, depending on the toggle
@@ -1553,17 +1235,6 @@ export default {
     isSpecificTimes() {
       return this.event.hasSpecificTimes
     },
-    respondents() {
-      return Object.values(this.parsedResponses)
-        .map((r) => r.user)
-        .filter(Boolean)
-    },
-    selectedGuestRespondent() {
-      if (this.curRespondents.length !== 1) return ""
-
-      const user = this.parsedResponses[this.curRespondents[0]].user
-      return this.isGuest(user) ? user._id : ""
-    },
     // Mirrors the server's requireResponseManager: admins always, otherwise
     // whoever manages the event — its owner, or member+ for a legacy ownerless
     // one. This returned true unconditionally, so a non-owner saw the pencil
@@ -1593,71 +1264,6 @@ export default {
       style.height = `calc(${height} * ${this.timeslotHeight}px)`
       return style
     },
-    /** Parses the responses to the gathering, makes necessary changes based on the type of event, and returns it */
-    parsedResponses() {
-      const parsed = {}
-
-      // Return only current user availability if using blind availabilities and user is not owner
-      if (this.event.blindAvailabilityEnabled && !this.isOwner) {
-        // Keyed off the session only — the server applies the same rule, and
-        // the ?guestName= escape hatch that bypassed it is gone.
-        const userId = this.authUser?._id
-        if (userId in this.event.responses) {
-          const user = {
-            ...this.event.responses[userId].user,
-            _id: userId,
-          }
-          parsed[userId] = {
-            ...this.event.responses[userId],
-            availability: new Set(
-              this.fetchedResponses[userId]?.availability?.map((a) =>
-                new Date(a).getTime()
-              )
-            ),
-            ifNeeded: new Set(
-              this.fetchedResponses[userId]?.ifNeeded?.map((a) =>
-                new Date(a).getTime()
-              )
-            ),
-            user: user,
-          }
-        }
-        return parsed
-      }
-
-      // Otherwise, parse responses so that if _id is null (i.e. guest user), then it is set to the guest user's name
-      for (const k of Object.keys(this.event.responses)) {
-        const newUser = {
-          ...this.event.responses[k].user,
-          _id: k,
-        }
-        parsed[k] = {
-          ...this.event.responses[k],
-          availability: new Set(
-            this.fetchedResponses[k]?.availability?.map((a) =>
-              new Date(a).getTime()
-            )
-          ),
-          ifNeeded: new Set(
-            this.fetchedResponses[k]?.ifNeeded?.map((a) =>
-              new Date(a).getTime()
-            )
-          ),
-          user: newUser,
-        }
-      }
-      return parsed
-    },
-    max() {
-      let max = 0
-      for (const availability of this.responsesFormatted.values()) {
-        if (availability.size > max) {
-          max = availability.size
-        }
-      }
-
-      return max
-    },
     /** Returns a set containing the times for the event if it has specific times */
     specificTimesSet() {
       return new Set(this.event.times?.map((t) => new Date(t).getTime()) ?? [])
@@ -1678,196 +1284,11 @@ export default {
     slotToBlock() {
       return buildSlotToBlockMap(this.specificTimeBlocks)
     },
-    /**
-     * Returns a two dimensional array of times
-     * IF endTime < startTime:
-     * the first element is an array of times between 12am and end time and the second element is an array of times between start time and 12am
-     * ELSE:
-     * the first element is an array of times between start time and end time. the second element is an empty array
-     * */
-    splitTimes() {
-      const splitTimes = [[], []]
-
-      const utcStartTime = this.event.startTime
-      const utcEndTime = this.event.startTime + this.event.duration
-      const localStartTime = utcTimeToLocalTime(
-        utcStartTime,
-        this.timezoneOffset
-      )
-      const localEndTime = utcTimeToLocalTime(utcEndTime, this.timezoneOffset)
-
-      // Weird timezones are timezones that are not a multiple of 60 minutes
-      // (e.g. GMT-2:30). See gridTimeOffset for why a specific-times event
-      // takes no shift.
-      const timeOffset = gridTimeOffset({
-        timezoneOffset: this.timezoneOffset,
-        eventStartTime: utcStartTime,
-        matchesStoredTimes:
-          this.isSpecificTimes && this.state !== this.states.SET_SPECIFIC_TIMES,
-      })
-
-      const getExtraTimes = (hoursOffset) => {
-        if (this.timeslotDuration === timeslotDurations.FIFTEEN_MINUTES) {
-          return [
-            {
-              hoursOffset: hoursOffset + 0.25,
-            },
-            {
-              hoursOffset: hoursOffset + 0.5,
-            },
-            {
-              hoursOffset: hoursOffset + 0.75,
-            },
-          ]
-        } else if (this.timeslotDuration === timeslotDurations.THIRTY_MINUTES) {
-          return [
-            {
-              hoursOffset: hoursOffset + 0.5,
-            },
-          ]
-        }
-        return []
-      }
-
-      if (this.state === this.states.SET_SPECIFIC_TIMES) {
-        // Hours offset for specific times starts from minHours
-        for (let i = 0; i <= 23; ++i) {
-          const hoursOffset = i
-          if (i === 9) {
-            // add an id so we can scroll to it
-            splitTimes[0].push({
-              id: "time-9",
-              hoursOffset,
-              text: timeNumToTimeText(i, this.timeType === timeTypes.HOUR12),
-            })
-          } else {
-            splitTimes[0].push({
-              hoursOffset,
-              text: timeNumToTimeText(i, this.timeType === timeTypes.HOUR12),
-            })
-          }
-          splitTimes[0].push(...getExtraTimes(hoursOffset))
-        }
-        return splitTimes
-      }
-
-      if (localEndTime <= localStartTime && localEndTime !== 0) {
-        for (let i = 0; i < localEndTime; ++i) {
-          splitTimes[0].push({
-            hoursOffset: this.event.duration - (localEndTime - i),
-            text: timeNumToTimeText(i, this.timeType === timeTypes.HOUR12),
-          })
-          splitTimes[0].push(
-            ...getExtraTimes(this.event.duration - (localEndTime - i))
-          )
-        }
-        for (let i = 0; i < 24 - localStartTime; ++i) {
-          const adjustedI = i + timeOffset
-          splitTimes[1].push({
-            hoursOffset: adjustedI,
-            text: timeNumToTimeText(
-              localStartTime + adjustedI,
-              this.timeType === timeTypes.HOUR12
-            ),
-          })
-          splitTimes[1].push(...getExtraTimes(adjustedI))
-        }
-      } else {
-        for (let i = 0; i < this.event.duration; ++i) {
-          const adjustedI = i + timeOffset
-          const utcTimeNum = this.event.startTime + adjustedI
-          const localTimeNum = utcTimeToLocalTime(
-            utcTimeNum,
-            this.timezoneOffset
-          )
-
-          splitTimes[0].push({
-            hoursOffset: adjustedI,
-            text: timeNumToTimeText(
-              localTimeNum,
-              this.timeType === timeTypes.HOUR12
-            ),
-          })
-          splitTimes[0].push(...getExtraTimes(adjustedI))
-        }
-        if (timeOffset !== 0) {
-          const localTimeNum = utcTimeToLocalTime(
-            this.event.startTime + this.event.duration - 0.5,
-            this.timezoneOffset
-          )
-          splitTimes[0].push({
-            hoursOffset: this.event.duration - 0.5,
-            text: timeNumToTimeText(
-              localTimeNum,
-              this.timeType === timeTypes.HOUR12
-            ),
-          })
-          splitTimes[0].push(...getExtraTimes(this.event.duration - 0.5))
-        }
-        splitTimes[1] = []
-      }
-
-      return splitTimes
-    },
-    /** Returns the times that are encompassed by startTime and endTime */
-    times() {
-      return [...this.splitTimes[1], ...this.splitTimes[0]]
-    },
-    timeslotDuration() {
-      return this.event.timeIncrement ?? timeslotDurations.FIFTEEN_MINUTES
-    },
-    timeslotHeight() {
-      if (this.timeslotDuration === timeslotDurations.FIFTEEN_MINUTES) {
-        return Math.floor(this.HOUR_HEIGHT / 4)
-      } else if (this.timeslotDuration === timeslotDurations.THIRTY_MINUTES) {
-        return Math.floor(this.HOUR_HEIGHT / 2)
-      } else if (this.timeslotDuration === timeslotDurations.ONE_HOUR) {
-        return this.HOUR_HEIGHT
-      }
-      return Math.floor(this.HOUR_HEIGHT / 4)
-    },
-    timezoneOffset() {
-      return getScheduleTimezoneOffset(
-        this.event,
-        this.curTimezone,
-        this.weekOffset
-      )
-    },
-    timezoneReferenceDate() {
-      return getTimezoneReferenceDateForEvent(this.event, this.weekOffset)
-    },
-    userHasResponded() {
-      return this.authUser && this.authUser._id in this.parsedResponses
-    },
     showLeftZigZag() {
       return this.calendarScrollLeft > 0
     },
     showRightZigZag() {
       return Math.ceil(this.calendarScrollLeft) < this.calendarMaxScroll
-    },
-    maxDaysPerPage() {
-      return this.isPhone ? this.mobileNumDays : 7
-    },
-    hasNextPage() {
-      if (this.event.daysOnly) {
-        const lastDay = new Date(this.event.dates[this.event.dates.length - 1])
-        const curDate = new Date(this.event.dates[0])
-        const monthIndex = curDate.getUTCMonth() + this.page
-        const year = curDate.getUTCFullYear()
-
-        const lastDayOfCurMonth = new Date(Date.UTC(year, monthIndex + 1, 0))
-
-        return lastDayOfCurMonth.getTime() < lastDay.getTime()
-      }
-
-      return this.allDays.length - (this.page + 1) * this.maxDaysPerPage > 0
-    },
-    hasPrevPage() {
-      return this.page > 0
-    },
-    /** Returns whether the event has more than one page */
-    hasPages() {
-      return this.hasNextPage || this.hasPrevPage
     },
 
     showStickyRespondents() {
@@ -1922,86 +1343,6 @@ export default {
       return this.showHintText && this.hintText != "" && !this.hintClosed
     },
 
-    timeslotClassStyle() {
-      const classStyles = []
-      for (let d = 0; d < this.days.length; ++d) {
-        const day = this.days[d]
-        for (let t = 0; t < this.splitTimes[0].length; ++t) {
-          const time = this.splitTimes[0][t]
-          classStyles.push(this.getTimeTimeslotClassStyle(day, time, d, t))
-        }
-        for (let t = 0; t < this.splitTimes[1].length; ++t) {
-          const time = this.splitTimes[1][t]
-          classStyles.push(
-            this.getTimeTimeslotClassStyle(
-              day,
-              time,
-              d,
-              t + this.splitTimes[0].length
-            )
-          )
-        }
-      }
-      return classStyles
-    },
-    dayTimeslotClassStyle() {
-      const classStyles = []
-      for (let i = 0; i < this.monthDays.length; ++i) {
-        classStyles.push(
-          this.getDayTimeslotClassStyle(this.monthDays[i].dateObject, i)
-        )
-      }
-      return classStyles
-    },
-    /** Per-cell traffic-light response counts for the time grid (indexed like timeslotClassStyle) */
-    timeslotCounts() {
-      const counts = []
-      for (let d = 0; d < this.days.length; ++d) {
-        for (let t = 0; t < this.splitTimes[0].length; ++t) {
-          counts.push(this.getTimeslotCount(this.getDateFromRowCol(t, d)))
-        }
-        for (let t = 0; t < this.splitTimes[1].length; ++t) {
-          counts.push(
-            this.getTimeslotCount(
-              this.getDateFromRowCol(t + this.splitTimes[0].length, d)
-            )
-          )
-        }
-      }
-      return counts
-    },
-    /** Per-cell traffic-light response counts for the daysOnly grid */
-    dayTimeslotCounts() {
-      const counts = []
-      for (let i = 0; i < this.monthDays.length; ++i) {
-        const date = this.monthDays[i].dateObject
-        counts.push(
-          this.monthDayIncluded.get(date.getTime())
-            ? this.getTimeslotCount(date)
-            : null
-        )
-      }
-      return counts
-    },
-    timeslotVon() {
-      const vons = []
-      for (let d = 0; d < this.days.length; ++d) {
-        for (let t = 0; t < this.times.length; ++t) {
-          vons.push(this.getTimeslotVon(t, d))
-        }
-      }
-      return vons
-    },
-    dayTimeslotVon() {
-      const vons = []
-      for (let i = 0; i < this.monthDays.length; ++i) {
-        const row = Math.floor(i / 7)
-        const col = i % 7
-        vons.push(this.getTimeslotVon(row, col))
-      }
-      return vons
-    },
-
     /** Whether to show spinner on top of availability grid */
     showLoader() {
       return (
@@ -2011,86 +1352,6 @@ export default {
         // Loading responses
         this.loadingResponses.loading
       )
-    },
-
-    /** Returns an array of time blocks representing the current user's availability
-     * (used for displaying current user's availability on top of everybody else's availability)
-     */
-    overlaidAvailability() {
-      const overlaidAvailability = []
-      this.days.forEach((day, d) => {
-        overlaidAvailability.push([])
-        let curBlockIndex = 0
-        const addOverlaidAvailabilityBlocks = (time, t) => {
-          const date = this.getDateFromRowCol(t, d)
-          if (!date) return
-
-          const dragAdd =
-            this.dragging &&
-            this.inDragRange(t, d) &&
-            this.dragType === this.DRAG_TYPES.ADD
-          const dragRemove =
-            this.dragging &&
-            this.inDragRange(t, d) &&
-            this.dragType === this.DRAG_TYPES.REMOVE
-
-          // Check if timeslot is available or if needed or in the drag region
-          if (
-            dragAdd ||
-            (!dragRemove &&
-              (this.availability.has(date.getTime()) ||
-                this.ifNeeded.has(date.getTime())))
-          ) {
-            // Determine whether to render as available or if needed block
-            let type = availabilityTypes.AVAILABLE
-            if (dragAdd) {
-              type = this.availabilityType
-            } else {
-              type = this.availability.has(date.getTime())
-                ? availabilityTypes.AVAILABLE
-                : availabilityTypes.IF_NEEDED
-            }
-
-            if (curBlockIndex in overlaidAvailability[d]) {
-              if (overlaidAvailability[d][curBlockIndex].type === type) {
-                // Increase block length if matching type and curBlockIndex exists
-                overlaidAvailability[d][curBlockIndex].hoursLength += 0.25
-              } else {
-                // Add a new block because type is different
-                overlaidAvailability[d].push({
-                  hoursOffset: time.hoursOffset,
-                  hoursLength: 0.25,
-                  type,
-                })
-                curBlockIndex++
-              }
-            } else {
-              // Add a new block because block doesn't exist for current index
-              overlaidAvailability[d].push({
-                hoursOffset: time.hoursOffset,
-                hoursLength: 0.25,
-                type,
-              })
-            }
-          } else if (curBlockIndex in overlaidAvailability[d]) {
-            // Only increment cur block index if block already exists at the current index
-            curBlockIndex++
-          }
-        }
-        for (let t = 0; t < this.splitTimes[0].length; ++t) {
-          addOverlaidAvailabilityBlocks(this.splitTimes[0][t], t)
-        }
-        if (curBlockIndex in overlaidAvailability[d]) {
-          curBlockIndex++
-        }
-        for (let t = 0; t < this.splitTimes[1].length; ++t) {
-          addOverlaidAvailabilityBlocks(
-            this.splitTimes[1][t],
-            t + this.splitTimes[0].length
-          )
-        }
-      })
-      return overlaidAvailability
     },
 
     // Options
@@ -2103,20 +1364,6 @@ export default {
         this.calendarPermissionGranted &&
         !this.userHasResponded
       )
-    },
-
-    /** Returns an array of the x-offsets of the columns, taking into account the split gaps from non-consecutive days */
-    columnOffsets() {
-      const offsets = []
-      let accumulatedOffset = 0
-      for (let i = 0; i < this.days.length; ++i) {
-        offsets.push(accumulatedOffset)
-        if (!this.days[i].isConsecutive) {
-          accumulatedOffset += this.SPLIT_GAP_WIDTH
-        }
-        accumulatedOffset += this.timeslot.width
-      }
-      return offsets
     },
   },
   methods: {

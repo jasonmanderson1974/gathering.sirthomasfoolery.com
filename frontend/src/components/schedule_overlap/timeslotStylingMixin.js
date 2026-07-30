@@ -11,10 +11,93 @@ dayjs.extend(utcPlugin)
  * Extracted verbatim from ScheduleOverlap.vue as a Vue 2 mixin (TODO A5).
  * Mixin methods run against the same component instance, so every `this.*`
  * reference resolves exactly as before — a behavior-preserving move, not a
- * rewrite. The component template binds these via its computed
- * timeslotClassStyle/timeslotVon maps.
+ * rewrite. The component template binds these via the timeslotClassStyle /
+ * timeslotVon maps below — computed fan-outs that call the per-cell methods
+ * once for every cell of the current page, so the template can index a flat
+ * array instead of invoking a method per cell on every render (TODO G2).
  */
 export default {
+  computed: {
+    timeslotClassStyle() {
+      const classStyles = []
+      for (let d = 0; d < this.days.length; ++d) {
+        const day = this.days[d]
+        for (let t = 0; t < this.splitTimes[0].length; ++t) {
+          const time = this.splitTimes[0][t]
+          classStyles.push(this.getTimeTimeslotClassStyle(day, time, d, t))
+        }
+        for (let t = 0; t < this.splitTimes[1].length; ++t) {
+          const time = this.splitTimes[1][t]
+          classStyles.push(
+            this.getTimeTimeslotClassStyle(
+              day,
+              time,
+              d,
+              t + this.splitTimes[0].length
+            )
+          )
+        }
+      }
+      return classStyles
+    },
+    dayTimeslotClassStyle() {
+      const classStyles = []
+      for (let i = 0; i < this.monthDays.length; ++i) {
+        classStyles.push(
+          this.getDayTimeslotClassStyle(this.monthDays[i].dateObject, i)
+        )
+      }
+      return classStyles
+    },
+    /** Per-cell traffic-light response counts for the time grid (indexed like timeslotClassStyle) */
+    timeslotCounts() {
+      const counts = []
+      for (let d = 0; d < this.days.length; ++d) {
+        for (let t = 0; t < this.splitTimes[0].length; ++t) {
+          counts.push(this.getTimeslotCount(this.getDateFromRowCol(t, d)))
+        }
+        for (let t = 0; t < this.splitTimes[1].length; ++t) {
+          counts.push(
+            this.getTimeslotCount(
+              this.getDateFromRowCol(t + this.splitTimes[0].length, d)
+            )
+          )
+        }
+      }
+      return counts
+    },
+    /** Per-cell traffic-light response counts for the daysOnly grid */
+    dayTimeslotCounts() {
+      const counts = []
+      for (let i = 0; i < this.monthDays.length; ++i) {
+        const date = this.monthDays[i].dateObject
+        counts.push(
+          this.monthDayIncluded.get(date.getTime())
+            ? this.getTimeslotCount(date)
+            : null
+        )
+      }
+      return counts
+    },
+    timeslotVon() {
+      const vons = []
+      for (let d = 0; d < this.days.length; ++d) {
+        for (let t = 0; t < this.times.length; ++t) {
+          vons.push(this.getTimeslotVon(t, d))
+        }
+      }
+      return vons
+    },
+    dayTimeslotVon() {
+      const vons = []
+      for (let i = 0; i < this.monthDays.length; ++i) {
+        const row = Math.floor(i / 7)
+        const col = i % 7
+        vons.push(this.getTimeslotVon(row, col))
+      }
+      return vons
+    },
+  },
   methods: {
     /**
      * Returns the traffic-light response count to render inside a timeslot, or

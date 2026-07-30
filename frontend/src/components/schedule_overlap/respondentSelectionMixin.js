@@ -6,8 +6,49 @@
  * reference resolves exactly as before — a behavior-preserving move, not a
  * rewrite. `deselectRespondents` is registered as a window click listener in
  * ScheduleOverlap's mounted/destroyed hooks.
+ *
+ * The computed block (added by TODO G2) covers what the current selection
+ * implies: membership lookups and the peak availability within it, which the
+ * heatmap scales against when a subset of respondents is selected.
  */
 export default {
+  computed: {
+    curRespondentsSet() {
+      return new Set(this.curRespondents)
+    },
+    /** Returns the max number of people in the curRespondents array available at any given time */
+    curRespondentsMax() {
+      let max = 0
+      if (this.event.daysOnly) {
+        for (const day of this.allDays) {
+          const num = [
+            ...(this.responsesFormatted.get(day.dateObject.getTime()) ??
+              new Set()),
+          ].filter((r) => this.curRespondentsSet.has(r)).length
+
+          if (num > max) max = num
+        }
+      } else {
+        for (let i = 0; i < this.event.dates.length; i++) {
+          const date = new Date(this.event.dates[i])
+          for (const time of this.times) {
+            const num = [
+              ...this.getRespondentsForHoursOffset(date, time.hoursOffset),
+            ].filter((r) => this.curRespondentsSet.has(r)).length
+
+            if (num > max) max = num
+          }
+        }
+      }
+      return max
+    },
+    selectedGuestRespondent() {
+      if (this.curRespondents.length !== 1) return ""
+
+      const user = this.parsedResponses[this.curRespondents[0]].user
+      return this.isGuest(user) ? user._id : ""
+    },
+  },
   methods: {
     mouseOverRespondent(e, id) {
       if (this.curRespondents.length === 0) {

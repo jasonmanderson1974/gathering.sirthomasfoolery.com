@@ -945,14 +945,45 @@ The sequencing that got there is at the bottom.
     actual bug shape (India/Nepal/Newfoundland).
 
 - [ ] **G2 (was A23) · Split the two remaining giants.** `L` · **P3**
-  **FREE PART DONE 2026-07-29** (`9831d303`); **`newEventFormMixin` DONE 2026-07-30.**
+  **FREE PART DONE 2026-07-29** (`9831d303`); **`newEventFormMixin` DONE 2026-07-30;
+  the `ScheduleOverlap` computed block DONE 2026-07-30.**
   The nine zero-caller exports were re-verified repo-wide and deleted — and deleting them
   **stranded two more** (`splitTime`, `getDateWithTimeNum`), whose only callers were among the
   nine, so eleven went rather than nine. Three of the internal-only five are unexported
   (`getDateRangeString`, `processTimeBlocks`, `stdTimezoneOffset`). `date_utils.js` is now
   **946 lines / 32 exports** (from 1,119 / 46) — the predicted ~32 surface, so the numbers below
-  for the split still stand. **Still to do:** the `ScheduleOverlap.vue` computed block and the
-  `date_utils` split itself — both of which want the app running, per A11's caveat.
+  for the split still stand. **Still to do:** only the `date_utils` split itself, which wants the
+  app running, per A11's caveat.
+
+  **What the computed pass did.** `ScheduleOverlap.vue` **2,713 → 1,960**; its `computed` block
+  **929 → 180 lines**. Two new mixins, plus computed blocks added to four that were methods-only
+  — the point being that each moved computed landed next to the methods it already served, so no
+  mixin is a grab-bag:
+  - `calendarDaysMixin` (279) — the **day axis**: `allDays`/`days`/`monthDays`, `daysOfWeek`,
+    `dayOffset`, `monthDayIncluded`, `curMonthText`, the four pagination computeds, `columnOffsets`.
+  - `timeGridMixin` (183) — the **time axis**: `splitTimes` (131 lines by itself) and `times`,
+    `timeslotDuration`/`timeslotHeight`, `timezoneOffset`, `timezoneReferenceDate`.
+  - `timeslotStylingMixin` += the six per-cell fan-out maps (`timeslotClassStyle`,
+    `dayTimeslotClassStyle`, `timeslot`/`dayTimeslotCounts`, `timeslot`/`dayTimeslotVon`) — they
+    do nothing but call that mixin's own per-cell methods once per cell.
+  - `availabilityMixin` += the read side of responses: `parsedResponses`, `respondents`, `max`,
+    `userHasResponded`.
+  - `respondentSelectionMixin` += `curRespondentsSet`, `curRespondentsMax`, `selectedGuestRespondent`.
+  - `currentAvailabilityMixin` += `availabilityArray`, `ifNeededArray`, `calendarEventsByDay`,
+    `overlaidAvailability`.
+
+  Eight now-unused imports left the component. **No behaviour change was intended and none was
+  made** — every one of the 63 function-bodied computeds is byte-identical to its original, checked
+  mechanically, and the 65-name set is unchanged with nothing duplicated (a duplicate would mean a
+  mixin/component shadow). Verified beyond that with a **before/after runtime snapshot**:
+  `verify_g2_overlap.js` dumps all 67 merged computeds (65 + the two Vuex spreads expanding to four
+  keys) plus a DOM fingerprint for four fixture gatherings — paged/overnight/days-only/weekly — in
+  five UI states each (initial, next page, back, and two timezones), 16 snapshots per run. The
+  extracted build reproduces the pre-extraction build **byte for byte**, and the snapshot is stable
+  across repeated runs on one build. Note when re-running it: the dev **server registers its static
+  routes at boot**, so a dist swap needs a `restart server`, and confirm which build is actually
+  live via `$options.mixins.length` (6 = before, 8 = after) — the bundle hash is not a reliable
+  discriminator and quietly cost one bogus "identical" result.
 
   **What the mixin pass found.** NewEvent 937→585, NewSignUp 776→417 (761 lines deleted for 50
   added), against `src/mixins/newEventForm.js` and a pure `src/components/newEventDates.js` (122)

@@ -9,8 +9,9 @@ import {
   getISODateString,
   getDateWithTimezone,
   timeNumToTimeString,
+  splitTimeBlocksByDay,
 } from "@/utils"
-import { calendarOptionsDefaults } from "@/constants"
+import { availabilityTypes, calendarOptionsDefaults } from "@/constants"
 import dayjs from "dayjs"
 
 /**
@@ -23,8 +24,154 @@ import dayjs from "dayjs"
  * Mixin methods run against the same component instance, so every `this.*`
  * reference (data, computed, mapped Vuex actions, other methods) resolves exactly
  * as before — a behavior-preserving move, not a rewrite.
+ *
+ * The computed block (added by TODO G2) is the same concern read-only: the
+ * user's own availability in the shapes the template wants — plain arrays, the
+ * blocks drawn on top of everyone else's heatmap, and the calendar events those
+ * are derived from.
  */
 export default {
+  computed: {
+    /** Returns the availability as an array */
+    availabilityArray() {
+      return [...this.availability].map((item) => new Date(item))
+    },
+    /** Returns the if needed availability as an array */
+    ifNeededArray() {
+      return [...this.ifNeeded].map((item) => new Date(item))
+    },
+    /** Returns an array of calendar events for all of the authUser's enabled calendars, separated by the day they occur on */
+    calendarEventsByDay() {
+      // If this is an example calendar
+      if (this.sampleCalendarEventsByDay) return this.sampleCalendarEventsByDay
+
+      // If the user isn't logged in or is adding availability as a guest
+      if (!this.authUser || this.addingAvailabilityAsGuest) return []
+
+      let events = []
+      let event
+
+      const calendarAccounts = this.authUser.calendarAccounts
+
+      // Adds events from calendar accounts that are enabled
+      for (const id in calendarAccounts) {
+        if (!calendarAccounts[id].enabled) continue
+
+        if (Object.prototype.hasOwnProperty.call(this.calendarEventsMap, id)) {
+          for (const index in this.calendarEventsMap[id].calendarEvents) {
+            event = this.calendarEventsMap[id].calendarEvents[index]
+
+            // Check if we need to update authUser (to get latest subcalendars)
+            const subCalendars = calendarAccounts[id].subCalendars
+            if (!subCalendars || !(event.calendarId in subCalendars)) {
+              // authUser doesn't contain the subCalendar, so push event to events without checking if subcalendar is enabled
+              // and queue the authUser to be refreshed
+              events.push(event)
+              if (!this.hasRefreshedAuthUser) {
+                this.refreshAuthUser()
+              }
+              continue
+            }
+
+            // Push event to events if subcalendar is enabled
+            if (subCalendars[event.calendarId].enabled) {
+              events.push(event)
+            }
+          }
+        }
+      }
+
+      const eventsCopy = JSON.parse(JSON.stringify(events))
+
+      const calendarEventsByDay = splitTimeBlocksByDay(
+        this.event,
+        eventsCopy,
+        this.weekOffset,
+        this.timezoneOffset
+      )
+
+      return calendarEventsByDay
+    },
+    /** Returns an array of time blocks representing the current user's availability
+     * (used for displaying current user's availability on top of everybody else's availability)
+     */
+    overlaidAvailability() {
+      const overlaidAvailability = []
+      this.days.forEach((day, d) => {
+        overlaidAvailability.push([])
+        let curBlockIndex = 0
+        const addOverlaidAvailabilityBlocks = (time, t) => {
+          const date = this.getDateFromRowCol(t, d)
+          if (!date) return
+
+          const dragAdd =
+            this.dragging &&
+            this.inDragRange(t, d) &&
+            this.dragType === this.DRAG_TYPES.ADD
+          const dragRemove =
+            this.dragging &&
+            this.inDragRange(t, d) &&
+            this.dragType === this.DRAG_TYPES.REMOVE
+
+          // Check if timeslot is available or if needed or in the drag region
+          if (
+            dragAdd ||
+            (!dragRemove &&
+              (this.availability.has(date.getTime()) ||
+                this.ifNeeded.has(date.getTime())))
+          ) {
+            // Determine whether to render as available or if needed block
+            let type = availabilityTypes.AVAILABLE
+            if (dragAdd) {
+              type = this.availabilityType
+            } else {
+              type = this.availability.has(date.getTime())
+                ? availabilityTypes.AVAILABLE
+                : availabilityTypes.IF_NEEDED
+            }
+
+            if (curBlockIndex in overlaidAvailability[d]) {
+              if (overlaidAvailability[d][curBlockIndex].type === type) {
+                // Increase block length if matching type and curBlockIndex exists
+                overlaidAvailability[d][curBlockIndex].hoursLength += 0.25
+              } else {
+                // Add a new block because type is different
+                overlaidAvailability[d].push({
+                  hoursOffset: time.hoursOffset,
+                  hoursLength: 0.25,
+                  type,
+                })
+                curBlockIndex++
+              }
+            } else {
+              // Add a new block because block doesn't exist for current index
+              overlaidAvailability[d].push({
+                hoursOffset: time.hoursOffset,
+                hoursLength: 0.25,
+                type,
+              })
+            }
+          } else if (curBlockIndex in overlaidAvailability[d]) {
+            // Only increment cur block index if block already exists at the current index
+            curBlockIndex++
+          }
+        }
+        for (let t = 0; t < this.splitTimes[0].length; ++t) {
+          addOverlaidAvailabilityBlocks(this.splitTimes[0][t], t)
+        }
+        if (curBlockIndex in overlaidAvailability[d]) {
+          curBlockIndex++
+        }
+        for (let t = 0; t < this.splitTimes[1].length; ++t) {
+          addOverlaidAvailabilityBlocks(
+            this.splitTimes[1][t],
+            t + this.splitTimes[0].length
+          )
+        }
+      })
+      return overlaidAvailability
+    },
+  },
   methods: {
     async refreshAuthUser() {
       this.hasRefreshedAuthUser = true

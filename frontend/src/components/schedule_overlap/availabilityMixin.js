@@ -7,8 +7,88 @@ import { getDateHoursOffset, get } from "@/utils"
  * Mixin methods run against the same component instance, so every `this.*`
  * reference resolves exactly as before — a behavior-preserving move, not a
  * rewrite. The component keeps all the state these methods read/write.
+ *
+ * The computed block (added by TODO G2) is the read side of the same concern:
+ * the server's `responses` object parsed into the shape everything else here
+ * consumes, plus the aggregates derived from it.
  */
 export default {
+  computed: {
+    /** Parses the responses to the gathering, makes necessary changes based on the type of event, and returns it */
+    parsedResponses() {
+      const parsed = {}
+
+      // Return only current user availability if using blind availabilities and user is not owner
+      if (this.event.blindAvailabilityEnabled && !this.isOwner) {
+        // Keyed off the session only — the server applies the same rule, and
+        // the ?guestName= escape hatch that bypassed it is gone.
+        const userId = this.authUser?._id
+        if (userId in this.event.responses) {
+          const user = {
+            ...this.event.responses[userId].user,
+            _id: userId,
+          }
+          parsed[userId] = {
+            ...this.event.responses[userId],
+            availability: new Set(
+              this.fetchedResponses[userId]?.availability?.map((a) =>
+                new Date(a).getTime()
+              )
+            ),
+            ifNeeded: new Set(
+              this.fetchedResponses[userId]?.ifNeeded?.map((a) =>
+                new Date(a).getTime()
+              )
+            ),
+            user: user,
+          }
+        }
+        return parsed
+      }
+
+      // Otherwise, parse responses so that if _id is null (i.e. guest user), then it is set to the guest user's name
+      for (const k of Object.keys(this.event.responses)) {
+        const newUser = {
+          ...this.event.responses[k].user,
+          _id: k,
+        }
+        parsed[k] = {
+          ...this.event.responses[k],
+          availability: new Set(
+            this.fetchedResponses[k]?.availability?.map((a) =>
+              new Date(a).getTime()
+            )
+          ),
+          ifNeeded: new Set(
+            this.fetchedResponses[k]?.ifNeeded?.map((a) =>
+              new Date(a).getTime()
+            )
+          ),
+          user: newUser,
+        }
+      }
+      return parsed
+    },
+    respondents() {
+      return Object.values(this.parsedResponses)
+        .map((r) => r.user)
+        .filter(Boolean)
+    },
+    /** The largest number of people available at any one time */
+    max() {
+      let max = 0
+      for (const availability of this.responsesFormatted.values()) {
+        if (availability.size > max) {
+          max = availability.size
+        }
+      }
+
+      return max
+    },
+    userHasResponded() {
+      return this.authUser && this.authUser._id in this.parsedResponses
+    },
+  },
   methods: {
     /** Fetches responses from server */
     fetchResponses() {
