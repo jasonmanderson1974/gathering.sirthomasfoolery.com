@@ -183,16 +183,6 @@ export default {
         } else {
           this.curScheduledEvent = null
         }
-      } else if (this.state === this.states.EDIT_SIGN_UP_BLOCKS) {
-        // Update sign up blocks
-        const dayIndex = this.dragStart.col
-        const hoursOffset = this.dragStart.row / 4
-        const hoursLength = (this.dragCur.row - this.dragStart.row + 1) / 4
-        if (hoursLength > 0) {
-          this.signUpBlocksToAddByDay[dayIndex].push(
-            this.createSignUpBlock(dayIndex, hoursOffset, hoursLength)
-          )
-        }
       }
 
       // Set dragging defaults
@@ -250,12 +240,7 @@ export default {
         ...Object.values(this.normalizeXY(e))
       )
 
-      if (
-        this.maxSignUpBlockRowSize &&
-        row >= this.dragStart.row + this.maxSignUpBlockRowSize
-      ) {
-        row = this.dragStart.row + this.maxSignUpBlockRowSize - 1
-      } else if (this.state === this.states.SCHEDULE_EVENT) {
+      if (this.state === this.states.SCHEDULE_EVENT) {
         const isFirstSplit = this.dragStart.row < this.splitTimes[0].length
         if (isFirstSplit) {
           row = Math.min(row, this.splitTimes[0].length - 1)
@@ -268,24 +253,6 @@ export default {
       const { row, col } = this.getRowColFromXY(
         ...Object.values(this.normalizeXY(e))
       )
-
-      // If sign up form, check if trying to drag in a block
-      if (this.isSignUp) {
-        for (const block of this.signUpBlocksByDay[col].concat(
-          this.signUpBlocksToAddByDay[col]
-        )) {
-          if (
-            isBetween(
-              row,
-              block.hoursOffset * 4,
-              (block.hoursOffset + block.hoursLength) * 4 - 1
-            )
-          ) {
-            this.$refs.signUpBlocksList.scrollToSignUpBlock(block._id)
-            return
-          }
-        }
-      }
 
       if (!this.allowDrag) return
       if (e.touches?.length > 1) return // If dragging with more than one finger
@@ -306,9 +273,7 @@ export default {
       e.preventDefault()
 
       // Set drag type
-      if (this.isSignUp) {
-        this.dragType = this.DRAG_TYPES.ADD
-      } else if (
+      if (
         this.isWholeBlockSelection &&
         this.state === this.states.EDIT_AVAILABILITY
       ) {

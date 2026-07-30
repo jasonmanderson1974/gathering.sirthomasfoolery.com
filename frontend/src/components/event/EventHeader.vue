@@ -75,7 +75,7 @@
           <v-icon class="tw-text-brass" v-else>mdi-share</v-icon>
         </v-btn>
       </div>
-      <div v-if="!isPhone && (!isSignUp || canEdit)" class="tw-flex tw-w-40">
+      <div v-if="!isPhone" class="tw-flex tw-w-40">
         <template v-if="!isEditing">
           <v-btn
             width="10.25rem"
@@ -127,7 +127,6 @@ export default {
   props: {
     event: { type: Object, required: true },
     canEdit: { type: Boolean, default: false },
-    isSignUp: { type: Boolean, default: false },
     isEditing: { type: Boolean, default: false },
     dateString: { type: String, default: "" },
     actionButtonText: { type: String, default: "" },

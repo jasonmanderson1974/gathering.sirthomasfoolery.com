@@ -59,7 +59,10 @@ export default {
 
       if (count === 0 || total === 0) return null
 
-      return { text: String(count), class: getResponseCountColorClass(count, total) }
+      return {
+        text: String(count),
+        class: getResponseCountColorClass(count, total),
+      }
     },
     setTimeslotSize() {
       /* Gets the dimensions of each timeslot and assigns it to the timeslot variable */
@@ -150,8 +153,7 @@ export default {
 
       // Edit fill color and border color if day is not interactable
       if (isDisabled) {
-        classStyle.class +=
-          "tw-bg-light-gray-stroke tw-border-brass-dim "
+        classStyle.class += "tw-bg-light-gray-stroke tw-border-brass-dim "
       }
 
       // Change default red:
@@ -171,11 +173,6 @@ export default {
         this.responsesFormatted.get(date.getTime()) ?? new Set()
 
       // Fill style
-
-      if (this.isSignUp) {
-        c += "tw-bg-leather "
-        return { class: c, style: s }
-      }
 
       if (
         (!this.overlayAvailability &&
@@ -440,8 +437,7 @@ export default {
             // Highlight availability button
             if (
               this.state === this.defaultState &&
-              ((!this.isPhone &&
-                !this.userHasResponded) ||
+              ((!this.isPhone && !this.userHasResponded) ||
                 this.respondents.length == 0)
             )
               this.highlightAvailabilityBtn()

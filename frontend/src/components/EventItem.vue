@@ -1,8 +1,8 @@
 <template>
   <router-link
     :to="{
-      name: linkTo,
-      params: { [identifier]: event.shortId ?? event._id },
+      name: 'event',
+      params: { eventId: event.shortId ?? event._id },
     }"
   >
     <v-container
@@ -223,22 +223,6 @@ export default {
     },
     isDow() {
       return this.event.type === eventTypes.DOW
-    },
-    isSignUp() {
-      return this.event.isSignUpForm
-    },
-    linkTo() {
-      if (this.isSignUp) {
-        return "signUp"
-      }
-
-      return "event"
-    },
-    identifier() {
-      if (this.isSignUp) {
-        return "signUpId"
-      }
-      return "eventId"
     },
     typeText() {
       return "event"

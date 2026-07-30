@@ -173,8 +173,7 @@ func addMonthsClamped(t time.Time, n int) time.Time {
 }
 
 // RSVP to a confirmed gathering (paired with ScheduledEvent). Stored on the
-// Event as a map keyed by guest name or signed-in user id, mirroring
-// SignUpResponses.
+// Event as a map keyed by guest name or signed-in user id.
 type RsvpStatus string
 
 const (
@@ -209,7 +208,7 @@ type Rsvp struct {
 // should we meet?" or "What should we do?". The owner creates it; members and
 // guests vote. Votes live on each option (keyed by responder) so counts + the
 // voter roster render straight from the event with no extra fetch. Stored as an
-// array on the Event, mirroring SignUpBlocks.
+// array on the Event.
 type Poll struct {
 	Id    primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
 	Title string             `json:"title" bson:"title,omitempty"`
@@ -287,31 +286,6 @@ type EventListItem struct {
 	CheckedAt     primitive.DateTime  `json:"checkedAt,omitempty" bson:"checkedAt,omitempty"`
 }
 
-type SignUpBlock struct {
-	Id        primitive.ObjectID  `json:"_id" bson:"_id,omitempty"`
-	Name      string              `json:"name" bson:"name,omitempty"`
-	Capacity  *int                `json:"capacity" bson:"capacity,omitempty"`
-	StartDate *primitive.DateTime `json:"startDate" bson:"startDate,omitempty"`
-	EndDate   *primitive.DateTime `json:"endDate" bson:"endDate,omitempty"`
-}
-
-type SignUpResponse struct {
-	// The IDs of the sign up blocks the user is CONFIRMED for (within capacity)
-	SignUpBlockIds []primitive.ObjectID `json:"signUpBlockIds" bson:"signUpBlockIds,omitempty"`
-
-	// The IDs of the sign up blocks the user is WAITLISTED for (block was full).
-	// Assigned server-side by capacity; see assignSignUpBlocks (C9).
-	WaitlistBlockIds []primitive.ObjectID `json:"waitlistBlockIds" bson:"waitlistBlockIds,omitempty"`
-
-	// Guest information
-	Name  string `json:"name" bson:"name,omitempty"`
-	Email string `json:"email" bson:"email,omitempty"`
-
-	// User information
-	UserId primitive.ObjectID `json:"userId" bson:"userId,omitempty"`
-	User   *User              `json:"user" bson:",omitempty"`
-}
-
 // Representation of an Event in the mongoDB database
 type Event struct {
 	Id          primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
@@ -342,11 +316,6 @@ type Event struct {
 	WholeBlockSelection *bool `json:"wholeBlockSelection" bson:"wholeBlockSelection,omitempty"`
 
 	Type EventType `json:"type" bson:"type,omitempty"`
-
-	// Sign up form details
-	IsSignUpForm    *bool                      `json:"isSignUpForm" bson:"isSignUpForm,omitempty"`
-	SignUpBlocks    *[]SignUpBlock             `json:"signUpBlocks" bson:"signUpBlocks,omitempty"`
-	SignUpResponses map[string]*SignUpResponse `json:"signUpResponses" bson:"signUpResponses"`
 
 	// Whether to start the event on Monday (as opposed to Sunday, used for DOW events)
 	StartOnMonday *bool `json:"startOnMonday" bson:"startOnMonday,omitempty"`

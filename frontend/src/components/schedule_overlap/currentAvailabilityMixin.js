@@ -2,7 +2,6 @@ import {
   dateCompare,
   getDateHoursOffset,
   post,
-  put,
   _delete,
   get,
   getDateDayOffset,
@@ -239,53 +238,6 @@ export default {
       this.refreshEvent()
       this.unsavedChanges = false
     },
-    async submitNewSignUpBlocks() {
-      if (
-        this.signUpBlocksToAddByDay.flat().length +
-          this.signUpBlocksByDay.flat().length ===
-        0
-      ) {
-        this.showError("Please add at least one sign-up block!")
-        return false
-      }
-
-      for (let i = 0; i < this.signUpBlocksToAddByDay.length; ++i) {
-        this.signUpBlocksByDay[i] = this.signUpBlocksByDay[i].concat(
-          this.signUpBlocksToAddByDay[i]
-        )
-        this.signUpBlocksToAddByDay[i] = []
-      }
-
-      const payload = {
-        name: this.event.name,
-        duration: this.event.duration,
-        dates: this.event.dates,
-        type: this.event.type,
-        signUpBlocks: this.signUpBlocksByDay.flat().map((block) => {
-          return {
-            _id: block._id,
-            name: block.name,
-            capacity: block.capacity,
-            startDate: block.startDate,
-            endDate: block.endDate,
-          }
-        }),
-      }
-
-      put(`/events/${this.event._id}`, payload)
-        .then(() => {
-          // window.location.reload()
-        })
-        .catch((err) => {
-          console.error(err)
-          this.showError(
-            "There was a problem editing this event! Please try again later."
-          )
-        })
-
-      return true
-    },
-
     async deleteAvailability(name = "") {
       const payload = {}
       if (this.authUser && !this.addingAvailabilityAsGuest) {

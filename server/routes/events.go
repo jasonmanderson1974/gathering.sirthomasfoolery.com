@@ -90,7 +90,7 @@ func trimmedLocation(location *string) *string {
 
 // Input caps for the event create/edit payloads. Comments and polls already cap
 // their inputs (2,000 chars / 20 options); these extend the same discipline to
-// events, where an uncapped Name and unbounded Dates/Times/Remindees/SignUpBlocks
+// events, where an uncapped Name and unbounded Dates/Times/Remindees
 // let one request store a multi-megabyte document.
 //
 // Deliberately generous — no legitimate client comes close. The frontend builds
@@ -102,17 +102,15 @@ const (
 	maxEventDates             = 366 // a year of daily options
 	maxEventTimes             = 366
 	maxEventRemindees         = 200
-	maxEventSignUpBlocks      = 200
 )
 
 // eventPayloadLimits is the shared shape of the create/edit payload fields that
 // need bounding, so both handlers enforce one rule set.
 type eventPayloadLimits struct {
-	Type         models.EventType
-	Dates        []primitive.DateTime
-	Times        []primitive.DateTime
-	Remindees    []string
-	SignUpBlocks *[]models.SignUpBlock
+	Type      models.EventType
+	Dates     []primitive.DateTime
+	Times     []primitive.DateTime
+	Remindees []string
 }
 
 // validateEventPayload rejects an unusable event payload, writing the response
@@ -134,8 +132,7 @@ func validateEventPayload(c *gin.Context, p eventPayloadLimits) bool {
 	switch {
 	case tooMany(len(p.Dates), maxEventDates),
 		tooMany(len(p.Times), maxEventTimes),
-		tooMany(len(p.Remindees), maxEventRemindees),
-		p.SignUpBlocks != nil && tooMany(len(*p.SignUpBlocks), maxEventSignUpBlocks):
+		tooMany(len(p.Remindees), maxEventRemindees):
 		c.JSON(http.StatusBadRequest, responses.Error{Error: errs.PayloadTooLarge})
 		return false
 	}
@@ -207,7 +204,7 @@ func requireEventManager(c *gin.Context, event *models.Event) bool {
 // @Tags events
 // @Accept json
 // @Produce json
-// @Param payload body object{name=string,duration=float32,dates=[]string,type=models.EventType,isSignUpForm=bool,signUpBlocks=[]models.SignUpBlock,notificationsEnabled=bool,blindAvailabilityEnabled=bool,daysOnly=bool,wholeBlockSelection=bool,remindees=[]string,sendEmailAfterXResponses=int,when2meetHref=string,timeIncrement=int} true "Object containing info about the event to create"
+// @Param payload body object{name=string,duration=float32,dates=[]string,type=models.EventType,notificationsEnabled=bool,blindAvailabilityEnabled=bool,daysOnly=bool,wholeBlockSelection=bool,remindees=[]string,sendEmailAfterXResponses=int,when2meetHref=string,timeIncrement=int} true "Object containing info about the event to create"
 // @Success 201 {object} object{eventId=string}
 // @Router /events [post]
 func createEvent(c *gin.Context) {
@@ -224,8 +221,6 @@ func createEvent(c *gin.Context) {
 		WholeBlockSelection *bool                `json:"wholeBlockSelection"`
 
 		// Only for sign up form events
-		IsSignUpForm *bool                 `json:"isSignUpForm"`
-		SignUpBlocks *[]models.SignUpBlock `json:"signUpBlocks"`
 
 		// Only for events (not groups)
 		StartOnMonday            *bool    `json:"startOnMonday"`
@@ -246,11 +241,10 @@ func createEvent(c *gin.Context) {
 		return
 	}
 	if !validateEventPayload(c, eventPayloadLimits{
-		Type:         payload.Type,
-		Dates:        payload.Dates,
-		Times:        payload.Times,
-		Remindees:    payload.Remindees,
-		SignUpBlocks: payload.SignUpBlocks,
+		Type:      payload.Type,
+		Dates:     payload.Dates,
+		Times:     payload.Times,
+		Remindees: payload.Remindees,
 	}) {
 		return
 	}
@@ -282,8 +276,6 @@ func createEvent(c *gin.Context) {
 		HasSpecificTimes:         payload.HasSpecificTimes,
 		Times:                    payload.Times,
 		WholeBlockSelection:      payload.WholeBlockSelection,
-		IsSignUpForm:             payload.IsSignUpForm,
-		SignUpBlocks:             payload.SignUpBlocks,
 		StartOnMonday:            payload.StartOnMonday,
 		NotificationsEnabled:     payload.NotificationsEnabled,
 		BlindAvailabilityEnabled: payload.BlindAvailabilityEnabled,
@@ -294,7 +286,6 @@ func createEvent(c *gin.Context) {
 		TimeIncrement:            payload.TimeIncrement,
 		Location:                 trimmedLocation(payload.Location),
 		Type:                     payload.Type,
-		SignUpResponses:          make(map[string]*models.SignUpResponse),
 		NumResponses:             &numResponses,
 	}
 
@@ -338,7 +329,7 @@ func createEvent(c *gin.Context) {
 // @Tags events
 // @Produce json
 // @Param eventId path string true "Event ID"
-// @Param payload body object{name=string,description=string,duration=float32,dates=[]string,type=models.EventType,signUpBlocks=[]models.SignUpBlock,notificationsEnabled=bool,blindAvailabilityEnabled=bool,daysOnly=bool,wholeBlockSelection=bool,remindees=[]string,sendEmailAfterXResponses=int} true "Object containing info about the event to update"
+// @Param payload body object{name=string,description=string,duration=float32,dates=[]string,type=models.EventType,notificationsEnabled=bool,blindAvailabilityEnabled=bool,daysOnly=bool,wholeBlockSelection=bool,remindees=[]string,sendEmailAfterXResponses=int} true "Object containing info about the event to update"
 // @Success 200
 // @Router /events/{eventId} [put]
 func editEvent(c *gin.Context) {
@@ -359,7 +350,6 @@ func editEvent(c *gin.Context) {
 		Location    *string `json:"location"`
 
 		// Only for sign up form events
-		SignUpBlocks *[]models.SignUpBlock `json:"signUpBlocks"`
 
 		// Only for events (not groups)
 		StartOnMonday            *bool    `json:"startOnMonday"`
@@ -377,11 +367,10 @@ func editEvent(c *gin.Context) {
 		return
 	}
 	if !validateEventPayload(c, eventPayloadLimits{
-		Type:         payload.Type,
-		Dates:        payload.Dates,
-		Times:        payload.Times,
-		Remindees:    payload.Remindees,
-		SignUpBlocks: payload.SignUpBlocks,
+		Type:      payload.Type,
+		Dates:     payload.Dates,
+		Times:     payload.Times,
+		Remindees: payload.Remindees,
 	}) {
 		return
 	}
@@ -411,7 +400,6 @@ func editEvent(c *gin.Context) {
 	event.Times = payload.Times
 	event.HasSpecificTimes = payload.HasSpecificTimes
 	event.WholeBlockSelection = payload.WholeBlockSelection
-	event.SignUpBlocks = payload.SignUpBlocks
 	event.StartOnMonday = payload.StartOnMonday
 	event.NotificationsEnabled = payload.NotificationsEnabled
 	event.BlindAvailabilityEnabled = payload.BlindAvailabilityEnabled
@@ -551,32 +539,6 @@ func getEvent(c *gin.Context) {
 		responsesMap[userId].ManualAvailability = nil
 	}
 
-	// Populate sign up form fields
-	for userId, response := range event.SignUpResponses {
-		user, userErr := db.GetUserById(userId)
-		if userErr != nil {
-			logger.StdErr.Println(userErr)
-			continue
-		}
-		if user == nil {
-			if len(response.Name) == 0 {
-				// User was deleted
-				delete(event.SignUpResponses, userId)
-				continue
-			} else {
-				// User is guest
-				userId = response.Name
-				response.User = &models.User{
-					FirstName: response.Name,
-					Email:     response.Email,
-				}
-			}
-		} else {
-			response.User = user
-		}
-		event.SignUpResponses[userId] = response
-	}
-
 	// Determine if the requester is the event owner
 	ownerSesh := event.OwnerId.Hex()
 	session := sessions.Default(c)
@@ -598,16 +560,6 @@ func getEvent(c *gin.Context) {
 			}
 		}
 		responsesMap[userId] = response
-	}
-	for userId, response := range event.SignUpResponses {
-		stripSensitiveUserFields(response.User)
-		if !showEmails {
-			response.Email = ""
-			if response.User != nil {
-				response.User.Email = ""
-			}
-		}
-		event.SignUpResponses[userId] = response
 	}
 
 	// RSVPs (C1) carry the responder's email — backfilled from the account for

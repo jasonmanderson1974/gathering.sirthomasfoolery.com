@@ -146,7 +146,7 @@ func filterResponsesForBlindAvailability(event *models.Event, responsesMap map[s
 // @Accept json
 // @Produce json
 // @Param eventId path string true "Event ID"
-// @Param payload body object{availability=[]string,ifNeeded=[]string,guest=bool,name=string,useCalendarAvailability=bool,enabledCalendars=map[string][]string,manualAvailability=map[string][]string,calendarOptions=models.CalendarOptions,signUpBlockIds=[]string} true "Object containing info about the event response to update"
+// @Param payload body object{availability=[]string,ifNeeded=[]string,guest=bool,name=string,useCalendarAvailability=bool,enabledCalendars=map[string][]string,manualAvailability=map[string][]string,calendarOptions=models.CalendarOptions} true "Object containing info about the event response to update"
 // @Success 200
 // @Router /events/{eventId}/response [post]
 func updateEventResponse(c *gin.Context) {
@@ -166,7 +166,6 @@ func updateEventResponse(c *gin.Context) {
 		CalendarOptions         *models.CalendarOptions                      `json:"calendarOptions"`
 
 		// Sign up form variables
-		SignUpBlockIds []primitive.ObjectID `json:"signUpBlockIds"`
 	}{}
 	if err := c.Bind(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
@@ -225,108 +224,68 @@ func updateEventResponse(c *gin.Context) {
 	// write at the end can be scoped to it rather than re-writing the whole
 	// event over whatever anyone else has done in the meantime.
 	numResponsesDelta := 0
-	var signUpResponseKey string
-	var signUpResponse *models.SignUpResponse
-	if !utils.Coalesce(event.IsSignUpForm) {
-		// Populate response differently if guest vs signed in user
-		var response models.Response
-		if *payload.Guest {
-			userIdString = payload.Name
+	// Populate response differently if guest vs signed in user
+	var response models.Response
+	if *payload.Guest {
+		userIdString = payload.Name
 
-			response = models.Response{
-				Name:         payload.Name,
-				Email:        payload.Email,
-				Availability: payload.Availability,
-				IfNeeded:     payload.IfNeeded,
-			}
-		} else {
-			userIdInterface := session.Get("userId")
-			if userIdInterface == nil {
-				c.JSON(http.StatusUnauthorized, responses.Error{Error: errs.NotSignedIn})
-				c.Abort()
-				return
-			}
-			userIdString = userIdInterface.(string)
-			userId := utils.StringToObjectID(userIdString)
-
-			response = models.Response{
-				UserId:                  userId,
-				Availability:            payload.Availability,
-				IfNeeded:                payload.IfNeeded,
-				UseCalendarAvailability: payload.UseCalendarAvailability,
-				EnabledCalendars:        payload.EnabledCalendars,
-				CalendarOptions:         payload.CalendarOptions,
-			}
-
-		}
-
-		// Check if user has responded to event before (edit response) or not (new response)
-		idx, _ := findResponse(eventResponses, userIdString)
-		userHasResponded = idx != -1
-
-		// Update event responses
-		if userHasResponded {
-			// This IS the availability being saved — swallowing the error meant
-			// answering 200 to a member whose response was never stored.
-			if _, err := db.EventResponsesCollection.UpdateOne(context.Background(), bson.M{
-				"_id": eventResponses[idx].Id,
-			}, bson.M{
-				"$set": bson.M{
-					"response": &response,
-				},
-			}); err != nil {
-				logger.StdErr.Println(err)
-				c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-				return
-			}
-		} else {
-			if _, err := db.EventResponsesCollection.InsertOne(context.Background(), models.EventResponse{
-				UserId:   userIdString,
-				Response: &response,
-				EventId:  event.Id,
-			}); err != nil {
-				logger.StdErr.Println(err)
-			} else {
-				*event.NumResponses++
-				numResponsesDelta = 1
-			}
+		response = models.Response{
+			Name:         payload.Name,
+			Email:        payload.Email,
+			Availability: payload.Availability,
+			IfNeeded:     payload.IfNeeded,
 		}
 	} else {
-		var response models.SignUpResponse
-		var userIdString string
-		// Populate response differently if guest vs signed in user
-		if *payload.Guest {
-			userIdString = payload.Name
-			response = models.SignUpResponse{
-				Name:  payload.Name,
-				Email: payload.Email,
-			}
+		userIdInterface := session.Get("userId")
+		if userIdInterface == nil {
+			c.JSON(http.StatusUnauthorized, responses.Error{Error: errs.NotSignedIn})
+			c.Abort()
+			return
+		}
+		userIdString = userIdInterface.(string)
+		userId := utils.StringToObjectID(userIdString)
+
+		response = models.Response{
+			UserId:                  userId,
+			Availability:            payload.Availability,
+			IfNeeded:                payload.IfNeeded,
+			UseCalendarAvailability: payload.UseCalendarAvailability,
+			EnabledCalendars:        payload.EnabledCalendars,
+			CalendarOptions:         payload.CalendarOptions,
+		}
+
+	}
+
+	// Check if user has responded to event before (edit response) or not (new response)
+	idx, _ := findResponse(eventResponses, userIdString)
+	userHasResponded = idx != -1
+
+	// Update event responses
+	if userHasResponded {
+		// This IS the availability being saved — swallowing the error meant
+		// answering 200 to a member whose response was never stored.
+		if _, err := db.EventResponsesCollection.UpdateOne(context.Background(), bson.M{
+			"_id": eventResponses[idx].Id,
+		}, bson.M{
+			"$set": bson.M{
+				"response": &response,
+			},
+		}); err != nil {
+			logger.StdErr.Println(err)
+			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+			return
+		}
+	} else {
+		if _, err := db.EventResponsesCollection.InsertOne(context.Background(), models.EventResponse{
+			UserId:   userIdString,
+			Response: &response,
+			EventId:  event.Id,
+		}); err != nil {
+			logger.StdErr.Println(err)
 		} else {
-			userIdInterface := session.Get("userId")
-			if userIdInterface == nil {
-				c.JSON(http.StatusUnauthorized, responses.Error{Error: errs.NotSignedIn})
-				c.Abort()
-				return
-			}
-			userIdString = userIdInterface.(string)
-			response = models.SignUpResponse{
-				UserId: utils.StringToObjectID(userIdString),
-			}
+			*event.NumResponses++
+			numResponsesDelta = 1
 		}
-
-		// Enforce block capacity server-side: confirmed within capacity, the rest
-		// waitlisted (C9). Authoritative — the client can't overfill a slot.
-		response.SignUpBlockIds, response.WaitlistBlockIds = assignSignUpBlocks(event, userIdString, payload.SignUpBlockIds)
-
-		// Check if user has responded to event before (edit response) or not (new response)
-		_, userHasResponded = event.SignUpResponses[userIdString]
-
-		// Update event responses
-		if event.SignUpResponses == nil {
-			event.SignUpResponses = make(map[string]*models.SignUpResponse)
-		}
-		event.SignUpResponses[userIdString] = &response
-		signUpResponseKey, signUpResponse = userIdString, &response
 	}
 
 	// Send notification emails
@@ -425,13 +384,6 @@ func updateEventResponse(c *gin.Context) {
 			return
 		}
 	}
-	if signUpResponse != nil {
-		if err := db.SetSignUpResponse(event.Id, signUpResponseKey, signUpResponse, event.SignUpResponses); err != nil {
-			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-			return
-		}
-	}
-
 	c.JSON(http.StatusOK, gin.H{})
 }
 
@@ -473,7 +425,6 @@ func deleteEventResponse(c *gin.Context) {
 	// A16: track what this delete actually changed, so the write below is
 	// scoped to it.
 	numResponsesDelta := 0
-	removedSignUpKey := ""
 
 	if *payload.Guest {
 		// Deleting a by-name response is acting on someone else's data, so it
@@ -482,26 +433,21 @@ func deleteEventResponse(c *gin.Context) {
 		if !requireResponseManager(c, event) {
 			return
 		}
-		if utils.Coalesce(event.IsSignUpForm) {
-			delete(event.SignUpResponses, payload.Name)
-			removedSignUpKey = payload.Name
-		} else {
-			// Remove response from array
-			for i := range eventResponses {
-				if eventResponses[i].Response.Name == payload.Name {
-					// Only adjust the count if the response actually went —
-					// otherwise numResponses drifts away from the responses.
-					if _, err := db.EventResponsesCollection.DeleteOne(context.Background(), bson.M{
-						"_id": eventResponses[i].Id,
-					}); err != nil {
-						logger.StdErr.Println(err)
-						c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-						return
-					}
-					*event.NumResponses--
-					numResponsesDelta = -1
-					break
+		// Remove response from array
+		for i := range eventResponses {
+			if eventResponses[i].Response.Name == payload.Name {
+				// Only adjust the count if the response actually went —
+				// otherwise numResponses drifts away from the responses.
+				if _, err := db.EventResponsesCollection.DeleteOne(context.Background(), bson.M{
+					"_id": eventResponses[i].Id,
+				}); err != nil {
+					logger.StdErr.Println(err)
+					c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+					return
 				}
+				*event.NumResponses--
+				numResponsesDelta = -1
+				break
 			}
 		}
 	} else {
@@ -520,29 +466,23 @@ func deleteEventResponse(c *gin.Context) {
 			return
 		}
 
-		if utils.Coalesce(event.IsSignUpForm) {
-			delete(event.SignUpResponses, payload.UserId)
-			removedSignUpKey = payload.UserId
-		} else {
-			// Remove response from array
-			for i := range eventResponses {
-				if eventResponses[i].UserId == payload.UserId {
-					// Only adjust the count if the response actually went —
-					// otherwise numResponses drifts away from the responses.
-					if _, err := db.EventResponsesCollection.DeleteOne(context.Background(), bson.M{
-						"_id": eventResponses[i].Id,
-					}); err != nil {
-						logger.StdErr.Println(err)
-						c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-						return
-					}
-					*event.NumResponses--
-					numResponsesDelta = -1
-					break
+		// Remove response from array
+		for i := range eventResponses {
+			if eventResponses[i].UserId == payload.UserId {
+				// Only adjust the count if the response actually went —
+				// otherwise numResponses drifts away from the responses.
+				if _, err := db.EventResponsesCollection.DeleteOne(context.Background(), bson.M{
+					"_id": eventResponses[i].Id,
+				}); err != nil {
+					logger.StdErr.Println(err)
+					c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+					return
 				}
+				*event.NumResponses--
+				numResponsesDelta = -1
+				break
 			}
 		}
-
 	}
 
 	// Scoped to what was actually removed, so a concurrent responder isn't
@@ -550,9 +490,6 @@ func deleteEventResponse(c *gin.Context) {
 	var err error
 	if numResponsesDelta != 0 {
 		err = db.IncrementNumResponses(event.Id, numResponsesDelta)
-	}
-	if err == nil && removedSignUpKey != "" {
-		err = db.DeleteSignUpResponse(event.Id, removedSignUpKey, event.SignUpResponses)
 	}
 	if err != nil {
 		logger.StdErr.Println(err)
@@ -759,51 +696,6 @@ func getResponsesMap(responses []models.EventResponse) map[string]*models.Respon
 		result[resp.UserId] = resp.Response
 	}
 	return result
-}
-
-// assignSignUpBlocks splits the blocks a user requested into confirmed (within
-// the block's capacity) and waitlisted (block already full) — the server-side
-// enforcement + waitlist for C9. A block with no capacity set is unlimited. The
-// user's own existing signup is excluded from the counts, and any block they
-// were already confirmed for keeps its spot (a re-submit never bumps you to the
-// waitlist). Order follows the requested slice for determinism.
-func assignSignUpBlocks(event *models.Event, userIdString string, requested []primitive.ObjectID) (confirmed, waitlisted []primitive.ObjectID) {
-	capacityByBlock := make(map[primitive.ObjectID]*int)
-	if event.SignUpBlocks != nil {
-		for _, b := range *event.SignUpBlocks {
-			capacityByBlock[b.Id] = b.Capacity
-		}
-	}
-
-	// Confirmed count per block across OTHER users, plus which blocks this user
-	// was already confirmed for.
-	confirmedCount := make(map[primitive.ObjectID]int)
-	alreadyConfirmed := make(map[primitive.ObjectID]bool)
-	for uid, resp := range event.SignUpResponses {
-		if resp == nil {
-			continue
-		}
-		if uid == userIdString {
-			for _, bid := range resp.SignUpBlockIds {
-				alreadyConfirmed[bid] = true
-			}
-			continue // exclude self from the counts
-		}
-		for _, bid := range resp.SignUpBlockIds {
-			confirmedCount[bid]++
-		}
-	}
-
-	for _, bid := range requested {
-		capacity, known := capacityByBlock[bid]
-		if !known || capacity == nil || alreadyConfirmed[bid] || confirmedCount[bid] < *capacity {
-			confirmed = append(confirmed, bid)
-			confirmedCount[bid]++ // reserve the seat for any later duplicate
-		} else {
-			waitlisted = append(waitlisted, bid)
-		}
-	}
-	return confirmed, waitlisted
 }
 
 // clampGuestCount bounds a plus-one count to a sane range. A plus-one only

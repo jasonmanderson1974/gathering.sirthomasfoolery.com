@@ -642,9 +642,6 @@ const docTemplate = `{
                                 "duration": {
                                     "type": "number"
                                 },
-                                "isSignUpForm": {
-                                    "type": "boolean"
-                                },
                                 "name": {
                                     "type": "string"
                                 },
@@ -659,12 +656,6 @@ const docTemplate = `{
                                 },
                                 "sendEmailAfterXResponses": {
                                     "type": "integer"
-                                },
-                                "signUpBlocks": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/definitions/models.SignUpBlock"
-                                    }
                                 },
                                 "timeIncrement": {
                                     "type": "integer"
@@ -826,12 +817,6 @@ const docTemplate = `{
                                 },
                                 "sendEmailAfterXResponses": {
                                     "type": "integer"
-                                },
-                                "signUpBlocks": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/definitions/models.SignUpBlock"
-                                    }
                                 },
                                 "type": {
                                     "$ref": "#/definitions/models.EventType"
@@ -1999,12 +1984,6 @@ const docTemplate = `{
                                 },
                                 "name": {
                                     "type": "string"
-                                },
-                                "signUpBlockIds": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "string"
-                                    }
                                 },
                                 "useCalendarAvailability": {
                                     "type": "boolean"
@@ -3616,10 +3595,6 @@ const docTemplate = `{
                 "isDeleted": {
                     "type": "boolean"
                 },
-                "isSignUpForm": {
-                    "description": "Sign up form details",
-                    "type": "boolean"
-                },
                 "lists": {
                     "description": "Shared lists (F13). Planner-created; anyone signed in adds items.",
                     "type": "array",
@@ -3685,18 +3660,6 @@ const docTemplate = `{
                 },
                 "shortId": {
                     "type": "string"
-                },
-                "signUpBlocks": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.SignUpBlock"
-                    }
-                },
-                "signUpResponses": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "$ref": "#/definitions/models.SignUpResponse"
-                    }
                 },
                 "startOnMonday": {
                     "description": "Whether to start the event on Monday (as opposed to Sunday, used for DOW events)",
@@ -4050,59 +4013,6 @@ const docTemplate = `{
                 "RsvpMaybe",
                 "RsvpNo"
             ]
-        },
-        "models.SignUpBlock": {
-            "type": "object",
-            "properties": {
-                "_id": {
-                    "type": "string"
-                },
-                "capacity": {
-                    "type": "integer"
-                },
-                "endDate": {
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "startDate": {
-                    "type": "integer"
-                }
-            }
-        },
-        "models.SignUpResponse": {
-            "type": "object",
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "name": {
-                    "description": "Guest information",
-                    "type": "string"
-                },
-                "signUpBlockIds": {
-                    "description": "The IDs of the sign up blocks the user is CONFIRMED for (within capacity)",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "user": {
-                    "$ref": "#/definitions/models.User"
-                },
-                "userId": {
-                    "description": "User information",
-                    "type": "string"
-                },
-                "waitlistBlockIds": {
-                    "description": "The IDs of the sign up blocks the user is WAITLISTED for (block was full).\nAssigned server-side by capacity; see assignSignUpBlocks (C9).",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
         },
         "models.SubCalendar": {
             "type": "object",

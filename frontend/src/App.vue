@@ -5,9 +5,7 @@
     <SignInNotSupportedDialog v-model="webviewDialog" />
     <NewDialog
       v-model="newDialogOptions.show"
-      type="event"
       :contactsPayload="newDialogOptions.contactsPayload"
-      :no-tabs="newDialogOptions.eventOnly"
       :folder-id="newDialogOptions.folderId"
     />
     <div
@@ -36,7 +34,7 @@
           id="top-right-create-btn"
           text
           class="tw-font-display tw-tracking-widest tw-text-brass"
-          @click="() => _createNew(true)"
+          @click="_createNew"
         >
           Call a Gathering
         </v-btn>
@@ -44,7 +42,7 @@
           v-if="$route.name === 'home' && !isPhone && canCreateEvents"
           color="primary"
           class="tw-mx-2 tw-rounded-md tw-font-display tw-tracking-widest tw-text-wood-deep"
-          @click="() => _createNew()"
+          @click="_createNew"
         >
           + Call a Gathering
         </v-btn>
@@ -266,16 +264,13 @@ export default {
   methods: {
     ...mapMutations(["setAuthUser"]),
     ...mapActions(["getEvents", "createNew"]),
-    _createNew(eventOnly = false) {
-      this.createNew({ eventOnly })
+    _createNew() {
+      this.createNew()
     },
     signIn() {
       // In-app webview browsers can't complete OAuth, so warn instead of
-      // routing. Only reachable from the two routes a shared link lands on.
-      if (
-        (this.$route.name === "event" || this.$route.name === "signUp") &&
-        isWebview(navigator.userAgent)
-      ) {
+      // routing. Only reachable from the route a shared link lands on.
+      if (this.$route.name === "event" && isWebview(navigator.userAgent)) {
         this.webviewDialog = true
         return
       }
@@ -304,7 +299,6 @@ export default {
     this.mounted = true
   },
 
-  beforeDestroy() {
-  },
+  beforeDestroy() {},
 }
 </script>

@@ -23,7 +23,7 @@
       <BottomFab
         v-if="isPhone && canCreateEvents"
         id="create-event-btn"
-        @click="() => _createNew()"
+        @click="_createNew"
       >
         <v-icon>mdi-plus</v-icon>
       </BottomFab>
@@ -65,7 +65,6 @@ export default {
     this.setNewDialogOptions({
       show: Object.keys(this.contactsPayload).length > 0,
       contactsPayload: this.contactsPayload,
-      eventOnly: false,
     })
   },
 
@@ -87,7 +86,7 @@ export default {
       return event.hasResponded ?? false
     },
     _createNew() {
-      this.createNew({ eventOnly: false })
+      this.createNew()
     },
     createFolder() {},
   },

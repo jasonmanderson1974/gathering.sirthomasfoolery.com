@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -174,50 +173,6 @@ func IncrementNumResponses(eventId primitive.ObjectID, delta int) error {
 	return err
 }
 
-// signUpResponseKeyIsAddressable reports whether a map key can be written with
-// a dotted path. Keys are user ids (safe) or guest-supplied names (arbitrary):
-// Mongo cannot address a field containing "." through a path, and a leading "$"
-// reads as an operator.
-func signUpResponseKeyIsAddressable(key string) bool {
-	return key != "" && !strings.Contains(key, ".") && !strings.HasPrefix(key, "$")
-}
-
-// SetSignUpResponse writes one member's sign-up response. It targets that key
-// alone where the key allows it, so two people claiming different slots don't
-// overwrite each other, and falls back to rewriting the map when the key can't
-// be expressed as a path.
-func SetSignUpResponse(eventId primitive.ObjectID, key string, response *models.SignUpResponse, all map[string]*models.SignUpResponse) error {
-	var update bson.M
-	if signUpResponseKeyIsAddressable(key) {
-		update = bson.M{"$set": bson.M{"signUpResponses." + key: response}}
-	} else {
-		update = bson.M{"$set": bson.M{"signUpResponses": all}}
-	}
-
-	_, err := EventsCollection.UpdateByID(context.Background(), eventId, update)
-	if err != nil {
-		logger.StdErr.Println(err)
-	}
-	return err
-}
-
-// DeleteSignUpResponse removes one member's sign-up response, targeting that
-// key alone where possible (see SetSignUpResponse).
-func DeleteSignUpResponse(eventId primitive.ObjectID, key string, all map[string]*models.SignUpResponse) error {
-	var update bson.M
-	if signUpResponseKeyIsAddressable(key) {
-		update = bson.M{"$unset": bson.M{"signUpResponses." + key: ""}}
-	} else {
-		update = bson.M{"$set": bson.M{"signUpResponses": all}}
-	}
-
-	_, err := EventsCollection.UpdateByID(context.Background(), eventId, update)
-	if err != nil {
-		logger.StdErr.Println(err)
-	}
-	return err
-}
-
 // DisarmSendEmailAfterXResponses flips the threshold to -1, but only if it is
 // still the value the caller saw. That compare-and-set is what makes the
 // "N people have responded" email fire exactly once: previously the guard was
@@ -264,7 +219,7 @@ func MarkRemindeeResponded(eventId primitive.ObjectID, email string) (bool, erro
 // them back from a snapshot it loaded seconds earlier.
 var editableEventFields = []string{
 	"name", "description", "location", "duration", "dates", "times",
-	"hasSpecificTimes", "wholeBlockSelection", "signUpBlocks", "startOnMonday",
+	"hasSpecificTimes", "wholeBlockSelection", "startOnMonday",
 	"notificationsEnabled", "blindAvailabilityEnabled", "daysOnly",
 	"sendEmailAfterXResponses", "collectEmails", "type", "remindees",
 }

@@ -243,9 +243,6 @@ definitions:
         type: boolean
       isDeleted:
         type: boolean
-      isSignUpForm:
-        description: Sign up form details
-        type: boolean
       lists:
         description: Shared lists (F13). Planner-created; anyone signed in adds items.
         items:
@@ -298,14 +295,6 @@ definitions:
         type: integer
       shortId:
         type: string
-      signUpBlocks:
-        items:
-          $ref: '#/definitions/models.SignUpBlock'
-        type: array
-      signUpResponses:
-        additionalProperties:
-          $ref: '#/definitions/models.SignUpResponse'
-        type: object
       startOnMonday:
         description: Whether to start the event on Monday (as opposed to Sunday, used
           for DOW events)
@@ -585,45 +574,6 @@ definitions:
     - RsvpGoing
     - RsvpMaybe
     - RsvpNo
-  models.SignUpBlock:
-    properties:
-      _id:
-        type: string
-      capacity:
-        type: integer
-      endDate:
-        type: integer
-      name:
-        type: string
-      startDate:
-        type: integer
-    type: object
-  models.SignUpResponse:
-    properties:
-      email:
-        type: string
-      name:
-        description: Guest information
-        type: string
-      signUpBlockIds:
-        description: The IDs of the sign up blocks the user is CONFIRMED for (within
-          capacity)
-        items:
-          type: string
-        type: array
-      user:
-        $ref: '#/definitions/models.User'
-      userId:
-        description: User information
-        type: string
-      waitlistBlockIds:
-        description: |-
-          The IDs of the sign up blocks the user is WAITLISTED for (block was full).
-          Assigned server-side by capacity; see assignSignUpBlocks (C9).
-        items:
-          type: string
-        type: array
-    type: object
   models.SubCalendar:
     properties:
       enabled:
@@ -1176,8 +1126,6 @@ paths:
               type: boolean
             duration:
               type: number
-            isSignUpForm:
-              type: boolean
             name:
               type: string
             notificationsEnabled:
@@ -1188,10 +1136,6 @@ paths:
               type: array
             sendEmailAfterXResponses:
               type: integer
-            signUpBlocks:
-              items:
-                $ref: '#/definitions/models.SignUpBlock'
-              type: array
             timeIncrement:
               type: integer
             type:
@@ -1282,10 +1226,6 @@ paths:
               type: array
             sendEmailAfterXResponses:
               type: integer
-            signUpBlocks:
-              items:
-                $ref: '#/definitions/models.SignUpBlock'
-              type: array
             type:
               $ref: '#/definitions/models.EventType'
             wholeBlockSelection:
@@ -2083,10 +2023,6 @@ paths:
               type: object
             name:
               type: string
-            signUpBlockIds:
-              items:
-                type: string
-              type: array
             useCalendarAvailability:
               type: boolean
           type: object

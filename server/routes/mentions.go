@@ -121,9 +121,6 @@ func mentionableUserIds(
 	}
 
 	if event != nil {
-		for key := range event.SignUpResponses {
-			add(key)
-		}
 		for key, rsvp := range event.Rsvps {
 			add(key)
 			// Older RSVPs are keyed by name but still carry the account id.

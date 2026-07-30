@@ -113,14 +113,12 @@ func TestParseMentions_CapsAtMaxPerComment(t *testing.T) {
 
 func TestMentionableUserIds_CollectsEveryVisibleRole(t *testing.T) {
 	respondent := primitive.NewObjectID()
-	signUp := primitive.NewObjectID()
 	rsvpByKey := primitive.NewObjectID()
 	rsvpByField := primitive.NewObjectID()
 	voter := primitive.NewObjectID()
 	commenter := primitive.NewObjectID()
 
 	event := &models.Event{
-		SignUpResponses: map[string]*models.SignUpResponse{signUp.Hex(): {}},
 		Rsvps: map[string]*models.Rsvp{
 			rsvpByKey.Hex(): {Status: models.RsvpGoing},
 			// Legacy shape: keyed by the typed-in name, account id in the field.
@@ -135,13 +133,13 @@ func TestMentionableUserIds_CollectsEveryVisibleRole(t *testing.T) {
 
 	got := mentionableUserIds(event, responses, comments)
 
-	for _, want := range []primitive.ObjectID{respondent, signUp, rsvpByKey, rsvpByField, voter, commenter} {
+	for _, want := range []primitive.ObjectID{respondent, rsvpByKey, rsvpByField, voter, commenter} {
 		if !got[want] {
 			t.Errorf("missing %s from the visible set", want.Hex())
 		}
 	}
-	if len(got) != 6 {
-		t.Errorf("got %d ids, want 6: %v", len(got), got)
+	if len(got) != 5 {
+		t.Errorf("got %d ids, want 5: %v", len(got), got)
 	}
 }
 
@@ -149,8 +147,7 @@ func TestMentionableUserIds_CollectsEveryVisibleRole(t *testing.T) {
 // nobody to mention — they must not become phantom entries in the picker.
 func TestMentionableUserIds_SkipsNameKeyedGuestRows(t *testing.T) {
 	event := &models.Event{
-		SignUpResponses: map[string]*models.SignUpResponse{"Barnaby": {}},
-		Rsvps:           map[string]*models.Rsvp{"Cousin Ed": {Status: models.RsvpGoing}},
+		Rsvps: map[string]*models.Rsvp{"Cousin Ed": {Status: models.RsvpGoing}},
 		Polls: []models.Poll{{
 			Options: []models.PollOption{{Votes: map[string]string{"Passer-by": "Passer-by"}}},
 		}},

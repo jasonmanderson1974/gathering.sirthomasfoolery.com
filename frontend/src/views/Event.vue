@@ -28,23 +28,12 @@
         :respondents="Object.keys(event.responses)"
       />
 
-      <!-- Join sign up slot dialog-->
-      <SignUpForSlotDialog
-        v-if="currSignUpBlock"
-        v-model="signUpForSlotDialog"
-        :signUpBlock="currSignUpBlock"
-        @submit="signUpForBlock"
-        :event="event"
-      />
-
       <!-- Edit event dialog -->
       <NewDialog
         v-model="editEventDialog"
-        :type="eventType"
         :event="event"
         :contactsPayload="contactsPayload"
         edit
-        no-tabs
       />
 
       <!-- Pages Not Visited dialog -->
@@ -90,7 +79,6 @@
             <EventHeader
               :event="event"
               :canEdit="canEdit"
-              :isSignUp="isSignUp"
               :isEditing="isEditing"
               :dateString="dateString"
               :actionButtonText="actionButtonText"
@@ -154,7 +142,6 @@
             @highlightAvailabilityBtn="highlightAvailabilityBtn"
             @deleteAvailability="deleteAvailability"
             @setCurGuestId="(id) => (curGuestId = id)"
-            @signUpForBlock="initiateSignUpFlow"
           />
 
           <!-- The discussion (C7) and the shared lists (F14) as two tabs over
@@ -213,9 +200,8 @@
       <div class="tw-h-8"></div>
       <!-- Bottom bar for phones -->
       <EventBottomBar
-        v-if="!isSettingSpecificTimes && isPhone && (!isSignUp || canEdit)"
+        v-if="!isSettingSpecificTimes && isPhone"
         :event="event"
-        :isSignUp="isSignUp"
         :isEditing="isEditing"
         :isScheduling="isScheduling"
         :numResponses="numResponses"
@@ -239,7 +225,6 @@
 <script>
 import {
   get,
-  post,
   signInGoogle,
   signInOutlook,
   isPhone,
@@ -259,7 +244,6 @@ dayjs.extend(timezonePlugin)
 import NewDialog from "@/components/NewDialog.vue"
 import ScheduleOverlap from "@/components/schedule_overlap/ScheduleOverlap.vue"
 import GuestDialog from "@/components/GuestDialog.vue"
-import SignUpForSlotDialog from "@/components/sign_up_form/SignUpForSlotDialog.vue"
 import {
   errors,
   authTypes,
@@ -317,7 +301,6 @@ export default {
 
   components: {
     GuestDialog,
-    SignUpForSlotDialog,
     ScheduleOverlap,
     NewDialog,
     SignInNotSupportedDialog,
@@ -338,7 +321,6 @@ export default {
     choiceDialog: false,
     webviewDialog: false,
     guestDialog: false,
-    signUpForSlotDialog: false,
     editEventDialog: false,
     pagesNotVisitedDialog: false,
 
@@ -358,7 +340,6 @@ export default {
     hasRefetchedAuthUserCalendarEvents: false,
 
     // Sign Up Forms
-    currSignUpBlock: null,
 
     // Shared lists (F15/F16): the band's active tab, and a guard that keeps
     // refreshLists from overlapping itself.
@@ -368,7 +349,6 @@ export default {
     // Who the discussion may @mention (F9), fetched once per event.
     mentionables: [],
   }),
-
 
   mounted() {
     // If coming from enabling contacts, show the dialog. Checks if contactsPayload is not an Observer.
@@ -433,13 +413,6 @@ export default {
     isWeekly() {
       return this.event?.type === eventTypes.DOW
     },
-    isSignUp() {
-      return this.event?.isSignUpForm
-    },
-    eventType() {
-      if (this.isSignUp) return "signup"
-      else return "event"
-    },
     areUnsavedChanges() {
       return this.scheduleOverlapComponent?.unsavedChanges
     },
@@ -453,9 +426,7 @@ export default {
       return this.scheduleOverlapComponent?.respondents.length
     },
     actionButtonText() {
-      if (this.isSignUp) return "Edit slots"
-      else if (this.userHasResponded) return "Edit availability"
-      return "Mark availability"
+      return this.userHasResponded ? "Edit availability" : "Mark availability"
     },
     isSettingSpecificTimes() {
       return (
@@ -485,7 +456,7 @@ export default {
         this.userHasResponded
       ) {
         this.scheduleOverlapComponent.startEditing()
-        if (!this.userHasResponded && !this.isSignUp) {
+        if (!this.userHasResponded) {
           this.scheduleOverlapComponent.setAvailabilityAutomatically()
         }
       } else {
@@ -501,9 +472,7 @@ export default {
       /* Cancels editing and resets availability to previous */
       if (!this.scheduleOverlapComponent) return
 
-      if (!this.isSignUp)
-        this.scheduleOverlapComponent.resetCurUserAvailability()
-      else this.scheduleOverlapComponent.resetSignUpForm()
+      this.scheduleOverlapComponent.resetCurUserAvailability()
       this.scheduleOverlapComponent.stopEditing()
       this.curGuestId = ""
       this.addingAvailabilityAsGuest = false
@@ -603,7 +572,9 @@ export default {
         await setThreadMembersOnly(id, commentId, payload)
         await this.refreshEvent()
       } catch (err) {
-        this.showError("Could not change who can see this thread. Please try again.")
+        this.showError(
+          "Could not change who can see this thread. Please try again."
+        )
       }
     },
     async onUntagThread({ commentId }) {
@@ -874,19 +845,10 @@ export default {
         return
       }
 
-      let changesPersisted = true
+      await this.scheduleOverlapComponent.submitAvailability()
 
-      if (this.isSignUp) {
-        changesPersisted =
-          await this.scheduleOverlapComponent.submitNewSignUpBlocks()
-      } else {
-        await this.scheduleOverlapComponent.submitAvailability()
-      }
-
-      if (changesPersisted) {
-        this.showInfo("Changes saved!")
-        this.scheduleOverlapComponent.stopEditing()
-      }
+      this.showInfo("Changes saved!")
+      this.scheduleOverlapComponent.stopEditing()
     },
     async saveChangesAsGuest(payload) {
       /* On-behalf entry: a signed-in member submitting availability under a
@@ -1067,30 +1029,6 @@ export default {
     handleGuestDialogSubmit(guestPayload) {
       this.saveChangesAsGuest(guestPayload)
     },
-
-    // -----------------------------------
-    //#region Sign Up Form
-    // -----------------------------------
-
-    initiateSignUpFlow(signUpBlock) {
-      this.currSignUpBlock = signUpBlock
-      this.signUpForSlotDialog = true
-    },
-
-    async signUpForBlock() {
-      const payload = {
-        guest: false,
-        signUpBlockIds: [this.currSignUpBlock._id],
-      }
-
-      await post(`/events/${this.event._id}/response`, payload)
-      await this.refreshEvent()
-
-      this.scheduleOverlapComponent.resetSignUpForm()
-      this.signUpForSlotDialog = false
-    },
-
-    //#endregion
   },
 
   async created() {

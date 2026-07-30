@@ -3,10 +3,7 @@
     <Tooltip :content="tooltipContent">
       <div class="tw-select-none tw-py-4" style="-webkit-touch-callout: none">
         <div class="tw-flex tw-flex-col sm:tw-flex-row">
-          <div
-            class="tw-flex tw-grow tw-pl-4"
-            :class="isSignUp ? '' : 'tw-pr-4'"
-          >
+          <div class="tw-flex tw-grow tw-pl-4 tw-pr-4">
             <template v-if="event.daysOnly">
               <div class="tw-grow">
                 <div class="tw-flex tw-items-center tw-justify-between">
@@ -399,27 +396,6 @@
                               </div>
                             </div>
 
-                            <!-- Sign up blocks (dragged / saved / to-add) -->
-                            <SignUpBlocksOverlay
-                              :dragging="
-                                state === states.EDIT_SIGN_UP_BLOCKS &&
-                                !!dragStart &&
-                                dragStart.col === d
-                              "
-                              :draggedBlockStyle="signUpBlockBeingDraggedStyle"
-                              :draggedBlockName="newSignUpBlockName"
-                              :isSignUp="isSignUp"
-                              :blocks="
-                                signUpBlocksByDay[d + page * maxDaysPerPage]
-                              "
-                              :blocksToAdd="
-                                signUpBlocksToAddByDay[
-                                  d + page * maxDaysPerPage
-                                ]
-                              "
-                              @block-click="handleSignUpBlockClick"
-                            />
-
                             <!-- Overlaid availabilities -->
                             <div v-if="overlayAvailability">
                               <div
@@ -549,37 +525,7 @@
             :style="{ width: rightSideWidth }"
           >
             <!-- Show section on the right depending on some if conditions -->
-            <template v-if="isSignUp">
-              <div class="tw-mb-2 tw-text-lg tw-text-parchment">Slots</div>
-              <div v-if="!isOwner" class="tw-mb-3 tw-flex tw-flex-col">
-                <div
-                  class="tw-flex tw-flex-col tw-gap-1 tw-rounded-md tw-bg-leather tw-p-3 tw-text-xs tw-italic tw-text-parchment-dim"
-                >
-                  <div v-if="!authUser || alreadyRespondedToSignUpForm">
-                    <a class="tw-underline" :href="`mailto:${event.ownerId}`"
-                      >Contact sign up creator</a
-                    >
-                    to edit your slot
-                  </div>
-                  <div v-if="event.blindAvailabilityEnabled">
-                    Responses are only visible to creator
-                  </div>
-                </div>
-              </div>
-              <SignUpBlocksList
-                ref="signUpBlocksList"
-                :signUpBlocks="signUpBlocksByDay.flat()"
-                :signUpBlocksToAdd="signUpBlocksToAddByDay.flat()"
-                :isEditing="state == states.EDIT_SIGN_UP_BLOCKS"
-                :isOwner="isOwner"
-                :alreadyResponded="alreadyRespondedToSignUpForm"
-                :anonymous="event.blindAvailabilityEnabled"
-                @update:signUpBlock="editSignUpBlock"
-                @delete:signUpBlock="deleteSignUpBlock"
-                @signUpForBlock="$emit('signUpForBlock', $event)"
-              />
-            </template>
-            <template v-else-if="state === states.SET_SPECIFIC_TIMES">
+            <template v-if="state === states.SET_SPECIFIC_TIMES">
               <SpecificTimesInstructions
                 v-if="!isPhone"
                 :numTempTimes="tempTimes.size"
@@ -893,7 +839,7 @@
 
           <!-- Fixed pos availability toggle (mobile) -->
           <v-expand-transition>
-            <div v-if="editing && !isSignUp">
+            <div v-if="editing">
               <div class="tw-bg-leather tw-p-4">
                 <AvailabilityTypeToggle
                   class="tw-w-full"
@@ -1024,7 +970,6 @@ import {
   isPhone,
   utcTimeToLocalTime,
   splitTimeBlocksByDay,
-  getTimeBlock,
   dateToDowDate,
   getSpecificTimesDayStarts,
   isTouchEnabled,
@@ -1047,8 +992,6 @@ import { setScheduledEvent } from "@/utils/services/EventService"
 import { nextScheduleLocation } from "./scheduleLocation"
 import { mapMutations, mapActions, mapState, mapGetters } from "vuex"
 import CalendarAccounts from "@/components/settings/CalendarAccounts.vue"
-import SignUpBlocksOverlay from "./SignUpBlocksOverlay.vue"
-import SignUpBlocksList from "@/components/sign_up_form/SignUpBlocksList.vue"
 import ZigZag from "./ZigZag.vue"
 import ToolRow from "./ToolRow.vue"
 import RespondentsList from "./RespondentsList.vue"
@@ -1059,7 +1002,6 @@ import Tooltip from "../Tooltip.vue"
 import ColorLegend from "./ColorLegend.vue"
 
 import dayjs from "dayjs"
-import ObjectID from "bson-objectid"
 import utcPlugin from "dayjs/plugin/utc"
 import timezonePlugin from "dayjs/plugin/timezone"
 import AvailabilityTypeToggle from "./AvailabilityTypeToggle.vue"
@@ -1122,7 +1064,6 @@ export default {
         SUBSET_AVAILABILITY: "subset_availability", // Show availability for a subset of people
         BEST_TIMES: "best_times", // Show only the times that work for most people
         EDIT_AVAILABILITY: "edit_availability", // Edit current user's availability
-        EDIT_SIGN_UP_BLOCKS: "edit_sign_up_blocks", // Edit the slots on a sign up form
         SCHEDULE_EVENT: "schedule_event", // Schedule event on gcal
         SET_SPECIFIC_TIMES: "set_specific_times", // Set specific times for the event
       },
@@ -1146,8 +1087,6 @@ export default {
       tooltipContent: "", // The content of the tooltip
 
       /* Sign up form */
-      signUpBlocksByDay: [], // The current event's sign up blocks by day
-      signUpBlocksToAddByDay: [], // The sign up blocks to be added after hitting 'save'
 
       /* Edit options */
       showEditOptions:
@@ -1257,7 +1196,7 @@ export default {
     /** Returns the width of the right side of the calendar */
     rightSideWidth() {
       if (this.isPhone) return "100%"
-      return this.isSignUp ? "18rem" : "13rem"
+      return "13rem"
     },
     /** Returns the days of the week in the correct order */
     daysOfWeek() {
@@ -1283,7 +1222,6 @@ export default {
     allowDrag() {
       return (
         this.state === this.states.EDIT_AVAILABILITY ||
-        this.state === this.states.EDIT_SIGN_UP_BLOCKS ||
         this.state === this.states.SCHEDULE_EVENT ||
         this.state === this.states.SET_SPECIFIC_TIMES
       )
@@ -1343,56 +1281,6 @@ export default {
     curRespondentsSet() {
       return new Set(this.curRespondents)
     },
-
-    // -----------------------------------
-    //#region Sign up form
-    // -----------------------------------
-
-    /** Returns the name of the new sign up block being dragged */
-    newSignUpBlockName() {
-      return `Slot #${
-        this.signUpBlocksByDay.flat().length +
-        this.signUpBlocksToAddByDay.flat().length +
-        1
-      }`
-    },
-
-    /** Returns the max allowable drag */
-    maxSignUpBlockRowSize() {
-      if (!this.dragStart || !this.isSignUp) return null
-
-      const selectedDay = this.signUpBlocksByDay[this.dragStart.col]
-      const selectedDayToAdd = this.signUpBlocksToAddByDay[this.dragStart.col]
-
-      if (selectedDay.length === 0 && selectedDayToAdd.length === 0) return null
-
-      let maxSize = Infinity
-      for (const block of [...selectedDay, ...selectedDayToAdd]) {
-        if (block.hoursOffset * 4 > this.dragStart.row) {
-          maxSize = Math.min(
-            maxSize,
-            block.hoursOffset * 4 - this.dragStart.row
-          )
-        }
-      }
-
-      return maxSize
-    },
-
-    /** Whether the current user has already responded to the sign up form */
-    alreadyRespondedToSignUpForm() {
-      if (!this.authUser || !this.signUpBlocksByDay) return false
-
-      return this.signUpBlocksByDay.some((dayBlocks) =>
-        dayBlocks.some((block) =>
-          block.responses?.some(
-            (response) => response.userId === this.authUser._id
-          )
-        )
-      )
-    },
-
-    //#endregion
 
     /** Returns the max number of people in the curRespondents array available at any given time */
     curRespondentsMax() {
@@ -1641,10 +1529,7 @@ export default {
     },
     editing() {
       // Returns whether currently in the editing state
-      return (
-        this.state === this.states.EDIT_AVAILABILITY ||
-        this.state === this.states.EDIT_SIGN_UP_BLOCKS
-      )
+      return this.state === this.states.EDIT_AVAILABILITY
     },
     scheduling() {
       // Returns whether currently in the scheduling state
@@ -1664,9 +1549,6 @@ export default {
     },
     isWeekly() {
       return this.event.type === eventTypes.DOW
-    },
-    isSignUp() {
-      return this.event.isSignUpForm
     },
     isSpecificTimes() {
       return this.event.hasSpecificTimes
@@ -1709,18 +1591,6 @@ export default {
         style.top = `calc(${top} * ${this.timeslotHeight}px)`
       }
       style.height = `calc(${height} * ${this.timeslotHeight}px)`
-      return style
-    },
-    signUpBlockBeingDraggedStyle() {
-      const style = {}
-      let top = 0,
-        height = 0
-      if (this.dragging) {
-        top = this.dragStart.row
-        height = this.dragCur.row - this.dragStart.row + 1
-      }
-      style.top = `calc(${top} * 1rem)`
-      style.height = `calc(${height} * 1rem)`
       return style
     },
     /** Parses the responses to the gathering, makes necessary changes based on the type of event, and returns it */
@@ -2327,9 +2197,7 @@ export default {
     //#region Editing
     // -----------------------------------
     startEditing() {
-      this.state = this.isSignUp
-        ? this.states.EDIT_SIGN_UP_BLOCKS
-        : this.states.EDIT_AVAILABILITY
+      this.state = this.states.EDIT_AVAILABILITY
       this.availabilityType = availabilityTypes.AVAILABLE
       this.availability = new Set()
       this.ifNeeded = new Set()
@@ -2523,115 +2391,6 @@ export default {
       this.hintState = false
       localStorage[this.hintStateLocalStorageKey] = true
     },
-    //#endregion
-
-    // -----------------------------------
-    //#region Sign up form
-    // -----------------------------------
-
-    /** Creates a sign up block for the current day and hour offset */
-    createSignUpBlock(dayIndex, hoursOffset, hoursLength) {
-      const timeBlock = getTimeBlock(
-        this.days[dayIndex].dateObject,
-        hoursOffset,
-        hoursLength
-      )
-
-      return {
-        _id: ObjectID().toString(),
-        capacity: 1,
-        name: this.newSignUpBlockName,
-        ...timeBlock,
-        hoursOffset,
-        hoursLength,
-      }
-    },
-
-    /** Updates the sign up block with the same id */
-    editSignUpBlock(signUpBlock) {
-      this.signUpBlocksByDay.forEach((blocksInDay, dayIndex) => {
-        blocksInDay.forEach((block, blockIndex) => {
-          if (signUpBlock._id === block._id) {
-            this.signUpBlocksByDay[dayIndex][blockIndex] = signUpBlock
-            this.signUpBlocksByDay = [...this.signUpBlocksByDay]
-            return
-          }
-        })
-      })
-
-      this.signUpBlocksToAddByDay.forEach((blocksInDay, dayIndex) => {
-        blocksInDay.forEach((block, blockIndex) => {
-          if (signUpBlock._id === block._id) {
-            this.signUpBlocksToAddByDay[dayIndex][blockIndex] = signUpBlock
-            this.signUpBlocksToAddByDay = [...this.signUpBlocksToAddByDay]
-            return
-          }
-        })
-      })
-    },
-
-    /** Deletes the sign up block with the id */
-    deleteSignUpBlock(signUpBlockId) {
-      this.signUpBlocksByDay.forEach((blocksInDay, dayIndex) => {
-        blocksInDay.forEach((block, blockIndex) => {
-          if (signUpBlockId === block._id) {
-            this.signUpBlocksByDay[dayIndex].splice(blockIndex, 1)
-            return
-          }
-        })
-      })
-
-      this.signUpBlocksToAddByDay.forEach((blocksInDay, dayIndex) => {
-        blocksInDay.forEach((block, blockIndex) => {
-          if (signUpBlockId === block._id) {
-            this.signUpBlocksToAddByDay[dayIndex].splice(blockIndex, 1)
-            return
-          }
-        })
-      })
-    },
-
-    /** Reloads all the data for the sign up form */
-    resetSignUpForm() {
-      /** Split sign up blocks by day */
-      this.signUpBlocksByDay = splitTimeBlocksByDay(
-        this.event,
-        this.event.signUpBlocks ?? []
-      )
-
-      this.resetSignUpBlocksToAddByDay()
-
-      /** Populate sign up block responses (confirmed) + waitlist */
-      const allBlocks = this.signUpBlocksByDay.flat()
-      for (const userId in this.event.signUpResponses) {
-        const signUpResponse = this.event.signUpResponses[userId]
-        for (const signUpBlockId of signUpResponse.signUpBlockIds ?? []) {
-          const signUpBlock = allBlocks.find((b) => b._id === signUpBlockId)
-          if (!signUpBlock) continue
-          if (!signUpBlock.responses) signUpBlock.responses = []
-          signUpBlock.responses.push(signUpResponse)
-        }
-        for (const signUpBlockId of signUpResponse.waitlistBlockIds ?? []) {
-          const signUpBlock = allBlocks.find((b) => b._id === signUpBlockId)
-          if (!signUpBlock) continue
-          if (!signUpBlock.waitlist) signUpBlock.waitlist = []
-          signUpBlock.waitlist.push(signUpResponse)
-        }
-      }
-    },
-
-    /** Initialize sign up blocks to be added array */
-    resetSignUpBlocksToAddByDay() {
-      this.signUpBlocksToAddByDay = this.signUpBlocksByDay.map(() => [])
-    },
-
-    /** Emits sign up for block to parent element. A full block is still
-     * clickable — the server waitlists the signup (C9). */
-    handleSignUpBlockClick(block) {
-      if (!this.alreadyRespondedToSignUpForm && !this.isOwner)
-        this.$emit("signUpForBlock", block)
-    },
-
     //#endregion
 
     // -----------------------------------
@@ -2926,7 +2685,6 @@ export default {
     }
 
     // Parse sign up blocks and responses
-    this.resetSignUpForm()
   },
   beforeDestroy() {
     removeEventListener("click", this.deselectRespondents)
@@ -2947,8 +2705,6 @@ export default {
     RespondentsList,
     GCalWeekSelector,
     WorkingHoursToggle,
-    SignUpBlocksOverlay,
-    SignUpBlocksList,
     CalendarEventBlock, // Added component registration
     SpecificTimesInstructions, // Added component registration
     Tooltip,

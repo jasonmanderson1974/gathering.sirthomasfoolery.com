@@ -73,7 +73,6 @@ export default {
 
   props: {
     event: { type: Object, required: true },
-    isSignUp: { type: Boolean, default: false },
     isEditing: { type: Boolean, default: false },
     isScheduling: { type: Boolean, default: false },
     numResponses: { type: Number, default: 0 },
@@ -105,7 +104,6 @@ export default {
         : `Edit ${this.selectedGuestRespondent}'s availability`
     },
     mobileActionButtonText() {
-      if (this.isSignUp) return "Edit slots"
       return this.userHasResponded ? "Edit availability" : "Mark availability"
     },
   },

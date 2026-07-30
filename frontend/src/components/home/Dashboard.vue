@@ -463,10 +463,7 @@ export default {
     },
     createEventInFolder(folderId) {
       const actualFolderId = folderId === "no-folder" ? null : folderId
-      this.createNew({
-        eventOnly: false,
-        folderId: actualFolderId,
-      })
+      this.createNew({ folderId: actualFolderId })
     },
     openDeleteDialog(folder) {
       this.folderToDelete = folder

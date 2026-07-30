@@ -109,7 +109,6 @@ export const newEventFormMixin = (defaultOverrides = () => ({})) => {
       edit: { type: Boolean, default: false },
       dialog: { type: Boolean, default: true },
       contactsPayload: { type: Object, default: () => ({}) },
-      showHelp: { type: Boolean, default: false },
       /** The folder the dialog was opened from; null when created at top level */
       folderId: { type: String, default: null },
     },
@@ -127,8 +126,6 @@ export const newEventFormMixin = (defaultOverrides = () => ({})) => {
       showEmailReminders: false,
 
       timezone: {},
-
-      helpDialog: false,
 
       // Unsaved changes
       initialEventData: {},

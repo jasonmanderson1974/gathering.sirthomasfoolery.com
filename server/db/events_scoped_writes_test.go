@@ -82,72 +82,6 @@ func TestIncrementNumResponsesDecrements(t *testing.T) {
 	}
 }
 
-// Two members claiming different slots at once must both survive. `all` is
-// deliberately each caller's stale snapshot — the shape that used to clobber.
-func TestSetSignUpResponseKeepsConcurrentWriters(t *testing.T) {
-	id := insertScopedTestEvent(t, models.Event{
-		Name:            "A16 signups",
-		SignUpResponses: map[string]*models.SignUpResponse{},
-	})
-
-	keys := []string{"aaaaaaaaaaaaaaaaaaaaaaa1", "aaaaaaaaaaaaaaaaaaaaaaa2", "Greg Wallace"}
-	var wg sync.WaitGroup
-	for _, k := range keys {
-		wg.Add(1)
-		go func(k string) {
-			defer wg.Done()
-			db.SetSignUpResponse(id, k, &models.SignUpResponse{Name: k}, map[string]*models.SignUpResponse{})
-		}(k)
-	}
-	wg.Wait()
-
-	got := reloadEvent(t, id)
-	for _, k := range keys {
-		if _, ok := got.SignUpResponses[k]; !ok {
-			t.Errorf("sign-up response for %q was lost (have %d of %d)", k, len(got.SignUpResponses), len(keys))
-		}
-	}
-}
-
-// A key containing "." can't be addressed through a dotted path, so the write
-// falls back to rewriting the map. It must still persist the response.
-func TestSetSignUpResponseHandlesAnUnaddressableKey(t *testing.T) {
-	id := insertScopedTestEvent(t, models.Event{
-		Name:            "A16 dotted key",
-		SignUpResponses: map[string]*models.SignUpResponse{},
-	})
-
-	const key = "Greg.Wallace"
-	all := map[string]*models.SignUpResponse{key: {Name: key}}
-	if err := db.SetSignUpResponse(id, key, all[key], all); err != nil {
-		t.Fatalf("set: %v", err)
-	}
-	if _, ok := reloadEvent(t, id).SignUpResponses[key]; !ok {
-		t.Errorf("response under a dotted key was not persisted")
-	}
-}
-
-func TestDeleteSignUpResponseRemovesOnlyItsOwnKey(t *testing.T) {
-	id := insertScopedTestEvent(t, models.Event{
-		Name: "A16 signup delete",
-		SignUpResponses: map[string]*models.SignUpResponse{
-			"keep": {Name: "keep"},
-			"drop": {Name: "drop"},
-		},
-	})
-
-	if err := db.DeleteSignUpResponse(id, "drop", nil); err != nil {
-		t.Fatalf("delete: %v", err)
-	}
-	got := reloadEvent(t, id)
-	if _, ok := got.SignUpResponses["drop"]; ok {
-		t.Error("dropped key still present")
-	}
-	if _, ok := got.SignUpResponses["keep"]; !ok {
-		t.Error("delete removed the wrong key")
-	}
-}
-
 // Only one of N simultaneous responders may be told they were the Nth.
 func TestDisarmSendEmailAfterXResponsesWinsOnce(t *testing.T) {
 	threshold := 3
@@ -257,9 +191,6 @@ func TestUpdateEditableEventFieldsLeavesOtherFieldsAlone(t *testing.T) {
 	id := insertScopedTestEvent(t, models.Event{
 		Name:         "A16 original",
 		NumResponses: &five,
-		SignUpResponses: map[string]*models.SignUpResponse{
-			"someone": {Name: "someone"},
-		},
 		Rsvps: map[string]*models.Rsvp{
 			"someone": {Status: models.RsvpGoing},
 		},
@@ -268,11 +199,10 @@ func TestUpdateEditableEventFieldsLeavesOtherFieldsAlone(t *testing.T) {
 	// A stale snapshot: an editor who loaded the event before those arrived.
 	zero := 0
 	stale := models.Event{
-		Id:              id,
-		Name:            "A16 renamed",
-		NumResponses:    &zero,
-		SignUpResponses: map[string]*models.SignUpResponse{},
-		Rsvps:           map[string]*models.Rsvp{},
+		Id:           id,
+		Name:         "A16 renamed",
+		NumResponses: &zero,
+		Rsvps:        map[string]*models.Rsvp{},
 	}
 	if err := db.UpdateEditableEventFields(&stale); err != nil {
 		t.Fatalf("update: %v", err)
@@ -284,9 +214,6 @@ func TestUpdateEditableEventFieldsLeavesOtherFieldsAlone(t *testing.T) {
 	}
 	if got.NumResponses == nil || *got.NumResponses != 5 {
 		t.Errorf("numResponses was clobbered: %v, want 5", got.NumResponses)
-	}
-	if _, ok := got.SignUpResponses["someone"]; !ok {
-		t.Error("a concurrent sign-up response was clobbered by the edit")
 	}
 	if _, ok := got.Rsvps["someone"]; !ok {
 		t.Error("a concurrent RSVP was clobbered by the edit")

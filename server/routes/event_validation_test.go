@@ -19,7 +19,7 @@ import (
 )
 
 // E11 + E8: the create/edit payloads bound Type with `binding:"required"`, which
-// only rejects "", and left Name/Dates/Times/Remindees/SignUpBlocks unbounded.
+// only rejects "", and left Name/Dates/Times/Remindees unbounded.
 
 func TestIsKnownEventType(t *testing.T) {
 	for _, tc := range []struct {
@@ -138,13 +138,10 @@ func TestValidateEventPayload_RejectsOversizedCollections(t *testing.T) {
 	dates := make([]primitive.DateTime, maxEventDates+1)
 	times := make([]primitive.DateTime, maxEventTimes+1)
 	remindees := make([]string, maxEventRemindees+1)
-	blocks := make([]models.SignUpBlock, maxEventSignUpBlocks+1)
-
 	for name, p := range map[string]eventPayloadLimits{
-		"dates":        {Type: models.DOW, Dates: dates},
-		"times":        {Type: models.DOW, Times: times},
-		"remindees":    {Type: models.DOW, Remindees: remindees},
-		"signUpBlocks": {Type: models.DOW, SignUpBlocks: &blocks},
+		"dates":     {Type: models.DOW, Dates: dates},
+		"times":     {Type: models.DOW, Times: times},
+		"remindees": {Type: models.DOW, Remindees: remindees},
 	} {
 		code, errCode := runValidate(t, p)
 		if code != http.StatusBadRequest || errCode != errs.PayloadTooLarge {
@@ -156,29 +153,14 @@ func TestValidateEventPayload_RejectsOversizedCollections(t *testing.T) {
 // Exactly at the cap must pass — the caps are generous by design and an
 // off-by-one here would reject legitimate events.
 func TestValidateEventPayload_AllowsExactlyAtCap(t *testing.T) {
-	blocks := make([]models.SignUpBlock, maxEventSignUpBlocks)
 	code, errCode := runValidate(t, eventPayloadLimits{
-		Type:         models.SPECIFIC_DATES,
-		Dates:        make([]primitive.DateTime, maxEventDates),
-		Times:        make([]primitive.DateTime, maxEventTimes),
-		Remindees:    make([]string, maxEventRemindees),
-		SignUpBlocks: &blocks,
+		Type:      models.SPECIFIC_DATES,
+		Dates:     make([]primitive.DateTime, maxEventDates),
+		Times:     make([]primitive.DateTime, maxEventTimes),
+		Remindees: make([]string, maxEventRemindees),
 	})
 	if code != http.StatusOK {
 		t.Errorf("at-cap payload should pass, got (%d, %q)", code, errCode)
-	}
-}
-
-// A nil SignUpBlocks pointer (the common case — most events aren't sign-up
-// forms) must not be dereferenced.
-func TestValidateEventPayload_NilSignUpBlocksSafe(t *testing.T) {
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatalf("nil SignUpBlocks panicked: %v", r)
-		}
-	}()
-	if code, _ := runValidate(t, eventPayloadLimits{Type: models.DOW}); code != http.StatusOK {
-		t.Errorf("nil SignUpBlocks should pass, got %d", code)
 	}
 }
 

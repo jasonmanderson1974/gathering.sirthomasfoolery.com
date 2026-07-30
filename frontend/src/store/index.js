@@ -23,7 +23,6 @@ export default new Vuex.Store({
     folders: [],
 
     // Feature flags
-    signUpFormEnabled: true,
     daysOnlyEnabled: true,
     overlayAvailabilitiesEnabled: true,
 
@@ -31,7 +30,6 @@ export default new Vuex.Store({
     newDialogOptions: {
       show: false,
       contactsPayload: {},
-      eventOnly: false,
       folderId: null,
     },
   },
@@ -57,9 +55,6 @@ export default new Vuex.Store({
       state.folders = folders
     },
 
-    setSignUpFormEnabled(state, enabled) {
-      state.signUpFormEnabled = enabled
-    },
     setDaysOnlyEnabled(state, enabled) {
       state.daysOnlyEnabled = enabled
     },
@@ -93,12 +88,11 @@ export default new Vuex.Store({
 
     setNewDialogOptions(
       state,
-      { show = false, contactsPayload = {}, eventOnly = true, folderId = null }
+      { show = false, contactsPayload = {}, folderId = null }
     ) {
       state.newDialogOptions = {
         show,
         contactsPayload,
-        eventOnly,
         folderId,
       }
     },
@@ -122,10 +116,7 @@ export default new Vuex.Store({
       return authUser
     },
 
-    createNew(
-      { getters, commit, dispatch },
-      { eventOnly = false, folderId = null }
-    ) {
+    createNew({ getters, commit, dispatch }, { folderId = null } = {}) {
       // Guests may respond to events but not create them (enforced server-side too).
       if (getters.isGuest) {
         dispatch(
@@ -137,7 +128,6 @@ export default new Vuex.Store({
       commit("setNewDialogOptions", {
         show: true,
         contactsPayload: {},
-        eventOnly: eventOnly,
         folderId: folderId,
       })
     },

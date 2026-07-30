@@ -177,7 +177,6 @@ func importEvent(c *gin.Context) {
 	remoteEvent.When2meetHref = nil
 	remoteEvent.ScheduledEvent = nil
 	remoteEvent.CalendarEventId = ""
-	remoteEvent.SignUpResponses = make(map[string]*models.SignUpResponse)
 
 	_, err = db.EventsCollection.InsertOne(context.Background(), remoteEvent)
 	if err != nil {

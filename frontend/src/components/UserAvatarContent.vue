@@ -71,8 +71,8 @@ export default {
     },
     /**
      * Two initials at a readable size, one when the avatar is too small to fit
-     * them — CalendarAccount renders at 24 and SignUpBlock at 16, where "AL"
-     * is a smudge.
+     * them — CalendarAccount renders at 24, and below about 16 "AL" is a
+     * smudge.
      */
     initials() {
       const full = monogram(this.user)

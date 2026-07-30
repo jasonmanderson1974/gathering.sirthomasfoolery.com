@@ -9,29 +9,11 @@
         <div class="tw-mb-1 tw-font-head tw-text-2xl tw-text-parchment">
           {{ edit ? "Amend the Gathering" : "Call a Gathering" }}
         </div>
-        <div
-          v-if="dialog && showHelp"
-          class="tw-text-xs tw-font-normal tw-italic tw-text-parchment-dim"
-        >
-          Ideal for one-time / recurring meetings
-        </div>
       </div>
       <v-spacer />
-      <template v-if="dialog">
-        <v-btn v-if="showHelp" icon @click="helpDialog = true">
-          <v-icon>mdi-information-outline</v-icon>
-        </v-btn>
-        <v-btn v-else @click="$emit('input', false)" icon>
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-        <HelpDialog v-model="helpDialog">
-          <template v-slot:header>Events</template>
-          <div class="tw-mb-4">
-            Use events to collect people's availabilities and compare them
-            across certain days.
-          </div>
-        </HelpDialog>
-      </template>
+      <v-btn v-if="dialog" @click="$emit('input', false)" icon>
+        <v-icon>mdi-close</v-icon>
+      </v-btn>
     </v-card-title>
     <v-card-text
       ref="cardText"
@@ -375,7 +357,6 @@
 import { post, put, prefersStartOnMonday } from "@/utils"
 import { mapActions } from "vuex"
 import NewEventAdvancedOptions from "./NewEventAdvancedOptions.vue"
-import HelpDialog from "./HelpDialog.vue"
 import EmailInput from "./event/EmailInput.vue"
 import DatePicker from "@/components/DatePicker.vue"
 import SlideToggle from "./SlideToggle.vue"
@@ -411,7 +392,6 @@ export default {
 
   components: {
     NewEventAdvancedOptions,
-    HelpDialog,
     EmailInput,
     DatePicker,
     SlideToggle,
