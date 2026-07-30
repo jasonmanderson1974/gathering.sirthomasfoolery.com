@@ -997,14 +997,28 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
   `$inc`-ing it (`routes/events.go:329`, `routes/event_import.go:229`) and the model field.
   Same shape as A21's dead-marshal-on-hot-path finding.
 
-- [ ] **H2 · Dead friend-request subsystem.** `S` · **P2**
+- [x] **H2 · Dead friend-request subsystem.** `S` · **P2**
+  **DONE 2026-07-29** (`6ef72fd`, batched with H3). Went as written, with two notes: the errs
+  entries below were **already gone** — the G1 errs reshape took them, so only the model, the
+  two db funcs and the collection var remained. And the `friendrequests` **collection is left
+  in Mongo**: removing the accessor doesn't drop stored data, and dropping it is a separate
+  deliberate call nobody has made. Verified no frontend references either (the error codes were
+  never part of the client contract).
   Deletable as one unit, zero callers: `db/utils.go:16` `GetFriendRequestById` + `:40`
   `DeleteFriendRequestById`, `models/friend_request.go`, `FriendRequestsCollection`
   (`db/init.go:19,48`), errs `FriendRequestNotFound`/`UserNotFriends` (`errs/errors.go:15-16`).
   Upstream social-graph cruft this fork never used (A2 already flagged the two db funcs as
   0-caller in July).
 
-- [ ] **H3 · Dead exported server helpers.** `S` · **P2**
+- [x] **H3 · Dead exported server helpers.** `S` · **P2**
+  **DONE 2026-07-29** (`6ef72fd`, batched with H2). All confirmed still 0-caller before
+  deleting. One nuance worth recording: **`PrintJson` was not strictly callerless** — it had
+  three references, all inside `scripts/20240721_apple_calendar_test`, which is excluded from
+  the build and deliberately not kept compiling (`server/scripts/README.md`). Deleted anyway on
+  that basis, but it needed a deliberate call rather than a silent one. `IsRelease`/
+  `GetDateString` were unexported, not deleted, as planned. Removing the five helpers left five
+  now-unused imports in `utils.go` (`bytes`, `encoding/json`, `io`, `net/http`, `regexp`) —
+  trimmed with them. 152 deletions against 4 insertions; no behaviour change.
   Zero references outside their definitions: **all of `utils/db_utils.go`** (both funcs),
   `utils/utils.go` `PrintJson:27`, `EscapeRegExp:88`, `GetClientIdFromTokenOrigin:94`,
   `PrintHttpResponse:106`, `GetPrimaryAccountKey:191`, and `models/event.go:176`
@@ -1109,9 +1123,11 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
 9. ~~**F10** close-out.~~ **Done 2026-07-29.**
 
 **What's left, and nothing here is urgent:** ~~**F11** and **F12**~~ and ~~**G1**~~ are done
-(2026-07-29), as is **G2's** free half. **G2's** splits stay open and want the app running;
+(2026-07-29), as is **G2's** free half, and ~~**H2**/**H3**~~ went as one deletion batch the
+same day (`6ef72fd`). **G2's** splits stay open and want the app running;
 **G3** and **G4** were put to the user in the same session and deliberately left
-deferred/parked; **H5** whenever calendar code is next touched; **H6–H9** opportunistic
+deferred/parked; **H5** whenever calendar code is next touched — it is now the **only**
+remaining item with an actual failure mode; **H8/H9** opportunistic
 (**H9** is cheapest folded into the next change that touches `AvatarEditorDialog.vue`).
 Deploy is the human's call from the VM-adjacent box — `origin/main` is ahead of what's live
 until then.
