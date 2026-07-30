@@ -943,15 +943,45 @@ The sequencing that got there is at the bottom.
     actual bug shape (India/Nepal/Newfoundland).
 
 - [ ] **G2 (was A23) · Split the two remaining giants.** `L` · **P3**
-  **FREE PART DONE 2026-07-29** (`9831d303`); the splits themselves are still open. The nine
-  zero-caller exports were re-verified repo-wide and deleted — and deleting them **stranded two
-  more** (`splitTime`, `getDateWithTimeNum`), whose only callers were among the nine, so eleven
-  went rather than nine. Three of the internal-only five are unexported
+  **FREE PART DONE 2026-07-29** (`9831d303`); **`newEventFormMixin` DONE 2026-07-30.**
+  The nine zero-caller exports were re-verified repo-wide and deleted — and deleting them
+  **stranded two more** (`splitTime`, `getDateWithTimeNum`), whose only callers were among the
+  nine, so eleven went rather than nine. Three of the internal-only five are unexported
   (`getDateRangeString`, `processTimeBlocks`, `stdTimezoneOffset`). `date_utils.js` is now
   **946 lines / 32 exports** (from 1,119 / 46) — the predicted ~32 surface, so the numbers below
-  for the split still stand. **Still to do:** the `ScheduleOverlap.vue` computed block, the
-  `newEventFormMixin` for NewEvent/NewSignUp, and the `date_utils` split itself — all of which
-  want the app running, per A11's caveat.
+  for the split still stand. **Still to do:** the `ScheduleOverlap.vue` computed block and the
+  `date_utils` split itself — both of which want the app running, per A11's caveat.
+
+  **What the mixin pass found.** NewEvent 937→585, NewSignUp 776→417 (761 lines deleted for 50
+  added), against `src/mixins/newEventForm.js` (348) and a pure `src/components/newEventDates.js`
+  (122) + 18 tests. It is a factory like `calendarOptionSync`, taking a *function* of default
+  overrides so `startOnMonday` can read `localStorage` per instance; it seeds `data()` and
+  `reset()` from that one source. Three field lists drive what used to be hand-written parallel
+  code: `contactsFields` (the OAuth round-trip), `trackedFields` (the unsaved-changes check),
+  and the defaults themselves. Components override the two lists to extend them.
+
+  **The duplication was hiding three real bugs**, all fixed by folding the copies together:
+  - A dates-only **sign-up sheet could never be saved**: its branch set `type` from
+    `eventTypes.SIGNUP`, which does not exist, so the field went out as `undefined` and the API
+    (`type` is `binding:"required"`) rejected it. Reachable — editing a sign-up sheet is live
+    even though *creating* one is not.
+  - The sign-up copy of the day-of-week loop **omitted the June-2018 DST correction** the event
+    copy has, so a recurring sheet made in the opposite half of the year was stored an hour out.
+    Pinned now by two fake-clock tests (winter/summer), and the winter one fails without it.
+  - `resetToEventData()` called `this.$refs.emailInput.reset()` unguarded, so closing the edit
+    dialog on an **ownerless gathering** — where that section isn't rendered — threw. Now `?.`.
+
+  **Two deliberate behaviour changes**, both improvements, worth knowing if something looks off:
+  `timeIncrement` was snapshotted but never compared, so changing only the time increment and
+  closing discarded it with no prompt; it is now in `trackedFields`. And the snapshot copies
+  arrays instead of storing them by reference. Also deleted `contactsAccessGranted` from both —
+  dead in each, and it wrote to `curScheduledEvent`/`confirmDetailsDialog`, which are
+  ScheduleOverlap's state and exist in neither component.
+
+  Verified: 206 unit tests, eslint clean, production build, and two headless harnesses against a
+  rebuilt dev stack — `verify_g2_neweventform.js` 11/11 (both create paths, the payloads, the
+  unsaved-changes prompt in both directions, reset-on-reopen) and `verify_g2_newsignup.js` 6/6
+  (the sign-up edit path).
 
   Original notes, for reference:
   `ScheduleOverlap.vue` 2,967 lines — the `computed` block (:1270-2265) is **996 lines**, now
@@ -1188,9 +1218,10 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
 same day (`6ef72fd`). ~~**H5**, **H8** and **H9**~~ closed 2026-07-30, which empties **Part H**
 and leaves nothing anywhere with a known failure mode.
 
-**Everything still open is P3 and was already deliberately set aside:** **G2's** splits (they
-want the app running), and **G3**/**G4**, which the user deferred and parked respectively on
-2026-07-29. Nothing is queued. Deploy is the human's call from the VM-adjacent box —
+**Everything still open is P3 and was already deliberately set aside:** **G2's** two remaining
+splits (`ScheduleOverlap.vue`'s computed block and `date_utils.js` — its `newEventFormMixin`
+went in 2026-07-30, and found three live bugs on the way), and **G3**/**G4**, which the user
+deferred and parked respectively on 2026-07-29. Nothing is queued. Deploy is the human's call from the VM-adjacent box —
 `origin/main` is ahead of what's live until then.
 
 Workflow rules unchanged from `TODO.md`/`CLAUDE.md`: sync before changes, green commits to

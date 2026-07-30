@@ -297,49 +297,22 @@
 </style>
 
 <script>
-import { eventTypes, dayIndexToDayString, authTypes } from "@/constants"
-import {
-  post,
-  put,
-  timeNumToTimeString,
-  dateToTimeNum,
-  getISODateString,
-  isPhone,
-  signInGoogle,
-  getDateWithTimezone,
-  getTimeOptions,
-} from "@/utils"
-import { mapActions, mapState } from "vuex"
+import { post, put } from "@/utils"
 import TimezoneSelector from "./schedule_overlap/TimezoneSelector.vue"
 import HelpDialog from "./HelpDialog.vue"
 import DatePicker from "@/components/DatePicker.vue"
 import SlideToggle from "./SlideToggle.vue"
-import {
-  availabilityModes,
-  getAvailabilityFields,
-  getAvailabilityMode,
-} from "./availabilityModes"
+import { getAvailabilityFields } from "./availabilityModes"
 import OverflowGradient from "@/components/OverflowGradient.vue"
-
-import dayjs from "dayjs"
-import utcPlugin from "dayjs/plugin/utc"
-import timezonePlugin from "dayjs/plugin/timezone"
 import ExpandableSection from "./ExpandableSection.vue"
-dayjs.extend(utcPlugin)
-dayjs.extend(timezonePlugin)
+import { newEventFormMixin } from "@/mixins/newEventForm"
 
 export default {
   name: "NewSignUp",
 
   emits: ["input"],
 
-  props: {
-    event: { type: Object },
-    edit: { type: Boolean, default: false },
-    dialog: { type: Boolean, default: true },
-    contactsPayload: { type: Object, default: () => ({}) },
-    showHelp: { type: Boolean, default: false },
-  },
+  mixins: [newEventFormMixin()],
 
   components: {
     TimezoneSelector,
@@ -350,77 +323,7 @@ export default {
     OverflowGradient,
   },
 
-  data: () => ({
-    formValid: true,
-    name: "",
-    startTime: 9,
-    endTime: 17,
-    loading: false,
-    selectedDays: [],
-    selectedDaysOfWeek: [],
-    startOnMonday: false,
-    notificationsEnabled: false,
-
-    // Sign up sheets are always block based (the owner draws the blocks in the
-    // next step), so the time block and custom time modes don't apply here —
-    // only whether the sheet has times at all. `daysOnly` is derived from this.
-    availabilityModes,
-    availabilityMode: availabilityModes.DATES_AND_TIMES,
-
-    // Date options
-    dateOptions: Object.freeze({
-      SPECIFIC: "Specific dates",
-      DOW: "Days of the week",
-    }),
-    selectedDateOption: "Specific dates",
-
-    // Email reminders
-    showEmailReminders: false,
-    emails: [], // For email reminders
-
-    // Advanced options
-    showAdvancedOptions: false,
-    collectEmails: false,
-    blindAvailabilityEnabled: false,
-    timezone: {},
-    sendEmailAfterXResponsesEnabled: false,
-    sendEmailAfterXResponses: 3,
-
-    helpDialog: false,
-
-    // Unsaved changes
-    initialEventData: {},
-
-    hasMounted: false,
-  }),
-
-  mounted() {
-    if (Object.keys(this.contactsPayload).length > 0) {
-      this.toggleEmailReminders(true)
-
-      /** Get previously filled out data after enabling contacts  */
-      this.name = this.contactsPayload.name
-      this.startTime = this.contactsPayload.startTime
-      this.endTime = this.contactsPayload.endTime
-      this.availabilityMode =
-        this.contactsPayload.availabilityMode ??
-        this.availabilityModes.DATES_AND_TIMES
-      this.selectedDateOption = this.contactsPayload.selectedDateOption
-      this.selectedDaysOfWeek = this.contactsPayload.selectedDaysOfWeek
-      this.selectedDays = this.contactsPayload.selectedDays
-      this.notificationsEnabled = this.contactsPayload.notificationsEnabled
-      this.timezone = this.contactsPayload.timezone
-
-      this.$refs.form.resetValidation()
-    }
-
-    this.$nextTick(() => {
-      this.hasMounted = true
-    })
-  },
-
   computed: {
-    ...mapState(["authUser", "daysOnlyEnabled"]),
     availabilityModeOptions() {
       return [
         {
@@ -430,119 +333,21 @@ export default {
         { text: "Dates only", value: this.availabilityModes.DATES_ONLY },
       ]
     },
+    /**
+     * Sign up sheets are always block based (the owner draws the blocks in the
+     * next step), so the time block and custom time modes don't apply here —
+     * only whether the sheet has times at all, hence the hardcoded false.
+     */
     daysOnly() {
       return getAvailabilityFields(this.availabilityMode, false).daysOnly
-    },
-    nameRules() {
-      return [(v) => !!v || "Event name is required"]
-    },
-    selectedDaysRules() {
-      return [
-        (selectedDays) =>
-          selectedDays.length > 0 || "Please select at least one day",
-      ]
-    },
-    addedEmails() {
-      if (Object.keys(this.contactsPayload).length > 0)
-        return this.contactsPayload.emails
-      return this.event && this.event.remindees
-        ? this.event.remindees.map((r) => r.email)
-        : []
-    },
-    times() {
-      return getTimeOptions()
-    },
-    minCalendarDate() {
-      if (this.edit) {
-        return ""
-      }
-
-      let today = new Date()
-      let dd = String(today.getDate()).padStart(2, "0")
-      let mm = String(today.getMonth() + 1).padStart(2, "0")
-      let yyyy = today.getFullYear()
-
-      return yyyy + "-" + mm + "-" + dd
-    },
-    isPhone() {
-      return isPhone(this.$vuetify)
     },
   },
 
   methods: {
-    ...mapActions(["showError"]),
-    blurNameField() {
-      this.$refs["name-field"].blur()
-    },
-    reset() {
-      this.name = ""
-      this.startTime = 9
-      this.endTime = 17
-      this.selectedDays = []
-      this.selectedDaysOfWeek = []
-      this.notificationsEnabled = false
-      this.availabilityMode = this.availabilityModes.DATES_AND_TIMES
-      this.selectedDateOption = "Specific dates"
-      this.emails = []
-      this.showAdvancedOptions = false
-      this.blindAvailabilityEnabled = false
-      this.sendEmailAfterXResponsesEnabled = false
-      this.sendEmailAfterXResponses = 3
-      this.collectEmails = false
-
-      this.$refs.form.resetValidation()
-    },
     submit() {
       if (!this.$refs.form.validate()) return
 
-      this.selectedDays.sort()
-
-      // Get duration of event
-      let duration = this.endTime - this.startTime
-      if (duration <= 0) duration += 24
-
-      // Get date objects for each selected day
-      let dates = []
-      let type = ""
-      if (this.daysOnly) {
-        duration = 0
-        type = eventTypes.SIGNUP
-
-        for (const day of this.selectedDays) {
-          const date = new Date(`${day} 00:00:00Z`)
-          dates.push(date)
-        }
-      } else {
-        const startTimeString = timeNumToTimeString(this.startTime)
-        if (this.selectedDateOption === this.dateOptions.SPECIFIC) {
-          type = eventTypes.SPECIFIC_DATES
-
-          for (const day of this.selectedDays) {
-            const date = dayjs.tz(
-              `${day} ${startTimeString}`,
-              this.timezone.value
-            )
-            dates.push(date.toDate())
-          }
-        } else if (this.selectedDateOption === this.dateOptions.DOW) {
-          type = eventTypes.DOW
-
-          this.selectedDaysOfWeek.sort((a, b) => a - b)
-          this.selectedDaysOfWeek = this.selectedDaysOfWeek.filter(
-            (dayIndex) => {
-              return this.startOnMonday ? dayIndex !== 0 : dayIndex !== 7
-            }
-          )
-          for (const dayIndex of this.selectedDaysOfWeek) {
-            const day = dayIndexToDayString[dayIndex]
-            const date = dayjs.tz(
-              `${day} ${startTimeString}`,
-              this.timezone.value
-            )
-            dates.push(date.toDate())
-          }
-        }
-      }
+      const { dates, duration, type } = this.buildDatesPayload()
 
       this.loading = true
 
@@ -605,170 +410,6 @@ export default {
               this.loading = false
             })
         }
-      }
-    },
-
-    toggleEmailReminders(delayed = false) {
-      if (delayed) {
-        setTimeout(
-          () => (this.showEmailReminders = !this.showEmailReminders),
-          300
-        )
-      } else {
-        this.showEmailReminders = !this.showEmailReminders
-      }
-    },
-
-    /** Redirects user to oauth page requesting access to the user's contacts */
-    requestContactsAccess({ emails }) {
-      const payload = {
-        emails,
-        name: this.name,
-        startTime: this.startTime,
-        endTime: this.endTime,
-        availabilityMode: this.availabilityMode,
-        selectedDays: this.selectedDays,
-        selectedDaysOfWeek: this.selectedDaysOfWeek,
-        selectedDateOption: this.selectedDateOption,
-        notificationsEnabled: this.notificationsEnabled,
-        timezone: this.timezone,
-      }
-      signInGoogle({
-        state: {
-          type: authTypes.EVENT_CONTACTS,
-          eventId: this.event ? this.event.shortId ?? this.event._id : "",
-          payload,
-        },
-        requestContactsPermission: true,
-      })
-    },
-    /** Update state based on the contactsPayload after granting contacts access */
-    contactsAccessGranted({ curScheduledEvent, ...data }) {
-      this.curScheduledEvent = curScheduledEvent
-      this.$refs.confirmDetailsDialog?.setData(data)
-      this.confirmDetailsDialog = true
-    },
-
-    /** Populates the form fields based on this.event */
-    updateFieldsFromEvent() {
-      if (this.event) {
-        this.name = this.event.name
-
-        // Set start time, accounting for the timezone
-        this.startTime = Math.floor(
-          dateToTimeNum(getDateWithTimezone(this.event.dates[0]), true)
-        )
-        this.startTime %= 24
-
-        this.endTime = (this.startTime + this.event.duration) % 24
-        this.notificationsEnabled = this.event.notificationsEnabled
-        this.blindAvailabilityEnabled = this.event.blindAvailabilityEnabled
-        this.availabilityMode = getAvailabilityMode(this.event).mode
-
-        if (
-          this.event.sendEmailAfterXResponses !== null &&
-          this.event.sendEmailAfterXResponses > 0
-        ) {
-          this.sendEmailAfterXResponsesEnabled = true
-          this.sendEmailAfterXResponses = this.event.sendEmailAfterXResponses
-        }
-
-        if (this.event.daysOnly) {
-          this.selectedDateOption = this.dateOptions.SPECIFIC
-          const selectedDays = []
-          for (let date of this.event.dates) {
-            selectedDays.push(getISODateString(date, true))
-          }
-          this.selectedDays = selectedDays
-        } else {
-          if (this.event.type === eventTypes.SPECIFIC_DATES) {
-            this.selectedDateOption = this.dateOptions.SPECIFIC
-            const selectedDays = []
-            for (let date of this.event.dates) {
-              date = getDateWithTimezone(date)
-
-              selectedDays.push(getISODateString(date, true))
-            }
-            this.selectedDays = selectedDays
-          } else if (this.event.type === eventTypes.DOW) {
-            this.selectedDateOption = this.dateOptions.DOW
-            const selectedDaysOfWeek = []
-            for (let date of this.event.dates) {
-              date = getDateWithTimezone(date)
-
-              if (this.event.startOnMonday && date.getUTCDay() === 0) {
-                selectedDaysOfWeek.push(7)
-              } else {
-                selectedDaysOfWeek.push(date.getUTCDay())
-              }
-            }
-            this.selectedDaysOfWeek = selectedDaysOfWeek
-            if (this.event.startOnMonday) {
-              this.startOnMonday = true
-            }
-          }
-        }
-      }
-    },
-    resetToEventData() {
-      this.updateFieldsFromEvent()
-      // this.$refs.emailInput.reset()
-    },
-    setInitialEventData() {
-      this.initialEventData = {
-        name: this.name,
-        startTime: this.startTime,
-        endTime: this.endTime,
-        availabilityMode: this.availabilityMode,
-        selectedDays: this.selectedDays,
-        selectedDaysOfWeek: this.selectedDaysOfWeek,
-        selectedDateOption: this.selectedDateOption,
-        notificationsEnabled: this.notificationsEnabled,
-        emails: [...this.emails],
-        blindAvailabilityEnabled: this.blindAvailabilityEnabled,
-        sendEmailAfterXResponsesEnabled: this.sendEmailAfterXResponsesEnabled,
-        sendEmailAfterXResponses: this.sendEmailAfterXResponses,
-      }
-    },
-    hasEventBeenEdited() {
-      return (
-        this.name !== this.initialEventData.name ||
-        this.startTime !== this.initialEventData.startTime ||
-        this.endTime !== this.initialEventData.endTime ||
-        this.selectedDateOption !== this.initialEventData.selectedDateOption ||
-        JSON.stringify(this.selectedDays) !==
-          JSON.stringify(this.initialEventData.selectedDays) ||
-        JSON.stringify(this.selectedDaysOfWeek) !==
-          JSON.stringify(this.initialEventData.selectedDaysOfWeek) ||
-        this.availabilityMode !== this.initialEventData.availabilityMode ||
-        this.notificationsEnabled !==
-          this.initialEventData.notificationsEnabled ||
-        JSON.stringify(this.emails) !==
-          JSON.stringify(this.initialEventData.emails) ||
-        this.blindAvailabilityEnabled !==
-          this.initialEventData.blindAvailabilityEnabled ||
-        this.sendEmailAfterXResponsesEnabled !==
-          this.initialEventData.sendEmailAfterXResponsesEnabled ||
-        this.sendEmailAfterXResponses !==
-          this.initialEventData.sendEmailAfterXResponses
-      )
-    },
-  },
-
-  watch: {
-    event: {
-      immediate: true,
-      handler() {
-        this.updateFieldsFromEvent()
-        this.setInitialEventData()
-      },
-    },
-    selectedDateOption() {
-      // Reset the other date / day selection when date option is changed
-      if (this.selectedDateOption === this.dateOptions.SPECIFIC) {
-        this.selectedDaysOfWeek = []
-      } else if (this.selectedDateOption === this.dateOptions.DOW) {
-        this.selectedDays = []
       }
     },
   },
