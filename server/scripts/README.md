@@ -39,5 +39,11 @@ convention. The dated ones, in order:
 - `20250201_optimize_event_indexes`
 - `20250417_responses_collection`
 - `20250420_num_responses`
+- `20260730_list_item_order`
 
 For what any individual script did, read its `main.go` — the code is the record.
+
+`20260730_list_item_order` is the one exception to "do not re-run": it is
+explicitly idempotent and takes a `-dry-run` flag, because it had to be
+rehearsed against a local database before going near production. Re-running it
+is a no-op, not a corruption. Its header says why.
