@@ -4017,6 +4017,14 @@
                 "status": {
                     "$ref": "#/definitions/models.RsvpStatus"
                 },
+                "user": {
+                    "description": "User is the resolved account, attached per-request (never stored) so the\nroster can render an avatar without a lookup per RSVP — the same shape\nComment.Author uses. Slimmed to identity fields; see resolveRsvpNames.\nNil for a legacy name-keyed row or a deleted account.\n\n`bson:\"-\"` is load-bearing: the RSVP write path $sets the whole rsvps map\nfrom the in-memory struct, so an untagged field would be persisted.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.User"
+                        }
+                    ]
+                },
                 "userId": {
                     "type": "string"
                 }

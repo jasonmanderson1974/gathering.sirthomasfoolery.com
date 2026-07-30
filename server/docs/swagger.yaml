@@ -561,6 +561,17 @@ definitions:
         type: integer
       status:
         $ref: '#/definitions/models.RsvpStatus'
+      user:
+        allOf:
+        - $ref: '#/definitions/models.User'
+        description: |-
+          User is the resolved account, attached per-request (never stored) so the
+          roster can render an avatar without a lookup per RSVP — the same shape
+          Comment.Author uses. Slimmed to identity fields; see resolveRsvpNames.
+          Nil for a legacy name-keyed row or a deleted account.
+
+          `bson:"-"` is load-bearing: the RSVP write path $sets the whole rsvps map
+          from the in-memory struct, so an untagged field would be persisted.
       userId:
         type: string
     type: object

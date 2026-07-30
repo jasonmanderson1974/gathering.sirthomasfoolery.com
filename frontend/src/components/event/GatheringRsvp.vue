@@ -62,13 +62,24 @@
     </div>
 
     <!-- Roster grouped by status -->
-    <div v-if="hasAnyRsvp" class="tw-mt-3 tw-space-y-1 tw-text-sm">
+    <div v-if="hasAnyRsvp" class="tw-mt-3 tw-space-y-2 tw-text-sm">
       <div v-for="opt in options" :key="`roster-${opt.value}`">
         <template v-if="rosters[opt.value].length">
-          <span class="tw-font-medium">{{ opt.label }}:</span>
-          <span class="tw-text-parchment-dim">
-            {{ rosters[opt.value].join(", ") }}
-          </span>
+          <div class="tw-font-medium">{{ opt.label }}</div>
+          <div class="tw-mt-1 tw-flex tw-flex-wrap tw-gap-x-4 tw-gap-y-1.5">
+            <div
+              v-for="entry in rosters[opt.value]"
+              :key="`${opt.value}-${entry.key}`"
+              class="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5"
+            >
+              <span class="tw-flex-none">
+                <UserAvatarContent :user="entry.user" :size="22" />
+              </span>
+              <span class="tw-truncate tw-text-parchment-dim">
+                {{ entry.label }}
+              </span>
+            </div>
+          </div>
         </template>
       </div>
     </div>
@@ -77,6 +88,8 @@
 
 <script>
 import { mapState } from "vuex"
+import UserAvatarContent from "@/components/UserAvatarContent.vue"
+import { userFromDisplayName } from "@/utils"
 
 /**
  * RSVP widget for a confirmed gathering (shown when event.scheduledEvent
@@ -86,6 +99,8 @@ import { mapState } from "vuex"
  */
 export default {
   name: "GatheringRsvp",
+
+  components: { UserAvatarContent },
 
   props: {
     event: { type: Object, required: true },
@@ -120,13 +135,25 @@ export default {
       }
       return c
     },
+    /**
+     * One entry per RSVP, grouped by status, carrying what a row renders: the
+     * label (name + any plus-ones) and the account behind it.
+     *
+     * The server attaches `user` to every account-keyed RSVP (F11). A legacy
+     * name-keyed row has none, so the stored name stands in and yields a
+     * monogram — the same fallback comments use.
+     */
     rosters() {
       const r = { going: [], maybe: [], no: [] }
       for (const [key, rsvp] of Object.entries(this.rsvps)) {
         if (!rsvp || !r[rsvp.status]) continue
         const name = rsvp.name || key
         const extra = rsvp.guestCount > 0 ? ` (+${rsvp.guestCount})` : ""
-        r[rsvp.status].push(`${name}${extra}`)
+        r[rsvp.status].push({
+          key,
+          label: `${name}${extra}`,
+          user: rsvp.user ?? userFromDisplayName(name),
+        })
       }
       return r
     },

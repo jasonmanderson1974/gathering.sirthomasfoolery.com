@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { serverURL } from "@/constants"
-import { avatarUrl, isOwnAvatarUrl, monogram } from "./general_utils"
+import {
+  avatarUrl,
+  isOwnAvatarUrl,
+  monogram,
+  userFromDisplayName,
+} from "./general_utils"
 
 // The photo a member uploads is served immutably, so the URL is the only thing
 // that tells a browser to fetch a new one. These cases are about that: which
@@ -164,5 +169,35 @@ describe("isOwnAvatarUrl", () => {
     expect(isOwnAvatarUrl("")).toBe(false)
     expect(isOwnAvatarUrl(null)).toBe(false)
     expect(isOwnAvatarUrl(undefined)).toBe(false)
+  })
+})
+
+// The fallback for rows whose account did not resolve: a guest, or an account
+// since deleted. Its whole job is to feed monogram, so the cases are about the
+// initials that come out the far end.
+describe("userFromDisplayName", () => {
+  it("splits a two-word name into the same two initials the account would give", () => {
+    expect(monogram(userFromDisplayName("Ada Lovelace"))).toBe("AL")
+  })
+
+  it("gives a one-word name one initial", () => {
+    expect(monogram(userFromDisplayName("Cecil"))).toBe("C")
+  })
+
+  it("uses the last word of a three-part name, matching monogram on the account", () => {
+    expect(monogram(userFromDisplayName("Ada King Lovelace"))).toBe("AL")
+  })
+
+  it("ignores surrounding and repeated whitespace", () => {
+    expect(monogram(userFromDisplayName("  Ada   Lovelace  "))).toBe("AL")
+  })
+
+  it("yields '?' for a name it cannot use", () => {
+    // A roster row always renders an avatar, so every one of these has to
+    // produce something rather than throw.
+    expect(monogram(userFromDisplayName(""))).toBe("?")
+    expect(monogram(userFromDisplayName("   "))).toBe("?")
+    expect(monogram(userFromDisplayName(null))).toBe("?")
+    expect(monogram(userFromDisplayName(undefined))).toBe("?")
   })
 })

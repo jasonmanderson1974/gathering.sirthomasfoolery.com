@@ -66,6 +66,7 @@
 import dayjs from "dayjs"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
 import { splitMentions } from "@/components/event/mentionText"
+import { userFromDisplayName } from "@/utils"
 
 /**
  * A single comment in the event discussion — used both for top-level messages
@@ -107,15 +108,9 @@ export default {
      * monogram.
      */
     author() {
-      if (this.comment.author) return this.comment.author
-      // A snapshot is a finished display name, not structured fields. Split it
-      // so a two-word name still yields two initials, the same monogram the
-      // account would have produced had it resolved.
-      const parts = (this.comment.authorName ?? "").trim().split(/\s+/)
-      return {
-        firstName: parts[0] ?? "",
-        lastName: parts.length > 1 ? parts[parts.length - 1] : "",
-      }
+      return (
+        this.comment.author ?? userFromDisplayName(this.comment.authorName)
+      )
     },
     // Proxies the parent's shared edit buffer via .sync, so only one row is ever
     // in edit mode and the parent keeps ownership of the draft text.

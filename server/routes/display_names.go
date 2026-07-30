@@ -124,7 +124,9 @@ func attachCommentAuthors(comments []models.Comment, users map[string]models.Use
 }
 
 // resolveRsvpNames overwrites each account-keyed RSVP's serialized name with
-// the account's current DisplayName. Name-keyed legacy rows are left alone.
+// the account's current DisplayName, and attaches the slim account so the
+// roster can render an avatar beside it (F11). Name-keyed legacy rows are left
+// alone and keep a nil User, which the client renders as a monogram.
 func resolveRsvpNames(rsvps map[string]*models.Rsvp, users map[string]models.User) {
 	for key, rsvp := range rsvps {
 		if rsvp == nil {
@@ -134,10 +136,11 @@ func resolveRsvpNames(rsvps map[string]*models.Rsvp, users map[string]models.Use
 		if !ok {
 			continue
 		}
+		rsvp.User = slimUserForDisplay(user)
 		if name := user.DisplayName(); name != "" {
 			rsvp.Name = name
-			rsvps[key] = rsvp
 		}
+		rsvps[key] = rsvp
 	}
 }
 

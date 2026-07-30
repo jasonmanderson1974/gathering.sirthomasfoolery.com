@@ -324,6 +324,25 @@ export const monogram = (user) => {
 }
 
 /**
+ * A stand-in user built from a stored display-name snapshot, for the rows whose
+ * account did not resolve — a guest, or an account since deleted. The server
+ * attaches the real account wherever it can (comment.author, rsvp.user); this
+ * is the fallback for everywhere it cannot.
+ *
+ * A snapshot is a finished display name, not structured fields, so it is split
+ * back apart: a two-word name yields the same two initials the account itself
+ * would have produced. Anything the caller passes that isn't a string yields an
+ * empty pair, which monogram renders as "?".
+ */
+export const userFromDisplayName = (name) => {
+  const parts = (typeof name === "string" ? name : "").trim().split(/\s+/)
+  return {
+    firstName: parts[0] ?? "",
+    lastName: parts.length > 1 ? parts[parts.length - 1] : "",
+  }
+}
+
+/**
  * A Google Maps search link for a free-text venue or address.
  *
  * Locations are stored as the text the user typed or picked — no place id, no

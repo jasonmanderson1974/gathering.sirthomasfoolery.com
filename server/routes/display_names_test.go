@@ -3,6 +3,7 @@ package routes
 import (
 	"testing"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"sirtom/server/models"
 )
@@ -117,6 +118,47 @@ func TestResolveRsvpNames(t *testing.T) {
 	}
 	if got := rsvps["Guest Tom"].Name; got != "Guest Tom" {
 		t.Errorf("legacy guest RSVP was rewritten to %q", got)
+	}
+
+	// F11: the roster renders an avatar, so the slim account rides along.
+	slim := rsvps[id.Hex()].User
+	if slim == nil {
+		t.Fatal("account RSVP got no attached user")
+	}
+	if slim.Id != id || slim.Nickname != "Bart" {
+		t.Errorf("attached user lost identity fields: %+v", slim)
+	}
+	if slim.Email != "" {
+		t.Errorf("attached user leaked an email: %q", slim.Email)
+	}
+	if rsvps["Guest Tom"].User != nil {
+		t.Error("legacy guest RSVP should get no attached user")
+	}
+}
+
+// The RSVP write path $sets the whole rsvps map from the in-memory struct, so
+// the attached user would be persisted — and go stale — without `bson:"-"`.
+func TestRsvpUserIsNeverPersisted(t *testing.T) {
+	id := primitive.NewObjectID()
+	rsvp := models.Rsvp{
+		Status: models.RsvpGoing,
+		Name:   "Bart",
+		User:   &models.User{Id: id, FirstName: "Bart"},
+	}
+
+	raw, err := bson.Marshal(rsvp)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var doc bson.M
+	if err := bson.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, ok := doc["user"]; ok {
+		t.Fatalf("the resolved user was serialized into the stored document: %v", doc)
+	}
+	if doc["name"] != "Bart" {
+		t.Errorf("name should still persist, got %v", doc["name"])
 	}
 }
 

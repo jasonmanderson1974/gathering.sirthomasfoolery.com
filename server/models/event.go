@@ -202,9 +202,19 @@ type Rsvp struct {
 	// GuestCount is the number of ADDITIONAL people this responder is bringing
 	// (a spouse/plus-one), i.e. the headcount for this RSVP is 1 + GuestCount.
 	// Only meaningful for going/maybe.
-	GuestCount  int                `json:"guestCount" bson:"guestCount,omitempty"`
-	Name        string             `json:"name" bson:"name,omitempty"`
-	Email       string             `json:"email" bson:"email,omitempty"`
+	GuestCount int    `json:"guestCount" bson:"guestCount,omitempty"`
+	Name       string `json:"name" bson:"name,omitempty"`
+	Email      string `json:"email" bson:"email,omitempty"`
+
+	// User is the resolved account, attached per-request (never stored) so the
+	// roster can render an avatar without a lookup per RSVP — the same shape
+	// Comment.Author uses. Slimmed to identity fields; see resolveRsvpNames.
+	// Nil for a legacy name-keyed row or a deleted account.
+	//
+	// `bson:"-"` is load-bearing: the RSVP write path $sets the whole rsvps map
+	// from the in-memory struct, so an untagged field would be persisted.
+	User *User `json:"user,omitempty" bson:"-"`
+
 	UserId      primitive.ObjectID `json:"userId" bson:"userId,omitempty"`
 	RespondedAt primitive.DateTime `json:"respondedAt" bson:"respondedAt,omitempty"`
 }
