@@ -23,7 +23,7 @@ export default new Vuex.Store({
     folders: [],
 
     // Feature flags
-    signUpFormEnabled: false,
+    signUpFormEnabled: true,
     daysOnlyEnabled: true,
     overlayAvailabilitiesEnabled: true,
 

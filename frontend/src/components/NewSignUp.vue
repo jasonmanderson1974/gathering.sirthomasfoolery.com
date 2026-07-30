@@ -298,6 +298,7 @@
 
 <script>
 import { post, put } from "@/utils"
+import { mapActions } from "vuex"
 import TimezoneSelector from "./schedule_overlap/TimezoneSelector.vue"
 import HelpDialog from "./HelpDialog.vue"
 import DatePicker from "@/components/DatePicker.vue"
@@ -344,6 +345,7 @@ export default {
   },
 
   methods: {
+    ...mapActions(["setEventFolder"]),
     submit() {
       if (!this.$refs.form.validate()) return
 
@@ -371,7 +373,11 @@ export default {
       if (!this.edit) {
         // Create new event on backend
         post("/events", payload)
-          .then(({ eventId, shortId }) => {
+          .then(async ({ eventId, shortId }) => {
+            // The dialog can be opened from inside a folder, same as for an
+            // event — without this the new sheet lands at the top level
+            await this.setEventFolder({ eventId, folderId: this.folderId })
+
             this.$router.push({
               name: "signUp",
               params: {

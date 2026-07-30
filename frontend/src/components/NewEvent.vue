@@ -406,7 +406,6 @@ export default {
   ],
 
   props: {
-    folderId: { type: String, default: null },
     isDialogOpen: { type: Boolean, default: false },
   },
 

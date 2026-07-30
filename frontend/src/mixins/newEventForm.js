@@ -110,6 +110,8 @@ export const newEventFormMixin = (defaultOverrides = () => ({})) => {
       dialog: { type: Boolean, default: true },
       contactsPayload: { type: Object, default: () => ({}) },
       showHelp: { type: Boolean, default: false },
+      /** The folder the dialog was opened from; null when created at top level */
+      folderId: { type: String, default: null },
     },
 
     data: () => ({
