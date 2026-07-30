@@ -3,7 +3,7 @@
  *
  * Extracted verbatim from ScheduleOverlap.vue as a Vue 2 mixin (TODO A5).
  * Mixin methods run against the same component instance, so every `this.*`
- * reference (state, showEditOptions, $posthog, ...) resolves exactly as
+ * reference (state, showEditOptions, ...) resolves exactly as
  * before — a behavior-preserving move, not a rewrite.
  */
 export default {
@@ -34,9 +34,6 @@ export default {
     },
     updateOverlayAvailability(val) {
       this.overlayAvailability = !!val
-      this.$posthog.capture("overlay_availability_toggled", {
-        enabled: !!val,
-      })
     },
   },
 }

@@ -6,59 +6,63 @@ import (
 	"fmt"
 )
 
-// Errors enum
-// TODO: make these an actual type (i.e. Errors.NotSignedIn)
+// Code is the machine-readable error identifier returned to clients as the
+// `error` field of responses.Error. It is a distinct type rather than a bare
+// string (G1) so a handler cannot pass an arbitrary message where a client is
+// parsing a known code — the values are part of the frontend's contract, not
+// prose. The underlying type stays string, so the JSON on the wire is
+// unchanged.
+type Code string
+
 const (
-	NotSignedIn           string = "not-signed-in"
-	UserDoesNotExist      string = "user-does-not-exist"
-	EventNotFound         string = "event-not-found"
-	FriendRequestNotFound string = "friend-request-not-found"
-	UserNotFriends        string = "user-not-friends"
-	UserNotEventOwner     string = "user-not-event-owner"
-	RemindeeEmailNotFound string = "remindee-email-not-found"
-	InvalidCredentials    string = "invalid-credentials"
-	OtpExpired            string = "otp-expired"
-	OtpInvalidCode        string = "otp-invalid-code"
-	OtpTooManyAttempts    string = "otp-too-many-attempts"
-	OtpSendFailed         string = "otp-send-failed"
-	OtpRateLimited        string = "otp-rate-limited"
-	InvalidIdToken        string = "invalid-id-token"
+	NotSignedIn           Code = "not-signed-in"
+	UserDoesNotExist      Code = "user-does-not-exist"
+	EventNotFound         Code = "event-not-found"
+	UserNotEventOwner     Code = "user-not-event-owner"
+	RemindeeEmailNotFound Code = "remindee-email-not-found"
+	InvalidCredentials    Code = "invalid-credentials"
+	OtpExpired            Code = "otp-expired"
+	OtpInvalidCode        Code = "otp-invalid-code"
+	OtpTooManyAttempts    Code = "otp-too-many-attempts"
+	OtpSendFailed         Code = "otp-send-failed"
+	OtpRateLimited        Code = "otp-rate-limited"
+	InvalidIdToken        Code = "invalid-id-token"
 	// NotInvited: the email is not on the invite-only allowlist
-	NotInvited string = "not-invited"
+	NotInvited Code = "not-invited"
 	// NotAuthorized: the user is signed in but lacks permission (e.g. not an inviter)
-	NotAuthorized string = "not-authorized"
+	NotAuthorized Code = "not-authorized"
 	// InvalidEmail: the provided email failed validation
-	InvalidEmail string = "invalid-email"
+	InvalidEmail Code = "invalid-email"
 	// CannotRemoveSelf: an admin tried to remove their own access / role
-	CannotRemoveSelf string = "cannot-remove-self"
+	CannotRemoveSelf Code = "cannot-remove-self"
 	// SuperAdminImmutable: attempted to modify or remove a super admin via the app
-	SuperAdminImmutable string = "super-admin-immutable"
+	SuperAdminImmutable Code = "super-admin-immutable"
 	// InvalidRole: the requested role is not grantable by the actor
-	InvalidRole string = "invalid-role"
+	InvalidRole Code = "invalid-role"
 	// Internal: a generic server-side error (details are logged, not returned)
-	Internal string = "internal-error"
+	Internal Code = "internal-error"
 	// EmailUnchanged: the requested new email equals the current one
-	EmailUnchanged string = "email-unchanged"
+	EmailUnchanged Code = "email-unchanged"
 	// EmailTaken: the requested new email already belongs to another account
-	EmailTaken string = "email-taken"
+	EmailTaken Code = "email-taken"
 	// GatheringNotScheduled: the event has no confirmed gathering time yet
-	GatheringNotScheduled string = "gathering-not-scheduled"
+	GatheringNotScheduled Code = "gathering-not-scheduled"
 	// InvalidEventType: the event type is not one of the defined EventTypes
-	InvalidEventType string = "invalid-event-type"
+	InvalidEventType Code = "invalid-event-type"
 	// PayloadTooLarge: a create/edit payload exceeded a cardinality cap
-	PayloadTooLarge string = "payload-too-large"
+	PayloadTooLarge Code = "payload-too-large"
 	// InvalidImage: the uploaded avatar was not a decodable JPEG or PNG
-	InvalidImage string = "invalid-image"
+	InvalidImage Code = "invalid-image"
 	// ImageTooLarge: the uploaded avatar exceeded the upload size cap
-	ImageTooLarge string = "image-too-large"
+	ImageTooLarge Code = "image-too-large"
 	// InvalidName: a name field was sent but was blank after trimming. Names
 	// may be edited but not erased — DisplayName falls back to them.
-	InvalidName string = "invalid-name"
+	InvalidName Code = "invalid-name"
 )
 
 // Sentinel error returned by signInHelper when an email is not allowlisted, so
 // callers can distinguish it from other sign-in failures and return NotInvited.
-var ErrNotInvited = errors.New(NotInvited)
+var ErrNotInvited = errors.New(string(NotInvited))
 
 type GoogleAPIError struct {
 	Code    int         `json:"code"`

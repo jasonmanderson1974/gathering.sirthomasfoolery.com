@@ -287,15 +287,6 @@ export default {
           this.refreshAuthUser()
           this.getEvents()
           this.$refs.menu.save() // NOTE: Not sure why but without this line, the menu persists to the next event.
-
-          this.$posthog?.capture("Event removed", {
-            eventId: this.event._id,
-            eventName: this.event.name,
-            eventDuration: this.event.duration,
-            eventDates: this.event.dates,
-            eventNotificationsEnabled: this.event.notificationsEnabled,
-            eventType: this.event.type,
-          })
         })
         .catch(() => {
           this.showError(
@@ -309,19 +300,9 @@ export default {
         eventName: this.duplicateDialogOptions.name,
         copyAvailability: this.duplicateDialogOptions.copyAvailability,
       })
-        .then(({ eventId }) => {
+        .then(() => {
           this.getEvents()
           this.$refs.menu.save() // NOTE: Not sure why but without this line, the menu persists to the next event.
-
-          this.$posthog?.capture("Event duplicated", {
-            eventId: eventId,
-            eventName: this.duplicateDialogOptions.name,
-            eventDuration: this.event.duration,
-            eventDates: this.event.dates,
-            eventNotificationsEnabled: this.event.notificationsEnabled,
-            eventType: this.event.type,
-            copyAvailability: this.duplicateDialogOptions.copyAvailability,
-          })
         })
         .catch(() => {
           this.showError(

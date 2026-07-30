@@ -7,7 +7,7 @@
     <v-switch
       id="buffer-time-switch"
       :input-value="bufferTime.enabled"
-      @change="handleBufferTimeToggle"
+      @change="(val) => updateCalendarOption('enabled', val)"
       inset
       class="tw-flex tw-items-center"
       hide-details
@@ -23,7 +23,7 @@
             :items="bufferTimes"
             class="-tw-mt-0.5 tw-w-20 tw-text-xs"
             :value="bufferTime.time"
-            @input="(val) => updateBufferTime('time', val)"
+            @input="(val) => updateCalendarOption('time', val)"
             @click="
               (e) => {
                 e.preventDefault()
@@ -38,17 +38,14 @@
 </template>
 
 <script>
-import { patch } from "@/utils"
+import { calendarOptionSync } from "@/mixins/calendarOptionSync"
 
 export default {
   name: "BufferTimeToggle",
 
-  props: {
-    bufferTime: { type: Object, required: true },
-    syncWithBackend: { type: Boolean, default: false },
-  },
-
-  components: {},
+  // Declares the `bufferTime` + `syncWithBackend` props and
+  // updateCalendarOption — see the mixin.
+  mixins: [calendarOptionSync("bufferTime", "buffer time")],
 
   data() {
     return {
@@ -59,30 +56,6 @@ export default {
         { text: "1 hour", value: 60 },
       ],
     }
-  },
-
-  methods: {
-    updateBufferTime(key, val) {
-      const bufferTime = {
-        ...this.bufferTime,
-        [key]: val,
-      }
-      if (this.syncWithBackend) {
-        patch(`/user/calendar-options`, {
-          bufferTime,
-        })
-      }
-      this.$emit("update:bufferTime", bufferTime)
-    },
-    handleBufferTimeToggle(isEnabled) {
-      // Update the buffer time state
-      this.updateBufferTime("enabled", isEnabled)
-
-      // Capture PostHog event
-      this.$posthog.capture("buffer_time_switch_toggled", {
-        enabled: isEnabled,
-      })
-    },
   },
 }
 </script>

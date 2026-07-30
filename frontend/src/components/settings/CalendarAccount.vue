@@ -200,48 +200,49 @@ export default {
         this.openRemoveDialog()
       }
     },
-    toggleSubCalendarAccount(enabled, subCalendarId) {
+    /**
+     * The shared half of the two toggles below (G1): identify the account, then
+     * either persist the change or hand it to the parent.
+     *
+     * `syncWithBackend` is the whole difference between the two modes — in
+     * Settings this component owns the account and POSTs; in the event flow the
+     * parent is collecting changes to apply later, so it only emits.
+     *
+     * Kept local to this component rather than folded into the
+     * calendarOptionSync mixin the two switches share: those PATCH one route
+     * with a merged object, these POST two different routes with if/else
+     * semantics, so a common helper would be parameters all the way down.
+     */
+    toggleAccount(route, event, fields) {
+      const payload = {
+        email: this.account.email,
+        calendarType: this.account.calendarType,
+        ...fields,
+      }
       if (this.syncWithBackend) {
-        post(`/user/toggle-sub-calendar`, {
-          email: this.account.email,
-          calendarType: this.account.calendarType,
-          enabled,
-          subCalendarId,
-        }).catch(() => {
+        post(route, payload).catch(() => {
           this.showError(
             "There was a problem with toggling your calendar account! Please try again later."
           )
         })
       } else {
-        this.$emit("toggleSubCalendarAccount", {
-          email: this.account.email,
-          calendarType: this.account.calendarType,
-          enabled,
-          subCalendarId,
-        })
+        this.$emit(event, payload)
       }
     },
+    toggleSubCalendarAccount(enabled, subCalendarId) {
+      this.toggleAccount("/user/toggle-sub-calendar", "toggleSubCalendarAccount", {
+        enabled,
+        subCalendarId,
+      })
+    },
     toggleCalendarAccount(enabled) {
-
+      // Collapsing the sub-calendar list is local state, so it happens either
+      // way — including in the emit-only mode, where nothing is persisted.
       if (!enabled) this.showSubCalendars = false
 
-      if (this.syncWithBackend) {
-        post(`/user/toggle-calendar`, {
-          email: this.account.email,
-          calendarType: this.account.calendarType,
-          enabled,
-        }).catch(() => {
-          this.showError(
-            "There was a problem with toggling your calendar account! Please try again later."
-          )
-        })
-      } else {
-        this.$emit("toggleCalendarAccount", {
-          email: this.account.email,
-          calendarType: this.account.calendarType,
-          enabled,
-        })
-      }
+      this.toggleAccount("/user/toggle-calendar", "toggleCalendarAccount", {
+        enabled,
+      })
     },
     openRemoveDialog() {
       this.$emit("openRemoveDialog", {

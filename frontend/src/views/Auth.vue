@@ -49,12 +49,6 @@ export default {
         })
 
         this.setAuthUser(user)
-
-        this.$posthog?.identify(user._id, {
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-        })
       }
 
       // Redirect to the correct place based on "state", otherwise, just redirect to home

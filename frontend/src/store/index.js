@@ -22,8 +22,6 @@ export default new Vuex.Store({
     events: [],
     folders: [],
 
-    featureFlagsLoaded: false,
-
     // Feature flags
     signUpFormEnabled: false,
     daysOnlyEnabled: true,
@@ -59,9 +57,6 @@ export default new Vuex.Store({
       state.folders = folders
     },
 
-    setFeatureFlagsLoaded(state, loaded) {
-      state.featureFlagsLoaded = loaded
-    },
     setSignUpFormEnabled(state, enabled) {
       state.signUpFormEnabled = enabled
     },

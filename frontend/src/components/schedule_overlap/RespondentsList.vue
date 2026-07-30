@@ -519,11 +519,6 @@ export default {
         })
         this.$emit("refreshEvent")
         this.showInfo("Availability successfully deleted!")
-
-        this.$posthog?.capture("Deleted availability of another user", {
-          eventId: this.eventId,
-          userId: user._id,
-        })
       } catch (e) {
         console.error(e)
         this.showError(

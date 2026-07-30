@@ -100,7 +100,7 @@ func TestSanitizeResponderName(t *testing.T) {
 
 // validateEventPayload writes the response itself, so drive it through a real
 // context and assert on both the status and the error code.
-func runValidate(t *testing.T, p eventPayloadLimits) (int, string) {
+func runValidate(t *testing.T, p eventPayloadLimits) (int, errs.Code) {
 	t.Helper()
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -111,7 +111,7 @@ func runValidate(t *testing.T, p eventPayloadLimits) (int, string) {
 		return http.StatusOK, ""
 	}
 	var body struct {
-		Error string `json:"error"`
+		Error errs.Code `json:"error"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &body)
 	return w.Code, body.Error
@@ -205,7 +205,7 @@ func TestCreateEvent_RejectsUnknownTypeEndToEnd(t *testing.T) {
 		t.Fatalf("got %d, want 400 (body: %s)", w.Code, w.Body.String())
 	}
 	var resp struct {
-		Error string `json:"error"`
+		Error errs.Code `json:"error"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.Error != errs.InvalidEventType {

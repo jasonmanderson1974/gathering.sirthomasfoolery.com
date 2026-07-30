@@ -430,10 +430,6 @@ export default {
           color: this.newFolderColor,
         })
       } else {
-        this.$posthog.capture("folder_created", {
-          folderName: this.newFolderName.trim(),
-          folderColor: this.newFolderColor,
-        })
         this.createFolder({
           name: this.newFolderName.trim(),
           color: this.newFolderColor,

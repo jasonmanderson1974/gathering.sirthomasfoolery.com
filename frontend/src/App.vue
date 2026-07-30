@@ -264,16 +264,9 @@ export default {
   },
 
   methods: {
-    ...mapMutations([
-      "setAuthUser",
-      "setSignUpFormEnabled",
-      "setFeatureFlagsLoaded",
-    ]),
+    ...mapMutations(["setAuthUser"]),
     ...mapActions(["getEvents", "createNew"]),
     _createNew(eventOnly = false) {
-      this.$posthog.capture("create_new_button_clicked", {
-        eventOnly: eventOnly,
-      })
       this.createNew({ eventOnly })
     },
     signIn() {
@@ -288,25 +281,12 @@ export default {
       }
       this.$router.push({ name: "sign-in" })
     },
-    setFeatureFlags() {
-      if (!this.$posthog) return
-
-      // this.setSignUpFormEnabled(this.$posthog.isFeatureEnabled("sign-up-form"))
-      // this.setEnablePaywall(this.$posthog.isFeatureEnabled("enable-paywall"))
-      this.setFeatureFlagsLoaded(true)
-    },
   },
 
   async created() {
     await get("/user/profile")
       .then((authUser) => {
         this.setAuthUser(authUser)
-
-        this.$posthog?.identify(authUser._id, {
-          email: authUser.email,
-          firstName: authUser.firstName,
-          lastName: authUser.lastName,
-        })
       })
       .catch(() => {
         this.setAuthUser(null)
@@ -325,24 +305,6 @@ export default {
   },
 
   beforeDestroy() {
-  },
-
-  watch: {
-    authUser: {
-      immediate: true,
-      handler() {
-        if (this.$posthog) {
-          this.setFeatureFlags()
-          // Check feature flags (only if posthog is enabled)
-          // this.$posthog.setPersonPropertiesForFlags({
-          //   email: this.authUser?.email,
-          // })
-          // this.$posthog.onFeatureFlags(() => {
-          //   this.setFeatureFlags()
-          // })
-        }
-      },
-    },
   },
 }
 </script>

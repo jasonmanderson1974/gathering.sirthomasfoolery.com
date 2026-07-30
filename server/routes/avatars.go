@@ -70,8 +70,8 @@ const (
 // knowing anything about HTTP — F6 maps them to the same responses from a
 // different route group.
 var (
-	errAvatarInvalid  = errors.New(errs.InvalidImage)
-	errAvatarTooLarge = errors.New(errs.ImageTooLarge)
+	errAvatarInvalid  = errors.New(string(errs.InvalidImage))
+	errAvatarTooLarge = errors.New(string(errs.ImageTooLarge))
 )
 
 // decodeAvatarPayload turns the `image` field of a request into raw bytes. It

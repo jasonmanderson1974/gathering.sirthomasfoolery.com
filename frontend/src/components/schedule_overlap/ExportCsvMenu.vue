@@ -12,7 +12,6 @@
               id="export-csv-btn"
               v-on="on"
               v-bind="attrs"
-              @click="trackExportCsvClick"
             >
               <v-list-item-title>Export CSV</v-list-item-title>
             </v-list-item>
@@ -194,12 +193,6 @@ export default {
       document.body.appendChild(downloadLink)
       downloadLink.click()
       document.body.removeChild(downloadLink)
-    },
-    trackExportCsvClick() {
-      this.$posthog.capture("export_csv_clicked", {
-        eventId: this.eventId,
-        numRespondents: this.respondents.length,
-      })
     },
   },
 }

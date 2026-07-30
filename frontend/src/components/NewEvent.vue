@@ -321,7 +321,6 @@
               :sendEmailAfterXResponses.sync="sendEmailAfterXResponses"
               :timezone.sync="timezone"
               @signIn="$emit('signIn')"
-              @timezone-input="trackTimezoneChange"
             />
           </ExpandableSection>
         </div>
@@ -699,27 +698,6 @@ export default {
         location: this.location.trim(),
       }
 
-      const posthogPayload = {
-        eventName: this.name,
-        eventDuration: duration,
-        eventDates: JSON.stringify(dates),
-        eventHasSpecificTimes: this.specificTimesEnabled,
-        eventWholeBlockSelection: this.wholeBlockSelection,
-        eventNotificationsEnabled: !this.authUser
-          ? false
-          : this.notificationsEnabled,
-        eventBlindAvailabilityEnabled: this.blindAvailabilityEnabled,
-        eventDaysOnly: this.daysOnly,
-        eventRemindees: this.emails,
-        eventType: type,
-        eventSendEmailAfterXResponses: this.sendEmailAfterXResponsesEnabled
-          ? parseInt(this.sendEmailAfterXResponses)
-          : -1,
-        eventCollectEmails: this.collectEmails,
-        eventStartOnMonday: this.startOnMonday,
-        eventTimeIncrement: this.timeIncrement,
-        eventLocation: this.location.trim(),
-      }
 
       if (!this.edit) {
         // Create new event on backend
@@ -738,9 +716,6 @@ export default {
 
             this.$emit("input", false)
             this.reset()
-
-            posthogPayload.eventId = eventId
-            this.$posthog?.capture("Event created", posthogPayload)
           })
           .catch((err) => {
             this.showError(
@@ -756,9 +731,6 @@ export default {
         if (this.event) {
           put(`/events/${this.event._id}`, payload)
             .then(() => {
-              posthogPayload.eventId = this.event._id
-              this.$posthog?.capture("Event edited", posthogPayload)
-
               // this.$emit("input", false)
               // this.reset()
               localStorage.setItem(`from-edit-event-${this.event._id}`, "true")
@@ -933,11 +905,6 @@ export default {
           this.initialEventData.sendEmailAfterXResponses ||
         this.location !== this.initialEventData.location
       )
-    },
-    trackTimezoneChange(newTimezone) {
-      this.$posthog.capture("timezone_selected_in_new_event_dialog", {
-        timezone: newTimezone?.value,
-      })
     },
   },
 

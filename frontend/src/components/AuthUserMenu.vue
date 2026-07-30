@@ -111,7 +111,6 @@ export default {
     async signOut() {
       await post("/auth/sign-out")
       this.setAuthUser(null)
-      this.$posthog?.reset()
       location.reload()
     },
     goToSettings() {
@@ -127,7 +126,6 @@ export default {
       this.$router.replace({ name: "admin" })
     },
     addTeamMember() {
-      this.$posthog?.capture("add_team_member_clicked")
       this.showTeamsNotReadyDialog = true
     },
   },

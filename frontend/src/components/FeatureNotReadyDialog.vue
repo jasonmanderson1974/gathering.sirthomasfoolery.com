@@ -61,10 +61,6 @@ export default {
     ...mapActions(["showInfo"]),
     submitFeedback() {
       if (this.folderUsageFeedback.trim() !== "") {
-        this.$posthog?.capture("folder_usage_feedback_submitted", {
-          feedback: this.folderUsageFeedback,
-        })
-        // Optionally, you can clear the textarea and close the dialog
         this.folderUsageFeedback = ""
         this.dialog = false
         this.showInfo("Thanks for your input!")

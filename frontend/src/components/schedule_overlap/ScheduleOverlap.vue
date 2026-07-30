@@ -1076,6 +1076,7 @@ import {
   getSpecificTimeBlocks,
   buildSlotToBlockMap,
 } from "./specificTimeBlocks"
+import { gridTimeOffset } from "./gridTimeOffset"
 dayjs.extend(utcPlugin)
 dayjs.extend(timezonePlugin)
 
@@ -1825,13 +1826,15 @@ export default {
       )
       const localEndTime = utcTimeToLocalTime(utcEndTime, this.timezoneOffset)
 
-      // Weird timezones are timezones that are not a multiple of 60 minutes (e.g. GMT-2:30)
-      const isWeirdTimezone = this.timezoneOffset % 60 !== 0
-      const startTimeIsWeird = utcStartTime % 1 !== 0
-      let timeOffset = 0
-      if (isWeirdTimezone !== startTimeIsWeird) {
-        timeOffset = -0.5
-      }
+      // Weird timezones are timezones that are not a multiple of 60 minutes
+      // (e.g. GMT-2:30). See gridTimeOffset for why a specific-times event
+      // takes no shift.
+      const timeOffset = gridTimeOffset({
+        timezoneOffset: this.timezoneOffset,
+        eventStartTime: utcStartTime,
+        matchesStoredTimes:
+          this.isSpecificTimes && this.state !== this.states.SET_SPECIFIC_TIMES,
+      })
 
       const getExtraTimes = (hoursOffset) => {
         if (this.timeslotDuration === timeslotDurations.FIFTEEN_MINUTES) {
@@ -2298,7 +2301,10 @@ export default {
 
       const date = getDateHoursOffset(day.dateObject, time.hoursOffset)
       if (this.isSpecificTimes) {
-        // TODO: see if we need to do anything for 0.5 timezones
+        // Half-hour timezones used to fail every one of these lookups: the
+        // grid was shifted 30 minutes off the stored instants, so `date` was
+        // never in the set. splitTimes no longer shifts this view — see
+        // gridTimeOffset.
         if (
           this.state !== this.states.SET_SPECIFIC_TIMES &&
           this.event.times?.length > 0
@@ -2396,7 +2402,6 @@ export default {
     // -----------------------------------
     scheduleEvent() {
       this.state = this.states.SCHEDULE_EVENT
-      this.$posthog.capture("schedule_event_button_clicked")
     },
     cancelScheduleEvent() {
       this.state = this.defaultState
@@ -2406,7 +2411,6 @@ export default {
     saveScheduleEvent() {
       if (!this.curScheduledEvent) return
 
-      this.$posthog.capture("schedule_event_confirmed")
       // Get start date, and end date from the area that the user has dragged out
       const { col, row, numRows } = this.curScheduledEvent
       let startDate = this.getDateFromRowCol(row, col)

@@ -8,7 +8,7 @@
       id="working-hours-toggle"
       inset
       :input-value="workingHours.enabled"
-      @change="(val) => updateWorkingHours('enabled', val)"
+      @change="(val) => updateCalendarOption('enabled', val)"
       hide-details
     >
       <template v-slot:label>
@@ -22,7 +22,7 @@
               class="-tw-mt-0.5 tw-w-20 tw-text-xs"
               :items="times"
               :value="workingHours.startTime"
-              @input="(val) => updateWorkingHours('startTime', val.time)"
+              @input="(val) => updateCalendarOption('startTime', val.time)"
               @click="
                 (e) => {
                   e.preventDefault()
@@ -39,7 +39,7 @@
               class="-tw-mt-0.5 tw-w-20 tw-text-xs"
               :items="times"
               :value="workingHours.endTime"
-              @input="(val) => updateWorkingHours('endTime', val.time)"
+              @input="(val) => updateCalendarOption('endTime', val.time)"
               @click="
                 (e) => {
                   e.preventDefault()
@@ -56,34 +56,18 @@
 
 <script>
 import { getTimeOptions } from "@/utils"
-import { patch } from "@/utils"
+import { calendarOptionSync } from "@/mixins/calendarOptionSync"
 
 export default {
   name: "WorkingHoursToggle",
 
-  props: {
-    workingHours: { type: Object, required: true },
-    syncWithBackend: { type: Boolean, default: false },
-  },
+  // Declares the `workingHours` + `syncWithBackend` props and
+  // updateCalendarOption — see the mixin.
+  mixins: [calendarOptionSync("workingHours", "working hours")],
 
   computed: {
     times() {
       return getTimeOptions()
-    },
-  },
-
-  methods: {
-    updateWorkingHours(key, val) {
-      const workingHours = {
-        ...this.workingHours,
-        [key]: val,
-      }
-      if (this.syncWithBackend) {
-        patch(`/user/calendar-options`, {
-          workingHours,
-        })
-      }
-      this.$emit("update:workingHours", workingHours)
     },
   },
 }

@@ -221,7 +221,6 @@ export default {
     async submitAvailability(guestPayload = { name: "", email: "" }) {
       const payload = {}
 
-      const type = "availability"
       payload.availability = this.availabilityArray
       payload.ifNeeded = this.ifNeededArray
       if (this.addingAvailabilityAsGuest) {
@@ -236,40 +235,6 @@ export default {
       }
 
       await post(`/events/${this.event._id}/response`, payload)
-
-      // Update analytics
-      const addedIfNeededTimes = this.ifNeededArray.length > 0
-      if (this.authUser) {
-        if (this.authUser._id in this.parsedResponses) {
-          this.$posthog?.capture(`Edited ${type}`, {
-            eventId: this.event._id,
-            addedIfNeededTimes,
-          })
-        } else {
-          this.$posthog?.capture(`Added ${type}`, {
-            eventId: this.event._id,
-            addedIfNeededTimes,
-            // bufferTime: this.bufferTime,
-            bufferTime: this.bufferTime.time,
-            bufferTimeActive: this.bufferTime.enabled,
-            workingHoursEnabled: this.workingHours.enabled,
-            workingHoursStartTime: this.workingHours.startTime,
-            workingHoursEndTime: this.workingHours.endTime,
-          })
-        }
-      } else {
-        if (guestPayload.name in this.parsedResponses) {
-          this.$posthog?.capture(`Edited ${type} as guest`, {
-            eventId: this.event._id,
-            addedIfNeededTimes,
-          })
-        } else {
-          this.$posthog?.capture(`Added ${type} as guest`, {
-            eventId: this.event._id,
-            addedIfNeededTimes,
-          })
-        }
-      }
 
       this.refreshEvent()
       this.unsavedChanges = false
@@ -326,18 +291,9 @@ export default {
       if (this.authUser && !this.addingAvailabilityAsGuest) {
         payload.guest = false
         payload.userId = this.authUser._id
-
-        this.$posthog?.capture("Deleted availability", {
-          eventId: this.event._id,
-        })
       } else {
         payload.guest = true
         payload.name = name
-
-        this.$posthog?.capture("Deleted availability as guest", {
-          eventId: this.event._id,
-          name,
-        })
       }
       await _delete(`/events/${this.event._id}/response`, payload)
       this.availability = new Set()

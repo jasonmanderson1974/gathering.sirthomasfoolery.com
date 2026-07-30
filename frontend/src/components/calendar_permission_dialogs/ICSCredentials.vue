@@ -60,8 +60,6 @@ export default {
         .then(async () => {
           await this.refreshAuthUser()
           this.$emit("addedCalendar")
-
-          this.$posthog.capture("ICS Calendar Added")
         })
         .catch((err) => {
           this.showError(

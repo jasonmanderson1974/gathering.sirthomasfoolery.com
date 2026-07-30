@@ -121,7 +121,6 @@ export default {
     },
     createFolder() {
       this.showFeatureNotReadyDialog = true
-      this.$posthog?.capture("create_folder_clicked")
     },
   },
 }
