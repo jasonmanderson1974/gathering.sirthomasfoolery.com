@@ -67,10 +67,15 @@
             </div>
             <!-- The management buttons sit inside the header, so their clicks
                  must not also toggle the list open or shut. -->
-            <div v-if="canManage" class="tw-flex tw-flex-none">
+            <div
+              v-if="canManage"
+              class="tw-flex tw-flex-none"
+              :class="{ 'tw-gap-2': phone }"
+            >
               <v-btn
                 icon
-                x-small
+                :x-small="!phone"
+                :small="phone"
                 class="tw-text-parchment-dim"
                 title="Rename list"
                 @click.stop="startRename(list)"
@@ -79,7 +84,8 @@
               </v-btn>
               <v-btn
                 icon
-                x-small
+                :x-small="!phone"
+                :small="phone"
                 class="tw-text-red"
                 title="Delete list"
                 @click.stop="askDeleteList(list)"
@@ -219,11 +225,12 @@
                   >
                 </div>
               </div>
-              <div class="tw-flex tw-flex-none">
+              <div class="tw-flex tw-flex-none" :class="{ 'tw-gap-2': phone }">
                 <v-btn
                   v-if="canNest(row)"
                   icon
-                  x-small
+                  :x-small="!phone"
+                  :small="phone"
                   class="tw-text-parchment-dim"
                   title="Add sub-entry"
                   @click="startChild(row.item)"
@@ -233,7 +240,8 @@
                 <v-btn
                   v-if="isMine(row.item)"
                   icon
-                  x-small
+                  :x-small="!phone"
+                  :small="phone"
                   class="tw-text-parchment-dim"
                   title="Edit entry"
                   @click="startEdit(row.item)"
@@ -243,7 +251,8 @@
                 <v-btn
                   v-if="canDelete(row.item)"
                   icon
-                  x-small
+                  :x-small="!phone"
+                  :small="phone"
                   class="tw-text-parchment-dim"
                   :title="
                     row.hasChildren
@@ -402,7 +411,7 @@
 
 <script>
 import { mapGetters, mapState } from "vuex"
-import { mapsSearchUrl } from "@/utils"
+import { mapsSearchUrl, isPhone } from "@/utils"
 import draggable from "vuedraggable"
 import LocationInput from "@/components/LocationInput.vue"
 import ConfirmDeleteDialog from "@/components/general/ConfirmDeleteDialog.vue"
@@ -505,6 +514,12 @@ export default {
     ...mapGetters(["canInvite", "canManageUsers"]),
     lists() {
       return this.event.lists ?? []
+    },
+    // The icon buttons on a row sit close together and are the controls most
+    // likely to be used one-handed, standing in a shop. $vuetify.breakpoint is
+    // reactive, so this follows a rotation without a resize listener.
+    phone() {
+      return isPhone(this.$vuetify)
     },
     isEventOwner() {
       return (
