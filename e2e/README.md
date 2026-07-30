@@ -39,32 +39,45 @@ TIMEFUL_VM=user@host node prod_login.js someone@example.com
 `prod_state.json` holds a live session cookie and is gitignored. So are the
 screenshots the scripts drop here.
 
-## The checks
+## The check
 
-| Script | Covers |
-| --- | --- |
-| `smoke_prod.js` | `/home`, `/settings`, `/members`, `/new` render with no console errors, no failed requests, no 5xx |
-| `verify_h5_prod.js` | H5 (`3aa2478`) — `/api/user/calendars` still returns a per-account map, and no account's error is the swallowed-unmarshal string H5 fixed |
-| `verify_h9_prod.js` | H9 (`d99d18e`) — an avatar source under 256px on its shortest side is refused at pick time with its real size named; 256x256 still opens the cropper |
-
-Each exits non-zero on failure, so they chain:
+`smoke_prod.js` — `/home`, `/settings`, `/members` and `/new` render, with no
+console errors, no failed requests and no 5xx. It exits non-zero on failure:
 
 ```bash
-node smoke_prod.js && node verify_h5_prod.js && node verify_h9_prod.js
+node smoke_prod.js
 ```
 
-## Two gotchas worth keeping
+That's deliberately the whole of it. Checks pinned to one past fix pass forever
+and then quietly rot; this repo keeps the broad post-deploy check tracked and
+treats fix-specific ones as throwaway — write them when a fix needs verifying,
+run them, don't commit them.
+
+## Two gotchas, for when you write a throwaway one
+
+Both cost real time and neither is obvious from a failing run:
 
 - **Vuetify snackbars linger.** The wrapper stays mounted after it hides, so
-  `allInnerTexts()` returns the *previous* case's message and a passing case
-  reads as a failure. `verify_h9_prod.js` filters to visibly-rendered snackbars;
-  copy that helper rather than re-deriving it.
+  `allInnerTexts()` returns the *previous* case's message — a passing case reads
+  as a failure. Filter to what is actually rendered:
+
+  ```js
+  const visibleSnackbarText = await page.evaluate(() =>
+    Array.from(document.querySelectorAll(".v-snack__wrapper"))
+      .filter((el) => {
+        const s = getComputedStyle(el);
+        return (
+          el.offsetParent !== null &&
+          s.visibility !== "hidden" &&
+          s.display !== "none" &&
+          parseFloat(s.opacity) > 0.1
+        );
+      })
+      .map((el) => el.innerText)
+      .join(" ")
+  );
+  ```
+
 - **Scope dialog buttons.** A bare `getByRole("button", {name: "Cancel"})`
-  matches buttons elsewhere on the page and hangs. Scope to `.v-dialog--active`.
-
-## Regression-specific scripts
-
-`verify_h5` / `verify_h9` are pinned to specific fixes. They're kept because
-they still pass and cost nothing to run, but they aren't a general suite — when
-a check stops describing behaviour anyone relies on, delete it rather than
-letting it rot.
+  matches buttons elsewhere on the page and hangs until the timeout. Scope it:
+  `page.locator(".v-dialog--active").getByRole("button", {name: "Cancel"})`.

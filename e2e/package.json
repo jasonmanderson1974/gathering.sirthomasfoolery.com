@@ -4,9 +4,7 @@
   "description": "Playwright checks run against a deployed instance, by hand after a deploy.",
   "scripts": {
     "login": "node prod_login.js",
-    "smoke": "node smoke_prod.js",
-    "verify:h5": "node verify_h5_prod.js",
-    "verify:h9": "node verify_h9_prod.js"
+    "smoke": "node smoke_prod.js"
   },
   "dependencies": {
     "playwright": "^1.61.1"
