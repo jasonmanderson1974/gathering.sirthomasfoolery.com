@@ -9,15 +9,22 @@
 > small-club utility over scale. All event access requires sign-in (E3); roles are
 > superAdmin > admin > member > guest.
 >
-> **Status: FEATURE TRACK COMPLETE (2026-07-29); F11, F12, G1 and G2's free part landed the
-> same day.** F1–F16 have all landed, and the P3 tail that was deliberately deferred is now
-> mostly done too — **F11** (RSVP half; poll voters closed as won't-do), **F12**, **G1** in
-> full, and **G2's** dead-export prune. Verified green: swag regenerated (no drift), full
-> backend suite + `go vet` + golangci-lint (0 issues), frontend lint + **181** unit tests +
-> production build, and both headless harnesses 5/5 **against a rebuilt dev stack** — see the
-> note under "Workflow rules" about why that rebuild matters. What remains: **G2's** actual
-> splits, **G3** and **G4** (both reconfirmed deferred/parked by the user), and the
-> opportunistic **H5–H9**. History below.
+> **Status: FEATURE TRACK COMPLETE (2026-07-29); PART H CLOSED (2026-07-30).** F1–F16 have all
+> landed, along with **F11** (RSVP half; poll voters closed as won't-do), **F12**, **G1** in
+> full and **G2's** dead-export prune on 2026-07-29 — and **H5**, **H8** and **H9** on
+> 2026-07-30, which empties Part H. Verified green on the H pass: swag not re-run (no route
+> comments changed), full backend suite + `go vet` + golangci-lint (0 issues), frontend lint +
+> **188** unit tests + production build, and both headless harnesses 5/5 **against a rebuilt
+> dev stack** — see the note under "Workflow rules" about why that rebuild matters.
+>
+> **What remains is only what was deliberately set aside:** **G2's** actual splits, and **G3**
+> and **G4** (deferred and parked by the user on 2026-07-29). Nothing is queued.
+>
+> **Worth reading if you are picking up an old finding:** two of the three H items closed on
+> 2026-07-30 were described *wrongly* by the entries that recorded them, and neither error was
+> visible from the code — H5's real symptom was a JSON decode error, not the 401 it predicted,
+> and H9 had its defect exactly inverted (there was no guard, not a badly-worded one). Both
+> were caught by reproducing the finding before fixing it. History below.
 >
 > F1, H1, F2, F3, F4 and F5 landed 2026-07-28 (`0b5f2272`, `80a20905`,
 > `719cb4b8`, `0a9f450d`, `6c281faf`, F5 this commit); F6, H4, H6 and H7 landed 2026-07-29 — see
@@ -986,6 +993,11 @@ The sequencing that got there is at the bottom.
 
 None has a correctness or security symptom; all are cleanup/hygiene. Ranked by value:
 
+> **All of Part H is closed as of 2026-07-30.** H5, H8 and H9 went in one pass. Two of the
+> three turned out to be described wrongly in ways only a runtime check could show — H5's
+> symptom was a JSON decode error rather than the 401 it predicted, and H9 had the defect
+> exactly inverted. Both entries record the corrected version.
+
 - [x] **H1 · `NumEventsCreated`: dead aggregate on every profile fetch.** `S` · **P2**
   **DONE 2026-07-28** (`80a20905`). Sharper than written: the count's error path returned 500
   for the whole of `GET /user/profile`, so a transient Mongo failure on a dead field could
@@ -1054,12 +1066,35 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
     `<component :is>` anywhere** — checked before deleting. That's the one thing that would
     make a "registered but not used" warning a lie.
 
-- [ ] **H5 · `CallApi` can't see a failed token refresh.** `S–M` · **P2**
-  `services/services.go:19` calls `auth.RefreshUserTokenIfNecessary(user, nil)` which returns
-  nothing — a failed refresh proceeds with the stale token and surfaces as an opaque upstream
-  401. Adjacent to B8 (which fixed reporting *inside* the refresh; this caller is still
-  blind). Second blind caller: `services/calendar/calendar.go:57`. Also `services.go:25`
-  `json.Marshal` swallow — the function already returns `error`, propagating is a one-liner.
+- [x] **H5 · `CallApi` can't see a failed token refresh.** `S–M` · **P2**
+  **DONE 2026-07-30** (`3aa2478`). Built as planned — `RefreshUserTokenIfNecessary` now returns
+  `map[string]error` keyed by calendar account key — with four notes:
+  - **The symptom was worse than recorded.** The plan said a failed refresh "surfaces as an
+    opaque upstream 401". Reverting the fix under test showed what the member actually got:
+    `json: cannot unmarshal string into Go struct field Response.error of type
+    errs.GoogleAPIError` — Google's 401 body doesn't fit the struct that parses it, so even the
+    401 was lost. Same shape as the B8 bug one layer down, and the reason the regression test
+    asserts on the *reason text* rather than merely on "an error".
+  - **`CallApi` matches the failure by POINTER IDENTITY**, because an `OAuth2CalendarAuth`
+    carries no account key and no email — there is nothing else to match on. Both real callers
+    (`contacts.SearchContacts`, `microsoftgraph.GetUserInfo`) hand over the very pointer stored
+    on `user.CalendarAccounts`, which is also what lets the refresh write a new token through it.
+    A copied auth deliberately does not match; there is a test for that.
+  - **Persist only when a token actually changed.** The old `numAccountsToUpdate > 0` counted
+    *attempts*, so an all-failed round wrote the user document back unchanged. Fixing that is
+    also what keeps the failure path off Mongo entirely, which is why the new tests are pure
+    rather than DB-gated.
+  - `GetUsersCalendarEvents` puts the reason in the account's slot in the map — **the same slot
+    the 401 filled**, so `Event.vue`'s `calendarPermissionGranted` / refetch logic sees exactly
+    what it saw before — and skips the doomed round trip.
+  - The `json.Marshal` swallow went too: it was sending an empty body upstream and making the
+    result look like the provider's fault.
+  - Tests: 5 pure in `services/auth` (failure keyed by account, unexpired not reported, the
+    `accounts` filter honoured, `asRefreshError` preserving a real error vs wrapping a panic
+    value) + 5 in `services` (the skip, the non-skip, per-account isolation, identity-not-value,
+    the empty map) + 1 in `services/calendar` asserting the calendar URL is never requested.
+    Both new packages needed a `TestMain` calling `logger.Init(io.Discard)` — they are the first
+    tests there to reach a log line, and `logger.StdErr` is nil until `main.go` runs.
 
 - [x] **H6 · `pluginMessagesMixin.js:165-171`: lying comment + abandoned validation.** `S` · **P3**
   **DONE 2026-07-29, with H4.** Subsumption confirmed: the range check really does happen
@@ -1074,33 +1109,59 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
   URL it was always meant to build. Identical string today (`"common"`), but changing the
   const now takes effect instead of silently doing nothing, which is what made it a trap.
 
-- [ ] **H8 · Verify `guestEvent` template arms against a real legacy ownerless event.** `S` ·
-  **P3 — verify, don't delete.** The `guestEvent` prop threads through `NewEvent.vue`,
-  `NewEventAdvancedOptions.vue`, `ToolRow.vue` and gates 5 template arms. Post-E3, new events
-  always have owners, so it should only be reachable editing a **legacy** ownerless event — a
-  documented keeper. Runtime-check before anyone assumes those arms are dead.
+- [x] **H8 · Verify `guestEvent` template arms against a real legacy ownerless event.** `S` ·
+  **P3 — verify, don't delete.** **VERIFIED 2026-07-30 — keeper, no code change.** Driven in
+  headless Chrome against the dev stack, as a signed-in member who is **not** the owner:
+  - **Both legacy shapes reach it.** `isOwnerlessEvent` accepts `ownerId ==
+    "000000000000000000000000"` *and* a missing `ownerId`; seeded one of each and `guestEvent`
+    computed `true` for both. A third event owned by a different member computed `false`, so the
+    arms are gated rather than always-on — which is the half that would have made a "still
+    reachable" result meaningless.
+  - **The arms render.** On a legacy event the edit dialog shows the "created before sign-in was
+    required" `AlertText`, and the "Email me each time someone joins" checkbox and the "Email
+    reminders" section are correctly absent. On the owned event: no alert, both present.
+  - **`ToolRow`'s arm needed a response to exercise.** `showScheduleEventButton` also requires
+    `numResponses > 0`, and the server recomputes `numResponses` from the `eventResponses`
+    collection — seeding the field on the event document does nothing. With a real response
+    inserted, the confirm/schedule button appears on the legacy event (via `guestEvent`) and not
+    on the one owned by someone else (`isOwner` false). That is the arm actually doing work: it
+    is what lets a member confirm a gathering nobody owns.
+  - Not exercised, and dead for a *different* reason: the two `v-else-if="!guestEvent"`
+    signed-out variants (`NewEvent.vue:240`, `NewEventAdvancedOptions.vue:33,73`) need
+    `!authUser`, which E3 made unreachable on this page. Removing those is a G1-style sweep, not
+    this item — and they are not `guestEvent`'s doing.
+  - Seeded documents (2 users, 2 allowlist rows, 3 events, 3 responses) deleted afterwards.
 
-- [ ] **H9 · The cropper refuses a too-small photo without saying so.** `S` · **P3**
-  *Found 2026-07-29 during the post-deploy browser pass on F6, not by lint/tests/build.*
-  With a source image only a little larger than the 256x256 export (a 100x75 fixture
-  reproduces it), cropperjs lays out a degenerate crop box, `getCroppedCanvas`
-  (`AvatarEditorDialog.vue:209`) returns nothing, and the member gets **"That crop could not
-  be saved. Try adjusting it."** (`:215`) — advice that cannot work, since no amount of
-  dragging makes the source bigger. The refusal itself is right (better than uploading a
-  smeared 256x256 upscale); only the diagnosis is wrong.
-  Fix shape: measure the source **before** opening the dialog and reject with a message naming
-  the real cause and the minimum, alongside the `image/*` and 10MB guards already in
-  `onFileChosen` (`:158-165`). Note there is no cropper yet at that point — `getImageData()`
-  is not available — so measure by loading the `FileReader` data URL into an `Image` and
-  reading `naturalWidth/naturalHeight` before calling `openWith` (`:168` already hands it the
-  data URL). A guard at pick time beats one at save time: it fails before the
-  member has spent effort positioning a crop.
-  Low priority because real photos are nowhere near the threshold — phone cameras start
-  around 3000px. It costs someone scanning a small logo or a cropped screenshot, and the
-  current wording sends them in circles.
-  Note for whoever picks this up: `viewMode: 1` + `autoCropArea: 1` (`:191`,`:194`) are what
-  make the box degenerate rather than merely small, so re-check the threshold empirically
-  against those settings instead of assuming exactly 256.
+- [x] **H9 · The cropper refuses a too-small photo without saying so.** `S` · **P3**
+  **DONE 2026-07-30** (`d99d18e`). The fix shape below was right; **the diagnosis was
+  backwards, and taking its own advice — re-check the threshold empirically — is what showed
+  it.** Recorded in full because the corrected finding is worse than the original:
+  - **There was no refusal.** `getCroppedCanvas` returned a canvas for *every* source driven
+    through the real dialog: 1x1, 8x8, 32x24, 100x75 (the fixture this item named), 150x150,
+    2000x10 and 10x2000 strips, 256x256, 4000x3000 — and also when Save was clicked on the
+    first frame it was enabled, testing the one path that genuinely can return null (cropperjs
+    v1 returns null only while its own async `ready` flag is false, and
+    `AvatarEditorDialog` clears `loading` synchronously after the constructor). Every one of
+    those uploaded and was stored.
+  - **So the item had it inverted**: it was not a right refusal with wrong wording, it was no
+    guard at all, and the "smeared 256x256 upscale" it credited the refusal with preventing was
+    what actually got saved. The strips are the worst case — a square crop is bounded by the
+    **shortest** side, so a 2000x10 image contributed a 1–2px selection blown up to 256x256.
+  - **The threshold is the export size, and the shortest side is what it applies to.** New pure
+    `avatarSourceError(width, height)` in `general_utils.js` (F5's pattern — the vitest env is
+    node with no jsdom, so nothing testable can live in the `.vue`), rejecting under
+    `AVATAR_EXPORT_PX = 256`. It returns a *message*, not a boolean, so it can name the actual
+    size: naming it is the whole point of the item.
+  - Measured at pick time from an `Image`'s `naturalWidth/naturalHeight`, as planned — there is
+    no cropper yet, so no `getImageData()` to ask.
+  - The save-time branch stays as a backstop, **reworded**: "Try adjusting it" named an action
+    that cannot help. It is now believed unreachable, but it is two lines and the alternative is
+    a bare `return`.
+  - `MemberAdmin`'s admin-on-behalf upload reuses the dialog, so it is covered by the same guard
+    with no change.
+  - Verified in headless Chrome against a **rebuilt** dev stack (per the note at the bottom of
+    this file): 100x75 and 2000x10 are refused by name and size and the dialog never opens;
+    256x256 (the boundary) and 4000x3000 crop and save as before. 7 vitest cases pin the helper.
 
 ---
 
@@ -1124,13 +1185,13 @@ None has a correctness or security symptom; all are cleanup/hygiene. Ranked by v
 
 **What's left, and nothing here is urgent:** ~~**F11** and **F12**~~ and ~~**G1**~~ are done
 (2026-07-29), as is **G2's** free half, and ~~**H2**/**H3**~~ went as one deletion batch the
-same day (`6ef72fd`). **G2's** splits stay open and want the app running;
-**G3** and **G4** were put to the user in the same session and deliberately left
-deferred/parked; **H5** whenever calendar code is next touched — it is now the **only**
-remaining item with an actual failure mode; **H8/H9** opportunistic
-(**H9** is cheapest folded into the next change that touches `AvatarEditorDialog.vue`).
-Deploy is the human's call from the VM-adjacent box — `origin/main` is ahead of what's live
-until then.
+same day (`6ef72fd`). ~~**H5**, **H8** and **H9**~~ closed 2026-07-30, which empties **Part H**
+and leaves nothing anywhere with a known failure mode.
+
+**Everything still open is P3 and was already deliberately set aside:** **G2's** splits (they
+want the app running), and **G3**/**G4**, which the user deferred and parked respectively on
+2026-07-29. Nothing is queued. Deploy is the human's call from the VM-adjacent box —
+`origin/main` is ahead of what's live until then.
 
 Workflow rules unchanged from `TODO.md`/`CLAUDE.md`: sync before changes, green commits to
 trunk, deploys are human-run from the VM, cold-load signed-out testing after any router/auth
