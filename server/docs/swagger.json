@@ -3724,6 +3724,10 @@
                 "createdAt": {
                     "type": "integer"
                 },
+                "order": {
+                    "description": "Order places the item among its SIBLINGS — entries sharing its parentId\ncompete only with each other. Fractional on purpose (see\nlistItemOrderStep in routes/event_lists.go): a drop writes only the item\nthat moved, which is what keeps db/event_lists.go's single-targeted-update\ninvariant intact where integer reindexing would rewrite the whole group.\n\nNO omitempty on either tag, unlike everything around it. Two reasons: a\ndrop at the top of a list legitimately computes 0, and omitempty would\nstrip it back to \"absent\"; and absence is precisely how the F17 migration\nrecognizes an item written before ordering existed. Items that predate the\nfield decode to 0 and sort as a tie, which the display's stable\narray-position tie-break renders as today's insertion order.",
+                    "type": "number"
+                },
                 "parentId": {
                     "description": "ParentId is nil for a top-level item. A POINTER, not a bare ObjectID:\nomitempty can't omit a [12]byte array, so a zero id would serialize as 24\nzeros and read back as a real parent. Items written before nesting existed\nhave no field at all, which decodes to nil — hence no migration.",
                     "type": "string"

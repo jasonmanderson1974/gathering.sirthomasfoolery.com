@@ -403,6 +403,80 @@ func TestLists_NestedItems(t *testing.T) {
 	}
 }
 
+// Adds append: every new entry is stamped with an order above everything
+// already on the list, children included, and the value survives the round trip
+// to Mongo.
+func TestLists_AddsStampAnIncreasingOrder(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "lists-order@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := listsTestRouter()
+	cookie := loginAs(t, h, ownerId.Hex())
+	list := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"text"}`)
+
+	first := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Beer"}`)
+	if first.Order != listItemOrderStep {
+		t.Errorf("first item's order = %v, want %v", first.Order, float64(listItemOrderStep))
+	}
+	second := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Chips"}`)
+	// A child competes only with its siblings, but it is still stamped past the
+	// list-wide maximum, so the values keep climbing regardless of nesting.
+	child := addItemFor(t, h, eventId, list.Id, cookie,
+		`{"text":"Salsa","parentId":"`+second.Id.Hex()+`"}`)
+
+	if !(first.Order < second.Order && second.Order < child.Order) {
+		t.Errorf("orders are not increasing: %v, %v, %v", first.Order, second.Order, child.Order)
+	}
+
+	stored := itemsByText(readEventLists(t, eventId)[0].Items)
+	if stored["Beer"].Order != first.Order || stored["Salsa"].Order != child.Order {
+		t.Errorf("orders did not persist: %+v", stored)
+	}
+}
+
+// A zero order has to survive as a stored zero, not vanish. Dropping an entry at
+// the top of a list legitimately computes 0, and the F17 migration uses the
+// field's ABSENCE to recognize entries written before ordering existed — so an
+// omitempty on models.EventListItem.Order would quietly conflate the two. This
+// asserts against the raw document, because a decode back into the struct turns
+// "absent" into 0 and would pass either way.
+func TestLists_ZeroOrderIsStoredNotOmitted(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "lists-zero-order@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := listsTestRouter()
+	cookie := loginAs(t, h, ownerId.Hex())
+	list := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"text"}`)
+
+	item := models.EventListItem{
+		Id:     primitive.NewObjectID(),
+		Text:   "Dropped at the top",
+		Order:  0,
+		UserId: ownerId,
+	}
+	if _, err := db.InsertEventListItem(eventId, list.Id, item); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	var raw bson.M
+	err := db.EventsCollection.FindOne(context.Background(), bson.M{"_id": eventId}).Decode(&raw)
+	if err != nil {
+		t.Fatalf("read raw event: %v", err)
+	}
+	lists := raw["lists"].(primitive.A)
+	items := lists[0].(bson.M)["items"].(primitive.A)
+	first := items[0].(bson.M)
+	order, present := first["order"]
+	if !present {
+		t.Fatalf("order was omitted from the stored document: %+v", first)
+	}
+	if order != float64(0) {
+		t.Errorf("stored order = %v (%T), want 0", order, order)
+	}
+}
+
 // Deleting an item takes its subtree with it — including children someone else
 // added — and leaves everything beside it alone.
 func TestLists_DeleteCascadesToTheSubtree(t *testing.T) {

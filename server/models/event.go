@@ -267,10 +267,23 @@ type EventListItem struct {
 	// omitempty can't omit a [12]byte array, so a zero id would serialize as 24
 	// zeros and read back as a real parent. Items written before nesting existed
 	// have no field at all, which decodes to nil — hence no migration.
-	ParentId   *primitive.ObjectID `json:"parentId,omitempty" bson:"parentId,omitempty"`
-	UserId     primitive.ObjectID  `json:"userId" bson:"userId,omitempty"`
-	AuthorName string              `json:"authorName" bson:"authorName,omitempty"`
-	CreatedAt  primitive.DateTime  `json:"createdAt" bson:"createdAt,omitempty"`
+	ParentId *primitive.ObjectID `json:"parentId,omitempty" bson:"parentId,omitempty"`
+	// Order places the item among its SIBLINGS — entries sharing its parentId
+	// compete only with each other. Fractional on purpose (see
+	// listItemOrderStep in routes/event_lists.go): a drop writes only the item
+	// that moved, which is what keeps db/event_lists.go's single-targeted-update
+	// invariant intact where integer reindexing would rewrite the whole group.
+	//
+	// NO omitempty on either tag, unlike everything around it. Two reasons: a
+	// drop at the top of a list legitimately computes 0, and omitempty would
+	// strip it back to "absent"; and absence is precisely how the F17 migration
+	// recognizes an item written before ordering existed. Items that predate the
+	// field decode to 0 and sort as a tie, which the display's stable
+	// array-position tie-break renders as today's insertion order.
+	Order      float64            `json:"order" bson:"order"`
+	UserId     primitive.ObjectID `json:"userId" bson:"userId,omitempty"`
+	AuthorName string             `json:"authorName" bson:"authorName,omitempty"`
+	CreatedAt  primitive.DateTime `json:"createdAt" bson:"createdAt,omitempty"`
 
 	// Checklist state, meaningful only on a ListKindChecklist list. All four are
 	// absent until someone first ticks the box, and from then on they are always

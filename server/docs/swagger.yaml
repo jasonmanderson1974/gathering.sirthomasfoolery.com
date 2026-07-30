@@ -358,6 +358,21 @@ definitions:
         type: string
       createdAt:
         type: integer
+      order:
+        description: |-
+          Order places the item among its SIBLINGS — entries sharing its parentId
+          compete only with each other. Fractional on purpose (see
+          listItemOrderStep in routes/event_lists.go): a drop writes only the item
+          that moved, which is what keeps db/event_lists.go's single-targeted-update
+          invariant intact where integer reindexing would rewrite the whole group.
+
+          NO omitempty on either tag, unlike everything around it. Two reasons: a
+          drop at the top of a list legitimately computes 0, and omitempty would
+          strip it back to "absent"; and absence is precisely how the F17 migration
+          recognizes an item written before ordering existed. Items that predate the
+          field decode to 0 and sort as a tie, which the display's stable
+          array-position tie-break renders as today's insertion order.
+        type: number
       parentId:
         description: |-
           ParentId is nil for a top-level item. A POINTER, not a bare ObjectID:

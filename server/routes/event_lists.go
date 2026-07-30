@@ -32,6 +32,20 @@ const (
 	// advisory — an item is never re-parented, so the depth it is written at is
 	// the depth it keeps, and a check against the event as read cannot go stale.
 	maxListItemDepth = 3
+	// The gap left between adjacent items' Order values (F17). Ordering is
+	// fractional rather than a 0,1,2,... reindex so that moving an item writes
+	// only that item: a drop between two neighbours takes the midpoint
+	// (prev+next)/2, above the first takes next-step, below the last takes
+	// prev+step, and the first item on an empty list takes step. Negative orders
+	// are legal and expected — repeatedly dropping at the top marches downward.
+	//
+	// The gap is what buys the precision. float64 holds ~52 bits of mantissa, so
+	// halving a 1024-wide gap degenerates only after ~60 consecutive drops into
+	// that same shrinking gap; a list is capped at maxItemsPerList entries, which
+	// puts that out of reach in practice. There is deliberately no rebalance
+	// path — it would mean rewriting a whole sibling group, the very thing this
+	// scheme exists to avoid.
+	listItemOrderStep = 1024
 )
 
 // Error codes specific to lists.
@@ -179,6 +193,28 @@ func listItemDepth(list *models.EventList, item *models.EventListItem) int {
 		current = parent
 	}
 	return depth
+}
+
+// maxOrderInList returns the highest Order on a list, or 0 for an empty one.
+//
+// Deliberately list-wide rather than per-sibling-group, even though Order is
+// only ever compared within a group: the list-wide maximum is by definition at
+// least the group's, so stepping past it puts a new entry last among its own
+// siblings — which is where an append belongs — with one pass and no parent
+// bookkeeping. A list of items that predate ordering is all zeroes, so the
+// first entry added after F17 lands at listItemOrderStep.
+//
+// The maximum is taken over the values actually present rather than floored at
+// zero, so a list dragged entirely into negative territory still appends above
+// its last entry instead of jumping to listItemOrderStep.
+func maxOrderInList(list *models.EventList) float64 {
+	highest := 0.0
+	for i := range list.Items {
+		if i == 0 || list.Items[i].Order > highest {
+			highest = list.Items[i].Order
+		}
+	}
+	return highest
 }
 
 // collectDescendantIds returns rootId together with every item nested beneath
@@ -450,11 +486,15 @@ func addEventListItem(c *gin.Context) {
 		parentId = &parent.Id
 	}
 
-	// Identity and credit come from the session, never the payload (E3).
+	// Identity and credit come from the session, never the payload (E3). Order
+	// is stamped here too rather than by the client: an add is always an append,
+	// so the list already in hand is all it takes, and no request needs to carry
+	// a position it has no say in.
 	item := models.EventListItem{
 		Id:         primitive.NewObjectID(),
 		Text:       text,
 		ParentId:   parentId,
+		Order:      maxOrderInList(list) + listItemOrderStep,
 		UserId:     user.Id,
 		AuthorName: user.DisplayName(),
 		CreatedAt:  primitive.NewDateTimeFromTime(time.Now()),

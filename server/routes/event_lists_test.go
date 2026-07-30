@@ -370,3 +370,57 @@ func TestCollectDescendantIdsTerminatesOnACycle(t *testing.T) {
 		t.Fatal("collectDescendantIds did not terminate on a cycle")
 	}
 }
+
+// orderedItems builds a list whose items carry the given orders, ids aside.
+func orderedItems(orders ...float64) *models.EventList {
+	items := make([]models.EventListItem, len(orders))
+	for i, order := range orders {
+		items[i] = models.EventListItem{Id: primitive.NewObjectID(), Order: order}
+	}
+	return &models.EventList{Items: items}
+}
+
+// The append anchor. The zero cases are the ones that matter: an empty list and
+// a list written before ordering existed both have to produce a first step of
+// listItemOrderStep, and a list dragged below zero still has to append above its
+// own last entry rather than leaping back to the step.
+func TestMaxOrderInList(t *testing.T) {
+	cases := []struct {
+		name string
+		list *models.EventList
+		want float64
+	}{
+		{"empty list", &models.EventList{}, 0},
+		{"legacy items all decode to zero", orderedItems(0, 0, 0), 0},
+		{"ordered items", orderedItems(1024, 2048, 3072), 3072},
+		{"highest need not be last", orderedItems(3072, 1024, 2048), 3072},
+		{"mixed legacy and ordered", orderedItems(0, 0, 1024), 1024},
+		{"all negative", orderedItems(-3072, -2048), -2048},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := maxOrderInList(tc.list); got != tc.want {
+				t.Errorf("maxOrderInList = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// An append must land strictly above every sibling, which is the whole contract
+// addEventListItem relies on. Checked across the awkward shapes rather than
+// restating the arithmetic.
+func TestMaxOrderInListLeavesRoomToAppend(t *testing.T) {
+	for _, list := range []*models.EventList{
+		orderedItems(0, 0, 0),
+		orderedItems(1024, 2048),
+		orderedItems(-3072, -2048),
+		orderedItems(1024.5, 1024.75),
+	} {
+		next := maxOrderInList(list) + listItemOrderStep
+		for _, item := range list.Items {
+			if next <= item.Order {
+				t.Errorf("append order %v does not exceed existing %v", next, item.Order)
+			}
+		}
+	}
+}
