@@ -1,175 +1,179 @@
 # Timeful Deployment Guide
 
-Production deployment using Docker Compose behind a Caddy reverse proxy.
+Production runs on **stf-thegathering** (192.168.24.56) in the isolated "Sir Tom"
+VLAN, where hosting The Gathering is the machine's only job.
 
-## Prerequisites
+There is no Docker on that host, and there should never be. Three things run
+under systemd — `mongod`, one static Go binary, and `cloudflared` — and the
+build happens elsewhere.
 
-- Docker and Docker Compose
-- Caddy on the host (for reverse proxy + automatic HTTPS, although you can use any reverse proxy)
-- Domain with DNS pointing to your server
+> **Historical note:** this file used to describe a Caddy reverse proxy. That was
+> never the actual setup; ingress has always been a Cloudflare Tunnel, and Caddy
+> sat inactive on the old host. `Caddyfile.example` has been removed.
 
-## Quick Start
+## Architecture
+
+```
+dev box                                  stf-thegathering (192.168.24.56)
+  go build  ─┐                             /opt/thegathering/
+  npm build ─┼─ rsync over SSH ──────────►   releases/<sha>/{server,dist/}
+             │                               current -> releases/<sha>
+  deploy.sh ─┘                               logs/      the app's cwd
+                                             backups/   nightly dumps
+                                           /etc/thegathering/env  (0600 root)
+
+                                           systemd units:
+                                             mongod                127.0.0.1:27017, auth on
+                                             thegathering          127.0.0.1:3002
+                                             cloudflared           outbound to Cloudflare
+                                             thegathering-backup.timer
+```
+
+Ingress is a **Cloudflare Tunnel**: `cloudflared` dials out to Cloudflare, so
+nothing needs to be forwarded inbound. This is what makes an egress-only VLAN
+workable — the host can reach the internet, and nothing on the LAN can reach it.
+
+## Deploying
+
+From the **dev box** (not the server), in the repo root:
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/jasonmanderson1974/gathering.sirthomasfoolery.com.git
-cd gathering.sirthomasfoolery.com
-
-# 2. Create server environment file
-cp server/.env.template server/.env
-# Edit server/.env with your values (see Configuration below)
-
-# 3. Build and start services
-docker compose up -d --build
-
-# 4. Configure Caddy
-sudo cp Caddyfile.example /etc/caddy/Caddyfile
-# Edit /etc/caddy/Caddyfile with your domain
-sudo systemctl reload caddy
+./deploy.sh
 ```
+
+It refuses to run on a dirty tree or a checkout behind `origin/main`, runs the
+tests, builds a static binary and the frontend bundle, rsyncs both to
+`releases/<sha>`, flips the `current` symlink, restarts the service, and polls
+`/api/health`. If health doesn't come good it re-points the symlink at the
+previous release and restarts — leaving the bad release on disk to inspect.
+
+`DEPLOY_HOST=...` targets another host; `SKIP_TESTS=1` skips the test run.
+
+Rolling back by hand is a symlink flip:
+
+```bash
+ssh root@192.168.24.56 'ln -sfn /opt/thegathering/releases/<sha> /opt/thegathering/current.new \
+  && mv -Tf /opt/thegathering/current.new /opt/thegathering/current \
+  && systemctl restart thegathering'
+```
+
+### Why builds happen on the dev box
+
+Production carries no toolchain — no Go, no Node, no Docker. That keeps
+`node_modules` and build caches off the internet-facing host (a Docker build
+cache once filled the old VM's disk and took the site down), makes rollback a
+symlink flip rather than a rebuild, and means a failed build never reaches
+production.
+
+## Building a host from scratch
+
+```bash
+rsync -a deploy/ root@<host>:/tmp/deploy/
+ssh root@<host> /tmp/deploy/install.sh        # packages, user, dirs, units, mongod, cloudflared
+ssh root@<host> /tmp/deploy/mongo-bootstrap.sh # DB users + MONGODB_URI; ONCE, records a password
+# copy secrets into /etc/thegathering/env (see below), then from the dev box:
+./deploy.sh
+```
+
+`install.sh` is idempotent — re-run it after any change under `deploy/`.
+`mongo-bootstrap.sh` is not, by design: it mints credentials, detects that it
+has already run, and refuses to rotate a password by accident.
+
+### Host requirements
+
+- Ubuntu 24.04 (noble).
+- **Linux kernel 7.0.14 or newer**, or older than 6.19. MongoDB 8.0+ crashes on
+  kernels 6.19–7.0.13 (a TCMalloc/rseq bug, SERVER-121912) and refuses to start
+  rather than crash 30 seconds in. On an LXC guest this is the *Proxmox host's*
+  kernel — the guest cannot fix it.
+- Egress to Cloudflare (`7844`), Gmail SMTP (`587`), and the apt/MongoDB repos.
 
 ## Services
 
-| Service    | Description                             | Port           |
-| ---------- | --------------------------------------- | -------------- |
-| `mongo`    | MongoDB 7 database                      | Internal only  |
-| `frontend` | Vue.js build (outputs to shared volume) | N/A            |
-| `server`   | Go backend                              | 127.0.0.1:3002 |
-
-## Caddy
-
-The example Caddyfile proxies all traffic to the Go backend on port 3002. Caddy handles:
-
-- Automatic HTTPS certificates
-- HTTP → HTTPS redirect
-- www → non-www redirect
-- Compression (gzip/zstd)
-- Security headers
-
-Edit `/etc/caddy/Caddyfile` with your domain before reloading.
-
-## Commands
+| Unit                        | What it does                                    |
+| --------------------------- | ----------------------------------------------- |
+| `thegathering`              | The Go server on `127.0.0.1:3002`, as `gathering` |
+| `mongod`                    | MongoDB 8.0, loopback only, SCRAM auth          |
+| `cloudflared`               | Outbound tunnel; the public ingress             |
+| `thegathering-backup.timer` | Nightly `mongodump` at 03:15                    |
 
 ```bash
-docker compose up -d              # Start services
-docker compose logs -f            # View logs
-docker compose logs -f server     # View specific service logs
-docker compose up -d --build      # Rebuild after code changes
-docker compose down               # Stop services
-docker compose down -v            # Stop and remove volumes (deletes data!)
+systemctl status thegathering
+journalctl -u thegathering -f          # stdout half of the logs
+tail -f /opt/thegathering/logs/logs.log # file half (logrotate'd daily, 14 kept)
+curl -s localhost:3002/api/health      # {"status":"ok","mongo":"ok","version":"<sha>"}
 ```
 
-## Data & Backup
+`/api/health` returns **503** when Mongo is unreachable, which is what tells a
+deploy to roll back rather than retry. Note that on a cold start the server does
+not open its listener until `db.Init` finishes — with Mongo down that means
+roughly three minutes of index-creation timeouts before it answers at all.
 
-Data is persisted in Docker volumes: `mongo_data`, `frontend_dist`, `server_logs`.
+## Backups
+
+The old host had no backup cron; dumps were taken when someone remembered.
+
+- **On the server:** `thegathering-backup.timer` runs `mongodump` nightly into
+  `/opt/thegathering/backups`, keeping 14 days. It refuses to leave behind a
+  dump under 1 KB, because an empty-but-successful dump is the failure that
+  hides best.
+- **On the dev box:** `deploy/pull-backups.sh` pulls them into
+  `/root/backups/timeful/`. The direction matters — the VLAN is egress-only, so
+  the server *cannot* push; the dev box must pull.
+
+Restore:
 
 ```bash
-# Backup MongoDB
-docker compose exec mongo mongodump --db=schej-it --archive=/data/db/backup.archive
-docker compose cp mongo:/data/db/backup.archive ./backup.archive
-
-# Restore MongoDB
-docker compose cp ./backup.archive mongo:/data/db/backup.archive
-docker compose exec mongo mongorestore --drop --db=schej-it --archive=/data/db/backup.archive
+mongorestore --uri="$MONGODB_URI" --archive=<file>.archive.gz --gzip --drop
 ```
-
-## Troubleshooting
-
-```bash
-# Container won't start
-docker compose logs server
-ls -la server/.env
-
-# MongoDB connection issues
-docker compose ps
-docker compose exec mongo mongosh --eval "db.adminCommand('ping')"
-
-# Frontend not loading
-docker compose logs frontend
-docker compose exec server ls -la /app/frontend/dist
-```
-
----
 
 ## Configuration
 
-### Required Environment Variables
+Secrets live in `/etc/thegathering/env` (root-owned, `0600`) and are read by the
+systemd unit via `EnvironmentFile`. This is not in git and never should be.
 
-Create `server/.env` from the template (`server/.env.template`).
+| Variable                                    | Notes                                                                                         |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `MONGODB_URI`                               | Written by `mongo-bootstrap.sh`. Moving Mongo to another host is this one line plus a restart. |
+| `SESSION_SECRET`                            | ≥32 chars. The server panics at startup without it.                                            |
+| `ENCRYPTION_KEY`                            | Exactly 16/24/32 chars — raw AES key bytes. Use `openssl rand -hex 16`, **not** `-base64 32` (44 chars, rejected). |
+| `CLIENT_ID` / `CLIENT_SECRET`               | Google OAuth. Redirect URI: `https://<domain>/api/auth/callback`.                              |
+| `INVITE_ONLY_ENFORCED`                      | The allowlist gate fails closed on this. Dropping it changes who can get in.                   |
+| `SCHEJ_EMAIL_ADDRESS` / `GMAIL_APP_PASSWORD`| Gmail SMTP, the only mail transport. Without it nothing is sent — OTP codes included, so nobody can sign in. |
+| `CORS_ORIGINS`                              | Same-origin in production, so rarely needed. `http://localhost:8080` for local dev.            |
+| `FRONTEND_DIST`                             | `/opt/thegathering/current/dist` — absolute, so the release symlink can move underneath it.     |
+| `TZ`                                        | Pinned to `UTC`. The old server ran in a container whose TZ was UTC even though its host was `America/Los_Angeles`; pinning stops the migration quietly changing how times are interpreted. |
+| `MICROSOFT_CLIENT_ID` / `..._SECRET`        | Optional — Outlook calendars.                                                                  |
 
-#### Required
+**Frontend build args** live in the **root `.env` on the dev box**, not on the
+server: `CLIENT_ID`, `MICROSOFT_CLIENT_ID`, `GOOGLE_MAPS_API_KEY`. These are
+baked into the bundle at build time, so changing one needs a redeploy — and an
+empty `CLIENT_ID` ships a silently broken sign-in rather than failing. `deploy.sh`
+asserts it is both set and present in the built bundle.
 
-| Variable         | Description                                                                 |
-| ---------------- | --------------------------------------------------------------------------- |
-| `CLIENT_ID`      | Google OAuth client ID                                                      |
-| `CLIENT_SECRET`  | Google OAuth client secret                                                  |
-| `ENCRYPTION_KEY` | AES key for data encrypted at rest. Must be **exactly 16, 24 or 32 characters** — it is used as raw AES key bytes. Generate with `openssl rand -hex 16` (32 chars ⇒ AES-256). **Not** `openssl rand -base64 32`: that yields 44 characters, which AES rejects. Validated at startup. |
-| `SESSION_SECRET` | Session cookie encryption key (generate with `openssl rand -base64 32`)     |
+Only browser-side public values belong there. The OAuth client *secret* and the
+Gmail password stay on the server.
 
-#### Optional — Additional Calendars
+## Cloudflare Tunnel
 
-| Variable                  | Description                             |
-| ------------------------- | --------------------------------------- |
-| `MICROSOFT_CLIENT_ID`     | Microsoft OAuth client ID (for Outlook) |
-| `MICROSOFT_CLIENT_SECRET` | Microsoft OAuth client secret           |
+The tunnel is created in the Cloudflare dashboard; the host runs the connector.
+The token is a credential — keep it in a root-owned `0600` file, not in a unit's
+`ExecStart` where it shows up in `systemctl status` and every process listing.
 
-#### Optional — Address lookup
+Public hostname → `http://127.0.0.1:3002`.
 
-Set in the **root `.env`** (not `server/.env`): compose passes it to the frontend
-image as a build arg, so it is baked in at build time and changing it needs a
-frontend rebuild (`./deploy.sh` does this when the frontend changes; otherwise
-`docker compose build frontend && docker compose up -d`).
+Cutting a hostname over between hosts is a dashboard change, which also makes it
+the rollback: point it back at the old tunnel.
 
-| Variable                | Description                                                                                                    |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `GOOGLE_MAPS_API_KEY`   | Maps Platform **browser** key for address suggestions in the event location field. Unset = plain text field, no Maps script loaded. Needs "Places API (New)" + "Maps JavaScript API", restricted by HTTP referrer to the site's domain. |
+## Google OAuth setup
 
-#### Optional — CORS
+1. [Google Cloud Console](https://console.cloud.google.com/) → project.
+2. Enable: Google Calendar API, People API (Contacts), Admin SDK API (Directory).
+3. OAuth 2.0 credentials, Web application.
+4. Authorized redirect URIs:
+   - `https://<domain>/api/auth/callback`
+   - `http://localhost:3002/api/auth/callback` (development)
 
-| Variable       | Description                                                                                                          |
-| -------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `CORS_ORIGINS` | Comma-separated allowed origins (default: production domains). For local development, set to `http://localhost:8080` |
-
-#### Optional — Other Services
-
-| Variable                                     | Description                                  |
-| -------------------------------------------- | -------------------------------------------- |
-| `ANALYTICS_USERNAME` / `ANALYTICS_PASSWORD`  | Basic auth for /api/analytics routes         |
-| `GMAIL_APP_PASSWORD` / `SCHEJ_EMAIL_ADDRESS` | Gmail SMTP — the only mail transport. Without it no email is sent at all: OTP sign-in codes, invitations, pre-gathering reminders, remindee nudges and response notifications. |
-
-See `server/.env.template` for the complete list.
-
-### One-time migrations
-
-#### Remindee nudges (2026-07-28)
-
-The three "please fill this in" nudges moved from Cloud Tasks + Listmonk onto
-the in-process scheduler, which measures each remindee's schedule from a new
-`nudgeStage` field. Existing remindees have no such field, so they would all
-look overdue on the first tick after this deploy.
-
-Run this **before** starting the new binary, to retire every pre-existing
-remindee:
-
-```bash
-docker compose exec -T mongo mongosh --quiet schej-it --eval \
-  'db.events.updateMany({remindees: {$exists: true}}, {$set: {"remindees.$[].nudgeStage": 3}})'
-```
-
-The scheduler also refuses to nudge anything added more than 7 days ago, so
-this is belt-and-braces — but it is deterministic, and the age cutoff is not a
-substitute for it if you are restoring an old dump.
-
-### Google OAuth Setup
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing
-3. Enable the following APIs:
-   - Google Calendar API
-   - People API (Contacts)
-   - Admin SDK API (Directory)
-4. Create OAuth 2.0 credentials (Web application type)
-5. Add authorized redirect URIs:
-   - `https://yourdomain.com/api/auth/callback`
-   - `http://localhost:3002/api/auth/callback` (for development)
-6. Copy the Client ID and Client Secret to your `.env`
+The redirect URI is domain-bound, so calendar-connect does not work on a
+temporary hostname unless you add that hostname's callback too. OTP sign-in —
+the primary login path — is unaffected.

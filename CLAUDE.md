@@ -13,8 +13,11 @@ This repo is developed from **more than one machine**, all pushing directly to `
 - **`main` is the trunk; keep it green.** CI (GitHub Actions: `backend-ci.yml`, `frontend-ci.yml`) runs
   on every push but is *post-hoc*, not a merge gate — so build/test locally before pushing.
 - **Deploys are manual and gate-kept, and only possible from the machine with SSH access to the prod
-  VM.** Deploy by running `./deploy.sh` on the VM. If the current machine has no VM SSH access, do NOT
-  attempt to deploy — the human handles it. `origin/main` may be ahead of what's live; that's expected.
+  host.** Deploy by running `./deploy.sh` **on the build box** — it builds here and rsyncs artifacts to
+  `stf-thegathering` (192.168.24.56); it is NOT run on the server. Production runs no Docker: `mongod`,
+  one static Go binary and `cloudflared` under systemd. If the current machine has no SSH access to
+  that host, do NOT attempt to deploy — the human handles it. `origin/main` may be ahead of what's
+  live; that's expected.
 - **Local stack:** `docker compose -f compose.dev.yaml up` (dummy secrets; Mongo on :27017 for tests;
   SMTP/Google not wired, so login doesn't work locally). **Tests:** `npm run test:unit` (frontend) and
   `go test $(go list ./... | grep -v '/scripts')` with `MONGODB_URI` set (backend) — see
@@ -26,7 +29,8 @@ Monorepo for Timeful (formerly Schej.it), a group availability/scheduling app.
 
 - `frontend/` — Vue 2 + Vuetify + Tailwind single-page app (Vue CLI). Built output lands in `frontend/dist`.
 - `server/` — Go (Gin) HTTP API backed by MongoDB. Also serves the built frontend as static files at the root.
-- `compose.yaml` — Docker Compose: `mongo` + `frontend` (build-only, writes dist to a shared volume) + `server` (binds `127.0.0.1:3002`, mounts the dist volume read-only). See `DEPLOYMENT.md`.
+- `deploy/` — the production host's configuration, version-controlled so the host is reproducible rather than remembered: systemd units, `mongod.conf`, logrotate, and the `install.sh` / `mongo-bootstrap.sh` bootstrap scripts. See `DEPLOYMENT.md`.
+- `compose.yaml` — the **old** Docker production stack, kept only as the migration rollback. Delete once the old host is decommissioned. Local dev uses `compose.dev.yaml`, which stays.
 - `PLUGIN_API_README.md` — `window.postMessage` API used by browser plugins to read/write availability on the frontend.
 
 The Go module is `sirtom/server` (renamed from `schej.it/server`, 2026-07-23). The Mongo DB name (`schej-it`) and the `SCHEJ_EMAIL_ADDRESS` env var are intentionally left unchanged (internal/infra — see TODO D0/D2).

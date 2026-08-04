@@ -6,11 +6,12 @@ machine. (Deployment mechanics for the server itself are in `DEPLOYMENT.md`.)
 ## The setup
 
 - **Two dev machines**, both push directly to `main`:
-  - **VM-adjacent box** — has SSH access to the production VM, so it deploys.
-  - **Other machine(s)** — no VM access; cannot deploy.
-- **Production** is a single VM (`gathering.sirthomasfoolery.com`) behind a
-  Cloudflare tunnel, running Docker Compose (`compose.yaml`: mongo + frontend
-  build + Go server). It tracks `main`.
+  - **Build box** — has SSH access to the production host, so it deploys.
+  - **Other machine(s)** — no access; cannot deploy.
+- **Production** is `stf-thegathering` (192.168.24.56), a single host in the
+  isolated "Sir Tom" VLAN, behind a Cloudflare tunnel. **No Docker:** `mongod`,
+  one static Go binary and `cloudflared`, all under systemd. It does not track
+  `main` — it runs whatever release was last pushed to it.
 - **CI** runs on GitHub Actions on every push to `main` and on PRs.
 
 ## Golden rules
@@ -32,19 +33,23 @@ machine. (Deployment mechanics for the server itself are in `DEPLOYMENT.md`.)
    to prod. A human deploys, from the VM-adjacent box. `origin/main` can be
    ahead of what's live — that's expected.
 
-## Deploying (VM-adjacent box only)
+## Deploying (build box only)
 
-SSH to the VM and run the deploy script from the repo root:
+Run the deploy script **here**, from the repo root — not on the server:
 
 ```bash
 ./deploy.sh
 ```
 
-It pulls `main`, rebuilds only the service(s) whose code changed (`server/`
-and/or `frontend/`), recreates the server when the frontend changed (the Go
-server registers the frontend's static files at startup), health-checks
-`/api/health`, and prunes the Docker build cache (the 30G disk fills fast).
-Docs/config-only changes skip the rebuild.
+It refuses a dirty tree or a checkout behind `origin/main`, runs the tests,
+builds a static Go binary and the frontend bundle, rsyncs both to
+`/opt/thegathering/releases/<sha>` on the server, flips the `current` symlink,
+restarts the service, and polls `/api/health`. If health doesn't come good it
+re-points the symlink at the previous release and restarts.
+
+The direction is the opposite of the old Docker deploy, which ran on the VM and
+pulled git. Production now carries no toolchain at all. Full mechanics, and how
+to build a host from scratch, are in `DEPLOYMENT.md`.
 
 ## Local development
 

@@ -118,9 +118,14 @@ ssh "$DEPLOY_HOST" "systemctl restart thegathering"
 # The real /api/health: it pings Mongo and answers 503 when it can't, so this
 # distinguishes "serving" from "serving but unable to reach the database" —
 # which the old check, falling through to index.html, could not.
+# 90s, not 40s. With Mongo reachable the server listens almost immediately, but
+# db.Init creates four indexes and runs the token-encryption sweep BEFORE the
+# HTTP listener opens, and each of those blocks on a 30s server-selection
+# timeout when the database is slow or still starting. A window shorter than
+# that turns "Mongo took a moment after a reboot" into a spurious rollback.
 say "Waiting for health"
 HEALTHY=false
-for _ in $(seq 1 20); do
+for _ in $(seq 1 45); do
   # No curl -f: a 503 here is the interesting case, and -f would throw away the
   # body that says which dependency is down.
   BODY=$(ssh "$DEPLOY_HOST" "curl -sS --max-time 5 http://127.0.0.1:3002/api/health" 2>/dev/null || true)
