@@ -1,0 +1,19 @@
+# server/logger/logger.go MultiWriters every line to both stdout and a real
+# file. journald captures the stdout half; nothing rotated the file half once
+# Docker's json-file driver was out of the picture, so it would grow without
+# bound on a small disk.
+/opt/thegathering/logs/logs.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    # The server holds the file open for the life of the process and never
+    # reopens it, so renaming the file out from under it would send every
+    # subsequent line into an unlinked inode. copytruncate keeps the same inode
+    # and empties it instead.
+    copytruncate
+    su gathering gathering
+    create 0644 gathering gathering
+}

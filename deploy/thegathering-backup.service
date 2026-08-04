@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly MongoDB dump for The Gathering
+Documentation=file:/opt/thegathering/current/deploy/backup.sh
+After=mongod.service
+Requires=mongod.service
+
+[Service]
+Type=oneshot
+# Runs as root: /etc/thegathering/env holds the database credentials and is
+# root-readable only.
+User=root
+ExecStart=/opt/thegathering/bin/backup.sh

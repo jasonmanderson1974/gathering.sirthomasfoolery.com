@@ -1,0 +1,12 @@
+[Unit]
+Description=Take a nightly MongoDB dump for The Gathering
+
+[Timer]
+# 03:15 local. RandomizedDelaySec is pointless on a single host, but Persistent
+# is not: if the box is down at 03:15 the dump runs at next boot rather than
+# being skipped until tomorrow.
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,48 @@
+[Unit]
+Description=The Gathering (Timeful) application server
+Documentation=https://github.com/jasonmanderson1974/gathering.sirthomasfoolery.com
+# Wants= rather than Requires=: if Mongo is briefly down the server should stay
+# up and answer /api/health with 503, which is what tells a deploy to roll back.
+# Requires= would tear the server down instead, turning a recoverable database
+# blip into a hard outage and losing the signal that says so.
+Wants=mongod.service
+After=network-online.target mongod.service
+
+[Service]
+Type=simple
+User=gathering
+Group=gathering
+
+# The binary and the frontend are addressed absolutely, through the `current`
+# symlink, so a deploy is a symlink flip plus a restart.
+ExecStart=/opt/thegathering/current/server -release=true
+
+# main.go opens "logs.log" relative to the working directory and log.Fatals if
+# it can't. So the cwd must be writable and — importantly — must NOT be the
+# release directory: pruning old releases would take the logs with it.
+WorkingDirectory=/opt/thegathering/logs
+EnvironmentFile=/etc/thegathering/env
+
+Restart=on-failure
+RestartSec=5s
+
+# Hardening. Port 3002 is unprivileged, so no capabilities are needed at all.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# ProtectSystem=strict makes everything read-only bar what is listed here. The
+# service can write its logs and nothing else — not even its own release dir.
+ReadWritePaths=/opt/thegathering/logs
+
+[Install]
+WantedBy=multi-user.target
