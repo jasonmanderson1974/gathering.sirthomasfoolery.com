@@ -100,10 +100,18 @@ systemctl enable mongod >/dev/null
 # LXC guests share the Proxmox host kernel, so that is a host-level fix (7.0.14+)
 # and not something this script can do anything about. Say so plainly and carry
 # on installing the rest, rather than aborting the whole bootstrap over it.
-if ! systemctl restart mongod 2>/dev/null; then
-  echo "    !! mongod failed to start. If this host's kernel ($(uname -r)) is between"
+#
+# Check is-active rather than the exit status of restart: `systemctl restart
+# mongod` returns 0 even when the unit goes straight to failed, so testing the
+# exit code reports a healthy install on a host where the database cannot run
+# at all.
+systemctl restart mongod >/dev/null 2>&1 || true
+sleep 2
+if [ "$(systemctl is-active mongod)" != "active" ]; then
+  echo "    !! mongod is not running. If this host's kernel ($(uname -r)) is between"
   echo "       6.19 and 7.0.13, that is SERVER-121912 — upgrade the Proxmox host"
   echo "       kernel to 7.0.14+ and re-run. Continuing with the rest of the install."
+  echo "       Details: journalctl -u mongod -n 20"
 fi
 
 echo "==> cloudflared"
