@@ -141,7 +141,13 @@ for _ in $(seq 1 45); do
 done
 
 if [ "$HEALTHY" != true ]; then
-  printf '!! Health check failed after 40s. Last response: %s\n' "${BODY:-<none>}" >&2
+  printf '!! Health check failed after 90s. Last response: %s\n' "${BODY:-<none>}" >&2
+  # An empty response is the confusing one: it usually means the server is still
+  # inside db.Init rather than crashed, because index creation blocks on 30s
+  # server-selection timeouts when Mongo is unreachable.
+  if [ -z "${BODY:-}" ]; then
+    printf '   Empty response — check Mongo first: ssh %s systemctl status mongod\n' "$DEPLOY_HOST" >&2
+  fi
   if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$RELEASE" ]; then
     say "Rolling back to $(basename "$PREVIOUS")"
     ssh "$DEPLOY_HOST" "ln -sfn '$PREVIOUS' $APP_DIR/current.new && mv -Tf $APP_DIR/current.new $APP_DIR/current && systemctl restart thegathering"
