@@ -2289,6 +2289,32 @@ const docTemplate = `{
                 }
             }
         },
+        "/health": {
+            "get": {
+                "description": "Unauthenticated liveness/readiness probe. Returns 200 when the server can reach MongoDB, 503 when it cannot. Used by the deploy script to gate a release and roll back automatically.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Reports whether the server can serve traffic",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Health"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Health"
+                        }
+                    }
+                }
+            }
+        },
         "/user": {
             "delete": {
                 "produces": [
@@ -4179,6 +4205,20 @@ const docTemplate = `{
             ],
             "properties": {
                 "error": {}
+            }
+        },
+        "responses.Health": {
+            "type": "object",
+            "properties": {
+                "mongo": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
             }
         },
         "responses.SearchContacts": {

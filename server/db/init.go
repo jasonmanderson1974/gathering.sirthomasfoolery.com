@@ -35,7 +35,11 @@ func Init() func() {
 		mongoURI = "mongodb://localhost"
 	}
 
-	Client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
+	// NOTE: assignment, not `:=`. A short declaration here would create a local
+	// that shadows the package-level Client, leaving db.Client nil forever — a
+	// nil-pointer trap for the next caller that reaches for it.
+	var err error
+	Client, err = mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {
 		logger.StdErr.Panicln(err)
 	}
