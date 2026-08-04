@@ -3,6 +3,11 @@
 # Wire this host to a Cloudflare Tunnel connector.
 #
 #     ./cloudflared-setup.sh <connector-token>
+#     printf '%s' "$TOKEN" | ./cloudflared-setup.sh      # preferred
+#
+# Prefer stdin. The token is the whole credential — anyone holding it can serve
+# traffic for the hostname — and an argument is visible in `ps` to every user on
+# the box for as long as the script runs.
 #
 # The tunnel itself is created in the Cloudflare dashboard, with a public
 # hostname pointing at http://127.0.0.1:3002. This only installs the connector
@@ -19,8 +24,11 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 TOKEN=${1:-}
+if [ -z "$TOKEN" ] && [ ! -t 0 ]; then
+  read -r TOKEN || true
+fi
 if [ -z "$TOKEN" ]; then
-  echo "Usage: $0 <connector-token>" >&2
+  echo "Usage: $0 <connector-token>   (or pipe the token on stdin)" >&2
   echo "Create the tunnel in the Cloudflare dashboard and copy its token." >&2
   exit 1
 fi

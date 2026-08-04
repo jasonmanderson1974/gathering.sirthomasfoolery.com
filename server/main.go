@@ -206,6 +206,17 @@ func main() {
 	if os.Getenv("NODE_ENV") == "staging" {
 		addr = ":3003"
 	}
+	// BIND_ADDR narrows which interfaces are served. The default is unchanged —
+	// every interface — because that is what local development and the old
+	// Docker deployment both relied on: the container bound broadly and Docker
+	// published it on the host's loopback, so the outside world never saw it.
+	//
+	// Running the binary directly loses that second half. Without this, a host
+	// on an isolated VLAN still serves the app to everything else on that VLAN,
+	// straight past the tunnel. Production sets BIND_ADDR=127.0.0.1:3002.
+	if bindAddr := os.Getenv("BIND_ADDR"); bindAddr != "" {
+		addr = bindAddr
+	}
 	if err := router.Run(addr); err != nil {
 		logger.StdErr.Fatalln("server failed to start:", err)
 	}
