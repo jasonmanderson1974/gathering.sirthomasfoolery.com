@@ -92,7 +92,17 @@ grep -rqF "${CLIENT_ID}" "$STAGING/dist/js/" \
 # ------------------------------------------------------------------ deploy --
 
 RELEASE="$APP_DIR/releases/$SHA"
-PREVIOUS=$(ssh "$DEPLOY_HOST" "readlink -f $APP_DIR/current 2>/dev/null || true")
+
+# Plain readlink, NOT readlink -f: -f canonicalizes a path that doesn't exist
+# yet, so on the very first deploy it returns the symlink's own path. Rolling
+# back to that points `current` at itself, and systemd fails with 203/EXEC on a
+# symlink loop. Accept a rollback target only if it is a real directory under
+# releases/.
+PREVIOUS=$(ssh "$DEPLOY_HOST" "readlink '$APP_DIR/current' 2>/dev/null" || true)
+case "$PREVIOUS" in
+  "$APP_DIR/releases/"*) ssh "$DEPLOY_HOST" "[ -d '$PREVIOUS' ]" || PREVIOUS="" ;;
+  *) PREVIOUS="" ;;
+esac
 
 say "Shipping to ${RELEASE}"
 ssh "$DEPLOY_HOST" "mkdir -p '$RELEASE'"
