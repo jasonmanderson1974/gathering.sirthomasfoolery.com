@@ -86,6 +86,10 @@ has already run, and refuses to rotate a password by accident.
   kernels 6.19–7.0.13 (a TCMalloc/rseq bug, SERVER-121912) and refuses to start
   rather than crash 30 seconds in. On an LXC guest this is the *Proxmox host's*
   kernel — the guest cannot fix it.
+- **MongoDB 8.2 or newer.** The kernel-side fix in 7.0.14 is only half of it:
+  8.0.x still refuses on *any* kernel >= 6.19, because its startup guard is a
+  version test written before the fix existed and never loosened. 8.0.28 is the
+  last 8.0 release, so there is no 8.0 build that runs here.
 - Egress to Cloudflare (`7844`), Gmail SMTP (`587`), and the apt/MongoDB repos.
 
 ## Services
@@ -93,7 +97,7 @@ has already run, and refuses to rotate a password by accident.
 | Unit                        | What it does                                    |
 | --------------------------- | ----------------------------------------------- |
 | `thegathering`              | The Go server on `127.0.0.1:3002`, as `gathering` |
-| `mongod`                    | MongoDB 8.0, loopback only, SCRAM auth          |
+| `mongod`                    | MongoDB 8.2, loopback only, SCRAM auth          |
 | `cloudflared`               | Outbound tunnel; the public ingress             |
 | `thegathering-backup.timer` | Nightly `mongodump` at 03:15                    |
 

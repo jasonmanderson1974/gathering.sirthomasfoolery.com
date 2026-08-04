@@ -24,9 +24,21 @@ seconds in, so MongoDB detects those kernels and refuses to start at all
 kernel is the *Proxmox host's* — nothing inside the guest can fix it. If mongod
 won't start, check `uname -r` first.
 
+**...but upgrading the kernel is only half the fix — you also need 8.2+.**
+MongoDB 8.0.x checks the kernel version, not whether the bug is actually
+present, and every 8.0 build refuses on anything >= 6.19 however new. That guard
+predates the 7.0.14 fix and was never loosened, and 8.0.28 is the last 8.0
+release, so no 8.0 build will ever run on this host. 8.2 knows about 7.0.14+.
+Seen for real here: on kernel 7.0.14-8-pve, 8.0.28 refused and 8.2.12 started.
+
 **MongoDB 7.0 was never packaged for Ubuntu 24.04 (noble).** 8.0 is the first
 line that supports it. That is why this doesn't simply match the old host's
 version.
+
+**MongoDB never published a GPG key for the 8.2 series.**
+`pgp.mongodb.com/server-8.2.asc` 404s, while `server-8.0.asc` resolves — the
+same key (`41DE058A4E7DCA05`) signs both repos. `install.sh` therefore fetches
+the 8.0 URL and stores it as `mongodb-server.gpg`, without a series in the name.
 
 **The app's working directory is the log directory, not the release
 directory.** `main.go` opens `logs.log` relative to cwd and `log.Fatal`s if it

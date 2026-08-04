@@ -23,7 +23,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR=/opt/thegathering
 ETC_DIR=/etc/thegathering
 
-MONGO_SERIES=8.0
+MONGO_SERIES=8.2
 
 # Drop any MongoDB apt source from a different series before touching apt. A
 # stale one is not inert: `apt-get update` fails hard on a repo with no Release
@@ -59,21 +59,34 @@ mkdir -p "$ETC_DIR"
 chown root:root "$ETC_DIR"
 chmod 0750 "$ETC_DIR"
 
-echo "==> MongoDB 8.0"
-# 8.0, not the 7.0 the old host runs. Not a preference: MongoDB never published
-# 7.0 packages for Ubuntu 24.04 (noble) — 8.0 is the first line that supports
-# it. The alternative was pinning the jammy repo on a noble host, which trades a
+echo "==> MongoDB $MONGO_SERIES"
+# Not the 7.0 the old host runs. Not a preference: MongoDB never published 7.0
+# packages for Ubuntu 24.04 (noble) — 8.0 is the first line that supports it.
+# The alternative was pinning the jammy repo on a noble host, which trades a
 # supported major version for an unsupported distro pairing. Worse deal.
 #
-# Verified rather than assumed, before choosing it: the full Go test suite
-# (integration tests included) passes against 8.2 on the current driver, and the
-# real 7.0 production dump restores into it with every collection count and all
-# 15 indexes intact. mongodump/mongorestore is a logical BSON dump, which is
+# 8.2 rather than 8.0, because 8.0 cannot start here at all. Every 8.0.x build
+# up to 8.0.28 (the last one published) refuses on *any* kernel >= 6.19, even
+# though the underlying TCMalloc/rseq bug was fixed on the kernel side in
+# 7.0.14 — its startup guard is a naive version test that predates the fix and
+# was never loosened. 8.2's guard knows about 7.0.14+, so it starts. Verified
+# on this host: 8.0.28 refused on kernel 7.0.14-8-pve, 8.2.12 came up clean.
+#
+# Verified rather than assumed: the full Go test suite (integration tests
+# included) passes against 8.2 on the current driver, and the real 7.0
+# production dump restores into it with every collection count and all 15
+# indexes intact. mongodump/mongorestore is a logical BSON dump, which is
 # supported across major versions.
+#
+# The keyring is deliberately not per-series. MongoDB publishes a key file per
+# series at pgp.mongodb.com/server-<series>.asc, but never published one for
+# 8.2 (it 404s) — the 8.0 and 8.2 repos are both signed by the same key,
+# 41DE058A4E7DCA05. So fetch the URL that exists and store it under a
+# series-independent name.
 if ! command -v mongod >/dev/null 2>&1; then
-  curl -fsSL https://pgp.mongodb.com/server-$MONGO_SERIES.asc \
-    | gpg -o /usr/share/keyrings/mongodb-server-$MONGO_SERIES.gpg --dearmor --yes
-  echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-$MONGO_SERIES.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/$MONGO_SERIES multiverse" \
+  curl -fsSL https://pgp.mongodb.com/server-8.0.asc \
+    | gpg -o /usr/share/keyrings/mongodb-server.gpg --dearmor --yes
+  echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/$MONGO_SERIES multiverse" \
     > /etc/apt/sources.list.d/mongodb-org-$MONGO_SERIES.list
   apt-get update -qq
   apt-get install -y -qq mongodb-org >/dev/null
@@ -101,6 +114,10 @@ systemctl enable mongod >/dev/null
 # and not something this script can do anything about. Say so plainly and carry
 # on installing the rest, rather than aborting the whole bootstrap over it.
 #
+# Note the kernel fix only helps on 8.2+. On 8.0.x the guard refuses on any
+# kernel >= 6.19 no matter how new, so "upgrade the kernel" is only half the
+# advice — the series above matters just as much.
+#
 # Check is-active rather than the exit status of restart: `systemctl restart
 # mongod` returns 0 even when the unit goes straight to failed, so testing the
 # exit code reports a healthy install on a host where the database cannot run
@@ -108,9 +125,9 @@ systemctl enable mongod >/dev/null
 systemctl restart mongod >/dev/null 2>&1 || true
 sleep 2
 if [ "$(systemctl is-active mongod)" != "active" ]; then
-  echo "    !! mongod is not running. If this host's kernel ($(uname -r)) is between"
-  echo "       6.19 and 7.0.13, that is SERVER-121912 — upgrade the Proxmox host"
-  echo "       kernel to 7.0.14+ and re-run. Continuing with the rest of the install."
+  echo "    !! mongod is not running. If the log mentions SERVER-121912, this host needs"
+  echo "       kernel 7.0.14+ (has: $(uname -r)) AND MongoDB 8.2+ — 8.0.x refuses on"
+  echo "       every kernel >= 6.19. Continuing with the rest of the install."
   echo "       Details: journalctl -u mongod -n 20"
 fi
 
