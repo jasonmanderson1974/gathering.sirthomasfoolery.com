@@ -78,6 +78,19 @@ var eventRoutes = []struct {
 	{http.MethodDelete, "/api/events/abc/my-lists/l1/items/i1", false},
 	{http.MethodGet, "/api/events/abc/my-notes", false},
 	{http.MethodPut, "/api/events/abc/my-notes", false},
+
+	// The Settle Up ledger (F22). Reading is open to every signed-in viewer,
+	// guests included; the role checks that separate reading from writing happen
+	// inside the handlers, so as far as this table is concerned all eight are
+	// simply behind a session.
+	{http.MethodGet, "/api/events/abc/expenses", false},
+	{http.MethodGet, "/api/events/abc/expenses/participants", false},
+	{http.MethodPost, "/api/events/abc/expenses", false},
+	{http.MethodPut, "/api/events/abc/expenses/x1", false},
+	{http.MethodDelete, "/api/events/abc/expenses/x1", false},
+	{http.MethodPost, "/api/events/abc/expenses/x1/receipts", false},
+	{http.MethodGet, "/api/events/abc/expenses/x1/receipts/r1", false},
+	{http.MethodDelete, "/api/events/abc/expenses/x1/receipts/r1", false},
 }
 
 func newEventRouter() *gin.Engine {
@@ -150,6 +163,8 @@ func TestEventRoutes_TableCoversEveryRegisteredRoute(t *testing.T) {
 		p = strings.Replace(p, "/p1", "/:pollId", 1)
 		p = strings.Replace(p, "/l1", "/:listId", 1)
 		p = strings.Replace(p, "/i1", "/:itemId", 1)
+		p = strings.Replace(p, "/x1", "/:expenseId", 1)
+		p = strings.Replace(p, "/r1", "/:receiptId", 1)
 		listed[rt.method+" "+p] = true
 	}
 

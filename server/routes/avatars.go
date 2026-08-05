@@ -11,25 +11,22 @@
 // The helper is exported to the package rather than inlined in the handler
 // because F6's admin-on-behalf upload runs the identical pipeline against a
 // different user id.
+//
+// The generic defences — payload caps, the decode-bomb guard, alpha flattening,
+// the box filter — live in routes/images.go and are shared with Settle Up's
+// receipt photos (F22). What stays here is only what is specific to a face in a
+// small circle: the square crop and the 256px target.
 package routes
 
 import (
-	"bytes"
-	"encoding/base64"
-	"errors"
 	"image"
-	"image/draw"
-	"image/jpeg"
-	_ "image/png" // register PNG with image.Decode; we only ever encode JPEG
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"sirtom/server/db"
 	"sirtom/server/errs"
-	"sirtom/server/logger"
 	"sirtom/server/models"
 	"sirtom/server/responses"
 	"sirtom/server/utils"
@@ -66,52 +63,10 @@ const (
 	maxAvatarPixels = 16 * 1000 * 1000
 )
 
-// Sentinel errors so the shared helper can report *why* it refused without
-// knowing anything about HTTP — F6 maps them to the same responses from a
-// different route group.
-var (
-	errAvatarInvalid  = errors.New(string(errs.InvalidImage))
-	errAvatarTooLarge = errors.New(string(errs.ImageTooLarge))
-)
-
-// decodeAvatarPayload turns the `image` field of a request into raw bytes. It
-// accepts a data URL (what FileReader/canvas produce, and what the frontend
-// sends) or a bare base64 string, and enforces the size caps on both the
-// encoded and decoded forms.
+// decodeAvatarPayload turns the `image` field of a request into raw bytes,
+// under the avatar caps.
 func decodeAvatarPayload(payload string) ([]byte, error) {
-	encoded := strings.TrimSpace(payload)
-	if encoded == "" {
-		return nil, errAvatarInvalid
-	}
-
-	// data:image/png;base64,<...> — only the base64 form is accepted. A
-	// percent-encoded data URL is legal but nothing produces one for an image,
-	// and guessing would mean decoding two ways.
-	if strings.HasPrefix(encoded, "data:") {
-		comma := strings.IndexByte(encoded, ',')
-		if comma < 0 || !strings.Contains(strings.ToLower(encoded[:comma]), ";base64") {
-			return nil, errAvatarInvalid
-		}
-		encoded = encoded[comma+1:]
-	}
-
-	// Checked before decoding: base64 is the form we actually received, so
-	// this is the cap that keeps a huge payload from being expanded at all.
-	if len(encoded) > maxAvatarEncodedBytes {
-		return nil, errAvatarTooLarge
-	}
-
-	raw, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return nil, errAvatarInvalid
-	}
-	if len(raw) > maxAvatarDecodedBytes {
-		return nil, errAvatarTooLarge
-	}
-	if len(raw) == 0 {
-		return nil, errAvatarInvalid
-	}
-	return raw, nil
+	return decodeImagePayload(payload, maxAvatarEncodedBytes, maxAvatarDecodedBytes)
 }
 
 // normalizeAvatar decodes an uploaded JPEG or PNG and re-encodes it as the
@@ -122,22 +77,9 @@ func decodeAvatarPayload(payload string) ([]byte, error) {
 // relied on one arrives rotated. That is why the upload dialog offers rotate
 // buttons and bakes the rotation into the pixels before sending.
 func normalizeAvatar(raw []byte) ([]byte, error) {
-	// Read the header first and refuse an oversized canvas before Decode gets
-	// the chance to allocate it.
-	config, _, err := image.DecodeConfig(bytes.NewReader(raw))
+	src, err := decodeImageWithin(raw, maxAvatarPixels)
 	if err != nil {
-		return nil, errAvatarInvalid
-	}
-	if config.Width <= 0 || config.Height <= 0 {
-		return nil, errAvatarInvalid
-	}
-	if config.Width*config.Height > maxAvatarPixels {
-		return nil, errAvatarTooLarge
-	}
-
-	src, _, err := image.Decode(bytes.NewReader(raw))
-	if err != nil {
-		return nil, errAvatarInvalid
+		return nil, err
 	}
 
 	square := centeredSquare(src)
@@ -146,18 +88,11 @@ func normalizeAvatar(raw []byte) ([]byte, error) {
 		size = avatarSize
 	}
 
-	// Flatten onto white in one pass: JPEG has no alpha channel, so a
-	// transparent PNG left as-is would come out with black where it was clear.
-	flat := image.NewRGBA(image.Rect(0, 0, square.Dx(), square.Dy()))
-	draw.Draw(flat, flat.Bounds(), image.White, image.Point{}, draw.Src)
-	draw.Draw(flat, flat.Bounds(), src, square.Min, draw.Over)
-
-	var out bytes.Buffer
-	if err := jpeg.Encode(&out, boxDownscale(flat, size), &jpeg.Options{Quality: avatarJPEGQuality}); err != nil {
-		logger.StdErr.Println("re-encoding an avatar:", err)
-		return nil, errAvatarInvalid
-	}
-	return out.Bytes(), nil
+	return encodeJPEGAt(
+		boxDownscale(flattenOnWhite(src, square), size),
+		avatarJPEGQuality,
+		"an avatar",
+	)
 }
 
 // centeredSquare returns the largest centred square within an image's bounds,
@@ -176,52 +111,10 @@ func centeredSquare(img image.Image) image.Rectangle {
 	)
 }
 
-// boxDownscale reduces a square opaque RGBA image to size x size by averaging
-// each destination pixel's source footprint.
-//
-// A box filter, not nearest-neighbour: dropping pixels at these ratios makes a
-// face look like it was photographed through a screen door. It is only ever
-// used to shrink (the caller clamps size to the source), which is the case a
-// box filter handles well — the stdlib has no resampler, and this is a dozen
-// lines against a new dependency.
+// boxDownscale reduces a square image to size x size — the square case of
+// boxDownscaleTo, which is all an avatar ever needs.
 func boxDownscale(src *image.RGBA, size int) *image.RGBA {
-	sourceSize := src.Bounds().Dx()
-	if sourceSize == size {
-		return src
-	}
-
-	dst := image.NewRGBA(image.Rect(0, 0, size, size))
-	for y := 0; y < size; y++ {
-		y0, y1 := y*sourceSize/size, (y+1)*sourceSize/size
-		if y1 <= y0 {
-			y1 = y0 + 1
-		}
-		for x := 0; x < size; x++ {
-			x0, x1 := x*sourceSize/size, (x+1)*sourceSize/size
-			if x1 <= x0 {
-				x1 = x0 + 1
-			}
-
-			var r, g, b, n uint32
-			for sy := y0; sy < y1; sy++ {
-				row := src.Pix[sy*src.Stride:]
-				for sx := x0; sx < x1; sx++ {
-					i := sx * 4
-					r += uint32(row[i])
-					g += uint32(row[i+1])
-					b += uint32(row[i+2])
-					n++
-				}
-			}
-
-			o := dst.PixOffset(x, y)
-			dst.Pix[o] = uint8(r / n)
-			dst.Pix[o+1] = uint8(g / n)
-			dst.Pix[o+2] = uint8(b / n)
-			dst.Pix[o+3] = 0xff
-		}
-	}
-	return dst
+	return boxDownscaleTo(src, size, size)
 }
 
 // saveAvatarForUser validates, canonicalizes and stores an avatar for the given
@@ -242,19 +135,11 @@ func saveAvatarForUser(userId primitive.ObjectID, payload string) (primitive.Dat
 // avatarContentType is the type of everything the pipeline stores. It is a
 // constant rather than something carried from the upload precisely because the
 // upload's type is discarded.
-const avatarContentType = "image/jpeg"
+const avatarContentType = jpegContentType
 
-// respondToAvatarError maps the pipeline's sentinels onto HTTP. Anything else
-// is a storage failure — logged by the db layer, reported as internal.
+// respondToAvatarError maps the pipeline's sentinels onto HTTP.
 func respondToAvatarError(c *gin.Context, err error) {
-	switch {
-	case errors.Is(err, errAvatarInvalid):
-		c.JSON(http.StatusBadRequest, responses.Error{Error: errs.InvalidImage})
-	case errors.Is(err, errAvatarTooLarge):
-		c.JSON(http.StatusRequestEntityTooLarge, responses.Error{Error: errs.ImageTooLarge})
-	default:
-		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-	}
+	respondToImageError(c, err)
 }
 
 // @Summary Sets the signed-in user's profile photo
@@ -270,27 +155,13 @@ func respondToAvatarError(c *gin.Context, err error) {
 // @Failure 413 {object} responses.Error "image-too-large"
 // @Router /user/avatar [put]
 func updateAvatar(c *gin.Context) {
-	// Cap the body before binding reads it — the byte caps inside the pipeline
-	// only run once the whole payload is already in memory.
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxAvatarRequestBytes)
-
-	payload := struct {
-		Image string `json:"image" binding:"required"`
-	}{}
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		// A body over the cap fails here rather than in decodeAvatarPayload, so
-		// it has to be reported as the size problem it is.
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			c.JSON(http.StatusRequestEntityTooLarge, responses.Error{Error: errs.ImageTooLarge})
-			return
-		}
-		c.JSON(http.StatusBadRequest, responses.Error{Error: errs.InvalidImage})
+	payload, ok := bindImagePayload(c, maxAvatarRequestBytes)
+	if !ok {
 		return
 	}
 
 	authUser := utils.GetAuthUser(c)
-	updatedAt, err := saveAvatarForUser(authUser.Id, payload.Image)
+	updatedAt, err := saveAvatarForUser(authUser.Id, payload)
 	if err != nil {
 		respondToAvatarError(c, err)
 		return

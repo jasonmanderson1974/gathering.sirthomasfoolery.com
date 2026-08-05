@@ -80,6 +80,10 @@ func InitEvents(router *gin.RouterGroup) {
 	// group rather than one of their own so they share the :eventId parameter
 	// name — Gin rejects two different wildcard names at the same position.
 	initPersonalRoutes(authed)
+
+	// The shared "Settle Up" expense ledger (F22), on this group for the same
+	// reason.
+	initExpenseRoutes(authed)
 }
 
 // trimmedLocation normalizes a venue submitted by a client. A nil pointer means
@@ -777,6 +781,14 @@ func deleteEvent(c *gin.Context) {
 		// irreversible thing in it.
 		if err := db.DeletePersonalDataForEvent(objectId); err != nil {
 			logger.StdErr.Println("personal data cleanup after event delete:", err)
+		}
+
+		// The expense ledger and its receipt photos go the same way, for the same
+		// reasons — best-effort, and hard delete only (F22). Receipts are the one
+		// piece of this that is worth real storage, so leaving them stranded is
+		// the thing this call exists to avoid.
+		if err := db.DeleteExpensesForEvent(objectId); err != nil {
+			logger.StdErr.Println("expense cleanup after event delete:", err)
 		}
 	}
 

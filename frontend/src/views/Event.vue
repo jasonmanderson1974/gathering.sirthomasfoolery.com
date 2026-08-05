@@ -98,6 +98,12 @@
             @set-rsvp="setRsvp"
             @clear-rsvp="clearRsvp"
           />
+
+          <!-- Who owes whom (F22). Derived from the same rows the Settle Up
+               tab renders, so it is right whether or not that tab has ever
+               been opened. Hidden entirely for someone with no account: every
+               expense route is behind a session. -->
+          <SettleUpSummary v-if="authUser" :expenses="expenses" />
         </div>
 
         <div class="tw-mx-auto tw-max-w-5xl tw-flex-1 lg:tw-order-1">
@@ -205,7 +211,12 @@
               {{ calendarExpanded ? "Hide availability" : "View availability" }}
             </v-btn>
 
-            <div class="tw-flex tw-gap-1">
+            <!-- tw-flex-wrap, from F22 on: five tabs no longer fit across a
+                 390px phone, and an unwrapped row pushed the whole page into a
+                 horizontal scroll — visible on every tab, not just the new
+                 one. Wrapping to a second line beats a scroll nobody would
+                 find. -->
+            <div class="tw-flex tw-flex-wrap tw-gap-1">
               <v-btn
                 v-for="t in bandTabs"
                 :key="t.value"
@@ -267,6 +278,22 @@
                 v-if="authUser"
                 :event-id="bandEventId"
                 :active="bandTab === 'my-notes'"
+              />
+            </div>
+            <!-- The shared ledger (F22). Unlike the two private tabs this one
+                 is readable by everyone signed in, guests included — the v-if
+                 is on having an account at all, not on a role. -->
+            <div v-show="bandTab === 'settle-up'">
+              <EventExpenses
+                v-if="authUser"
+                :event-id="bandEventId"
+                :expenses="expenses"
+                :refreshing="refreshingExpenses"
+                :has-sidebar="showGatheringSidebar"
+                @create-expense="onCreateExpense"
+                @edit-expense="onEditExpense"
+                @delete-expense="onDeleteExpense"
+                @delete-receipt="onDeleteReceipt"
               />
             </div>
           </div>
@@ -342,6 +369,8 @@ import EventPolls from "@/components/event/EventPolls.vue"
 import EventLists from "@/components/event/EventLists.vue"
 import PersonalLists from "@/components/event/PersonalLists.vue"
 import PersonalNotes from "@/components/event/PersonalNotes.vue"
+import EventExpenses from "@/components/event/EventExpenses.vue"
+import SettleUpSummary from "@/components/event/SettleUpSummary.vue"
 import { canManageEventLists } from "@/components/event/eventLists"
 import {
   setRsvp,
@@ -367,10 +396,11 @@ import {
   setListItemChecked,
 } from "@/utils/services/EventService"
 import pluginMessagesMixin from "@/components/event/pluginMessagesMixin"
+import expensesMixin from "@/components/event/expensesMixin"
 export default {
   name: "Event",
 
-  mixins: [pluginMessagesMixin],
+  mixins: [pluginMessagesMixin, expensesMixin],
 
   props: {
     eventId: { type: String, required: true },
@@ -398,6 +428,8 @@ export default {
     EventLists,
     PersonalLists,
     PersonalNotes,
+    EventExpenses,
+    SettleUpSummary,
   },
 
   data: () => ({
@@ -505,6 +537,13 @@ export default {
         // No count: a character total would be noise, and "you have a note" is
         // not news to the only person who can read it.
         tabs.push({ value: "my-notes", title: "My Notes" })
+        // The shared ledger (F22), to the right of the private tabs. Signed-in
+        // rather than member+: a guest reads the ledger, they just can't add
+        // to it.
+        tabs.push({
+          value: "settle-up",
+          title: `Settle Up${count(this.expenses.length)}`,
+        })
       }
 
       return tabs
@@ -1267,6 +1306,13 @@ export default {
     // one tab of the page, so it must never hold up the calendar grid.
     this.fetchMentionables()
 
+    // Nor is the ledger (F22) — but it IS read on arrival rather than when its
+    // tab is opened, because the sidebar summary has to be right for someone
+    // who never opens it. Guarded on already knowing who the viewer is; the
+    // profile fetch below covers the case where we don't yet, via the authUser
+    // watcher.
+    if (this.authUser) this.refreshExpenses()
+
     const promises = []
     promises.push(this.fetchAuthUserCalendarEvents())
 
@@ -1297,15 +1343,31 @@ export default {
       if (tab === "lists") {
         this.refreshLists()
       }
+      // The ledger is loaded on arrival for the sidebar's sake, so this is a
+      // refresh rather than the first read — someone opening the tab is still
+      // when it most wants to be current.
+      if (tab === "settle-up") {
+        this.refreshExpenses()
+      }
       // The two private panels refresh themselves off their `active` prop —
       // they own their own data, so there is nothing to fetch from here.
     },
-    authUser(now) {
-      // Signing out, or a session expiring, while a private tab is selected
-      // must not leave the band pointing at a panel that no longer exists.
-      if (!now && (this.bandTab === "my-lists" || this.bandTab === "my-notes")) {
+    authUser(now, before) {
+      // Signing out, or a session expiring, while a signed-in-only tab is
+      // selected must not leave the band pointing at a panel that no longer
+      // exists.
+      if (!now && ["my-lists", "my-notes", "settle-up"].includes(this.bandTab)) {
         this.bandTab = "discussion"
         this.personalListCount = 0
+      }
+      // The ledger goes with the session: every expense route needs one, and
+      // leaving the rows behind would keep stale balances in the sidebar.
+      // Only fetched on the falsy→truthy edge, so learning who the viewer is
+      // after arrival loads it once rather than twice.
+      if (!now) {
+        this.expenses = []
+      } else if (!before) {
+        this.refreshExpenses()
       }
     },
     event() {

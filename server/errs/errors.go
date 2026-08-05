@@ -58,6 +58,24 @@ const (
 	// InvalidName: a name field was sent but was blank after trimming. Names
 	// may be edited but not erased — DisplayName falls back to them.
 	InvalidName Code = "invalid-name"
+	// ExpenseNotFound: no live expense with that id on this gathering
+	ExpenseNotFound Code = "expense-not-found"
+	// ReceiptNotFound: no receipt with that id on this expense
+	ReceiptNotFound Code = "receipt-not-found"
+	// InvalidAmount: an expense amount was zero, negative, or beyond the cap
+	InvalidAmount Code = "invalid-amount"
+	// InvalidTitle: an expense title was blank after trimming
+	InvalidTitle Code = "invalid-title"
+	// SplitMismatch: the per-person shares do not sum to the expense total
+	SplitMismatch Code = "split-mismatch"
+	// NoParticipants: an expense was submitted with nobody to split it between
+	NoParticipants Code = "no-participants"
+	// NotAParticipant: a payer or split member is not a member of this gathering
+	NotAParticipant Code = "not-a-participant"
+	// TooManyReceipts: the expense already carries the maximum number of photos
+	TooManyReceipts Code = "too-many-receipts"
+	// NoChanges: an edit was submitted that changes nothing
+	NoChanges Code = "no-changes"
 )
 
 // Sentinel error returned by signInHelper when an email is not allowlisted, so

@@ -1285,6 +1285,61 @@ won't-do. See their entries. The sequencing that got there is at the bottom.
     surviving a reload. Both standing harnesses green (`CHROME_PATH` must point at Playwright's
     chromium on this box — there is no system `google-chrome`).
 
+- [x] **F22 · Settle Up: a shared expense ledger per gathering.** `L` · **P1** —
+  **DONE 2026-08-05.** A fifth band tab, right of My Notes. Members log what they paid, attach
+  receipt photos, and tick who shares the cost; everyone signed in — guests included — reads the
+  ledger, and a "who owes whom" summary sits in the sidebar.
+  - **Decisions confirmed with the user (2026-08-05):** an explicit **"Paid by"** picker
+    pre-filled with the current user (so one member can log what another fronted, and an admin can
+    correct it); **even split by default with a per-person override** that must sum to the total;
+    **computed balances only** — no payment records, no "mark as paid"; and the split picker offers
+    **only members who took part in this gathering**, all ticked.
+  - **Money is integer cents end to end**, `int64` in Go and `number` in JS. No float on this path
+    in either language, and `parseAmount` parses by hand rather than via `parseFloat` —
+    `parseFloat("1.005") * 100` is `100.49999999999999`, which rounds to the wrong cent.
+  - **The server owns the arithmetic.** A client sends a total plus who shares it; the even split
+    is computed server-side by `models.SplitEvenly`, and a by-amount split is refused unless it
+    reconciles to the cent (`split-mismatch`). The stored `Splits` always sums to `AmountCents`,
+    which is what lets the balance calculation be a plain sum with no rounding logic of its own.
+    `splitEvenlyPreview` in `expenseForm.js` **deliberately duplicates** the remainder rule so the
+    preview shows the shares that will actually be stored, down to which two of three people
+    absorb the extra cent; both sides encode the same table in their tests.
+  - **`$10 across three` is the whole difficulty**: not three shares of `$3.33` but `334/333/333`,
+    with the remainder handed out by sorted id so the result is deterministic — a re-save that
+    changed nothing has to be recognised as changing nothing, or the audit trail fills with noise.
+  - **Balances are derived, never stored** (`settleUp.js`). Greedy min-cash-flow: largest debtor
+    against largest creditor, which zeroes one party per transfer and terminates in at most
+    `n-1` payments. Not the theoretical minimum (that problem is NP-hard) but within one of it for
+    any group this app will see. Ties break by id so the panel does not reshuffle on refresh.
+  - **Reuses `mentionableUserIds`** (`routes/mentions.go`) for "who was at this gathering" rather
+    than inventing a second definition — it already means availability + RSVP + poll votes +
+    comments, and is already table-tested. Filtered to member+, with the caller unioned in.
+  - **Change history is a `$push` in the SAME update as the `$set`** (`db/expenses.go`), capped at
+    50 with `$slice`. Two writes would admit a state where the amount had changed but nothing
+    recorded that it did — exactly the state the trail exists to rule out. `diffExpense` is pure
+    and produces both arms from one pass, so a field cannot be written without being recorded. An
+    edit that changes nothing is **refused** (`no-changes`) rather than recorded.
+  - **Delete is soft.** A hard delete would take the history with it, which is the one thing the
+    feature promises to keep.
+  - **The avatar image pipeline was extracted into `routes/images.go`** and is now shared. Receipts
+    keep the aspect ratio (a receipt is a document you have to be able to *read*; a square crop
+    takes the total off the bottom) with a 2000px long edge at q82, capped at 5 per expense; bytes
+    live in their own `expenseReceipts` collection for the same reason `models.Avatar` is not a
+    field on `User`. Re-encoding strips EXIF — including the GPS tag on a phone photo of a
+    restaurant bill, which is a privacy property of the route, not an accident.
+  - **The tab row needed `tw-flex-wrap`.** A fifth tab no longer fits across a 390px phone, and the
+    unwrapped row put the whole page into a horizontal scroll — on *every* tab, not just the new
+    one. Only looking at the page on a phone catches this; lint, tests and the build were all green.
+  - **`event_auth_gate_test.go` earned its keep**: it failed the moment the eight routes were
+    registered and not listed, exactly as designed.
+  - **Verified** with `/root/tools/browser/verify_f22_local.js` — 42 checks across four roles on one
+    event (author, another member, an admin, a guest): the split preview and what actually lands in
+    Mongo; save disabled until a by-amount split reconciles; a 1200x3000 PNG arriving as an 800x2000
+    JPEG; the history reading back on the page; 403 on a direct PUT as another member and on a
+    direct POST as a guest; a guest opening a receipt; and the soft delete leaving the row on disk
+    with its trail. Plus `probe_f22_sidebar.js` — the balances render in exactly one place, never
+    two, across the sidebar/inline breakpoint.
+
 ---
 
 ## PART G — Carried forward from TODO.md (re-verified 2026-07-28)

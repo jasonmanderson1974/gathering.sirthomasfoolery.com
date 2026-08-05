@@ -89,6 +89,14 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
 - **Tailwind purges on literal source text**, so a class name must appear whole in the source. Build
   a static map (`["", "tw-pl-6", "tw-pl-12"]`), never a template string like `` `tw-pl-${n}` `` —
   that emits no CSS at all.
+- **Money is integer cents end to end** (Settle Up, F22) — `int64` in Go, `number` in JS, never a
+  float in either. Parse with `parseAmount` in `components/event/expenseForm.js`, not `parseFloat`
+  (`parseFloat("1.005") * 100` is `100.49999999999999`). An even split is computed by the server
+  (`models.SplitEvenly`); `splitEvenlyPreview` mirrors it, remainder rule included, so the form's
+  preview matches what gets stored — if one moves, move the other.
+- **A fifth band tab does not fit across a phone**, so the tab row in `Event.vue` carries
+  `tw-flex-wrap`. Adding a sixth without checking the page at 390px will put the whole document
+  into a horizontal scroll, on every tab. Lint, unit tests and the build all pass with that bug.
 - **`src/utils/index.js` is an `export *` barrel imported by ~40 components.** Don't add modules with
   heavy or DOM-dependent dependencies to it (e.g. `utils/markdown.js`, which pulls in DOMPurify);
   import those directly by path.

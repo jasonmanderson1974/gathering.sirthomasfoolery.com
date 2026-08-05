@@ -1210,6 +1210,428 @@ const docTemplate = `{
                 }
             }
         },
+        "/events/{eventId}/expenses": {
+            "get": {
+                "description": "Readable by anyone signed in who can see the gathering, guests included. Each row carries a computed ` + "`" + `canEdit` + "`" + ` for the calling user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Lists a gathering's expenses, newest first",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Expense"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Members and up only. The server resolves the split itself: an even split is computed from the participant list, and a by-amount split must sum to the total exactly.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Adds an expense to a gathering's ledger",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The expense",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "amountCents": {
+                                    "type": "integer"
+                                },
+                                "date": {
+                                    "type": "integer"
+                                },
+                                "description": {
+                                    "type": "string"
+                                },
+                                "paidBy": {
+                                    "type": "string"
+                                },
+                                "participants": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                "splitMode": {
+                                    "type": "string"
+                                },
+                                "splits": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object"
+                                    }
+                                },
+                                "title": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Expense"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid-amount / invalid-title / split-mismatch / no-participants / not-a-participant",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/events/{eventId}/expenses/participants": {
+            "get": {
+                "description": "Everyone who took part in this gathering and is a member or above, plus the caller. Guests are excluded — they read the ledger but never share an expense — and are refused this endpoint outright.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Lists the members an expense may be split between",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.User"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/events/{eventId}/expenses/{expenseId}": {
+            "put": {
+                "description": "The member who entered it, or any admin. An edit that changes nothing is refused rather than recorded, so the change history stays a record of real changes.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Edits an expense",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Expense ID",
+                        "name": "expenseId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The expense",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "amountCents": {
+                                    "type": "integer"
+                                },
+                                "date": {
+                                    "type": "integer"
+                                },
+                                "description": {
+                                    "type": "string"
+                                },
+                                "paidBy": {
+                                    "type": "string"
+                                },
+                                "participants": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                "splitMode": {
+                                    "type": "string"
+                                },
+                                "splits": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object"
+                                    }
+                                },
+                                "title": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "400": {
+                        "description": "invalid-amount / invalid-title / split-mismatch / no-changes",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Error"
+                        }
+                    },
+                    "403": {
+                        "description": "not-authorized",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Error"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Soft delete — the row leaves the ledger and the balances, but its change history is retained. The member who entered it, or any admin.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Deletes an expense",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Expense ID",
+                        "name": "expenseId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "403": {
+                        "description": "not-authorized",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/events/{eventId}/expenses/{expenseId}/receipts": {
+            "post": {
+                "description": "Accepts a base64 data URL (JPEG or PNG). The image is downscaled to a 2000px long edge and re-encoded as JPEG before storage, so EXIF metadata — including the GPS tag on a phone photo — is discarded. The member who entered the expense, or any admin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Attaches a receipt photo to an expense",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Expense ID",
+                        "name": "expenseId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Data URL of the image to store",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "image": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ExpenseReceiptRef"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid-image",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Error"
+                        }
+                    },
+                    "413": {
+                        "description": "image-too-large / too-many-receipts",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/events/{eventId}/expenses/{expenseId}/receipts/{receiptId}": {
+            "get": {
+                "description": "Readable by anyone signed in who can see the gathering, guests included — the ledger is theirs to read too.",
+                "produces": [
+                    "image/jpeg"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Serves a receipt photo",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Expense ID",
+                        "name": "expenseId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Receipt ID",
+                        "name": "receiptId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "receipt-not-found",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Error"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "The member who entered the expense, or any admin.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Removes a receipt photo from an expense",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Expense ID",
+                        "name": "expenseId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Receipt ID",
+                        "name": "receiptId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "403": {
+                        "description": "not-authorized",
+                        "schema": {
+                            "$ref": "#/definitions/responses.Error"
+                        }
+                    }
+                }
+            }
+        },
         "/events/{eventId}/ics": {
             "get": {
                 "description": "Universal \"add to calendar\" — returns a text/calendar file for the gathering's locked-in time. No auth required so any invitee (incl. members without a Google account) can add it. 404 if the event has no confirmed gathering yet.",
@@ -4356,6 +4778,152 @@ const docTemplate = `{
                 "SPECIFIC_DATES",
                 "DOW"
             ]
+        },
+        "models.Expense": {
+            "type": "object",
+            "properties": {
+                "_id": {
+                    "type": "string"
+                },
+                "amountCents": {
+                    "type": "integer"
+                },
+                "canEdit": {
+                    "description": "CanEdit is computed per-request for the calling user and never stored —\nthe same idiom as Comment.CanManageThread. The client renders buttons from\nit; the server re-derives it on every write, so it is a hint, never a\ngrant.",
+                    "type": "boolean"
+                },
+                "createdAt": {
+                    "type": "integer"
+                },
+                "createdBy": {
+                    "description": "CreatedBy is the ownership key for editing (\"members may edit their own\nentries\"), and is deliberately NOT the same thing as PaidBy — one member\nmay log an expense another fronted, and admins may log on anyone's behalf.",
+                    "type": "string"
+                },
+                "createdByName": {
+                    "type": "string"
+                },
+                "date": {
+                    "description": "Date is the day the money was spent, which is not the day the row was\ncreated — you settle up on Sunday for a Friday you had already forgotten.",
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "history": {
+                    "description": "History is the audit trail, append-only and oldest first.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ExpenseChange"
+                    }
+                },
+                "paidBy": {
+                    "description": "PaidBy is who is owed. The names on this document are snapshots taken at\nwrite time and re-resolved on read (resolveExpenseNames), the same\narrangement Comment.AuthorName uses: renaming propagates, but a deleted\naccount still renders as the name it had.",
+                    "type": "string"
+                },
+                "paidByName": {
+                    "type": "string"
+                },
+                "receipts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ExpenseReceiptRef"
+                    }
+                },
+                "splitMode": {
+                    "type": "string"
+                },
+                "splits": {
+                    "description": "Splits always holds RESOLVED cents summing to exactly AmountCents,\nwhichever mode produced them. Storing the resolution rather than the\nrecipe is what lets the balance calculation be a plain sum with no\nknowledge of rounding rules, and what stops an even split silently\nre-dividing itself when someone is added to the gathering later.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ExpenseSplit"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.ExpenseChange": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "at": {
+                    "type": "integer"
+                },
+                "byName": {
+                    "type": "string"
+                },
+                "byUser": {
+                    "type": "string"
+                },
+                "changes": {
+                    "description": "Changes carries field-level diffs, and is present only on an \"edited\"\nentry. The values are PRE-FORMATTED display strings (\"$142.50\", \"2 Aug\n2026\", \"Tom Foolery\") rather than raw values, so rendering the trail needs\nno knowledge of what type each field happens to be — and so a historical\nentry keeps reading correctly even if the formatting rules change later.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ExpenseFieldChange"
+                    }
+                }
+            }
+        },
+        "models.ExpenseFieldChange": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ExpenseReceiptRef": {
+            "type": "object",
+            "properties": {
+                "_id": {
+                    "type": "string"
+                },
+                "contentType": {
+                    "type": "string"
+                },
+                "height": {
+                    "type": "integer"
+                },
+                "uploadedAt": {
+                    "type": "integer"
+                },
+                "uploadedBy": {
+                    "type": "string"
+                },
+                "width": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.ExpenseSplit": {
+            "type": "object",
+            "properties": {
+                "amountCents": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "userId": {
+                    "type": "string"
+                }
+            }
         },
         "models.Folder": {
             "type": "object",

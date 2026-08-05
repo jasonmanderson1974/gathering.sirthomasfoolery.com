@@ -397,6 +397,127 @@ definitions:
     x-enum-varnames:
     - SPECIFIC_DATES
     - DOW
+  models.Expense:
+    properties:
+      _id:
+        type: string
+      amountCents:
+        type: integer
+      canEdit:
+        description: |-
+          CanEdit is computed per-request for the calling user and never stored —
+          the same idiom as Comment.CanManageThread. The client renders buttons from
+          it; the server re-derives it on every write, so it is a hint, never a
+          grant.
+        type: boolean
+      createdAt:
+        type: integer
+      createdBy:
+        description: |-
+          CreatedBy is the ownership key for editing ("members may edit their own
+          entries"), and is deliberately NOT the same thing as PaidBy — one member
+          may log an expense another fronted, and admins may log on anyone's behalf.
+        type: string
+      createdByName:
+        type: string
+      date:
+        description: |-
+          Date is the day the money was spent, which is not the day the row was
+          created — you settle up on Sunday for a Friday you had already forgotten.
+        type: integer
+      description:
+        type: string
+      eventId:
+        type: string
+      history:
+        description: History is the audit trail, append-only and oldest first.
+        items:
+          $ref: '#/definitions/models.ExpenseChange'
+        type: array
+      paidBy:
+        description: |-
+          PaidBy is who is owed. The names on this document are snapshots taken at
+          write time and re-resolved on read (resolveExpenseNames), the same
+          arrangement Comment.AuthorName uses: renaming propagates, but a deleted
+          account still renders as the name it had.
+        type: string
+      paidByName:
+        type: string
+      receipts:
+        items:
+          $ref: '#/definitions/models.ExpenseReceiptRef'
+        type: array
+      splitMode:
+        type: string
+      splits:
+        description: |-
+          Splits always holds RESOLVED cents summing to exactly AmountCents,
+          whichever mode produced them. Storing the resolution rather than the
+          recipe is what lets the balance calculation be a plain sum with no
+          knowledge of rounding rules, and what stops an even split silently
+          re-dividing itself when someone is added to the gathering later.
+        items:
+          $ref: '#/definitions/models.ExpenseSplit'
+        type: array
+      title:
+        type: string
+      updatedAt:
+        type: integer
+    type: object
+  models.ExpenseChange:
+    properties:
+      action:
+        type: string
+      at:
+        type: integer
+      byName:
+        type: string
+      byUser:
+        type: string
+      changes:
+        description: |-
+          Changes carries field-level diffs, and is present only on an "edited"
+          entry. The values are PRE-FORMATTED display strings ("$142.50", "2 Aug
+          2026", "Tom Foolery") rather than raw values, so rendering the trail needs
+          no knowledge of what type each field happens to be — and so a historical
+          entry keeps reading correctly even if the formatting rules change later.
+        items:
+          $ref: '#/definitions/models.ExpenseFieldChange'
+        type: array
+    type: object
+  models.ExpenseFieldChange:
+    properties:
+      field:
+        type: string
+      from:
+        type: string
+      to:
+        type: string
+    type: object
+  models.ExpenseReceiptRef:
+    properties:
+      _id:
+        type: string
+      contentType:
+        type: string
+      height:
+        type: integer
+      uploadedAt:
+        type: integer
+      uploadedBy:
+        type: string
+      width:
+        type: integer
+    type: object
+  models.ExpenseSplit:
+    properties:
+      amountCents:
+        type: integer
+      name:
+        type: string
+      userId:
+        type: string
+    type: object
   models.Folder:
     properties:
       _id:
@@ -1508,6 +1629,300 @@ paths:
         "200":
           description: OK
       summary: Duplicate event
+      tags:
+      - events
+  /events/{eventId}/expenses:
+    get:
+      description: Readable by anyone signed in who can see the gathering, guests
+        included. Each row carries a computed `canEdit` for the calling user.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Expense'
+            type: array
+      summary: Lists a gathering's expenses, newest first
+      tags:
+      - events
+    post:
+      consumes:
+      - application/json
+      description: 'Members and up only. The server resolves the split itself: an
+        even split is computed from the participant list, and a by-amount split must
+        sum to the total exactly.'
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: The expense
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            amountCents:
+              type: integer
+            date:
+              type: integer
+            description:
+              type: string
+            paidBy:
+              type: string
+            participants:
+              items:
+                type: string
+              type: array
+            splitMode:
+              type: string
+            splits:
+              items:
+                type: object
+              type: array
+            title:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Expense'
+        "400":
+          description: invalid-amount / invalid-title / split-mismatch / no-participants
+            / not-a-participant
+          schema:
+            $ref: '#/definitions/responses.Error'
+      summary: Adds an expense to a gathering's ledger
+      tags:
+      - events
+  /events/{eventId}/expenses/{expenseId}:
+    delete:
+      description: Soft delete — the row leaves the ledger and the balances, but its
+        change history is retained. The member who entered it, or any admin.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: Expense ID
+        in: path
+        name: expenseId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "403":
+          description: not-authorized
+          schema:
+            $ref: '#/definitions/responses.Error'
+      summary: Deletes an expense
+      tags:
+      - events
+    put:
+      consumes:
+      - application/json
+      description: The member who entered it, or any admin. An edit that changes nothing
+        is refused rather than recorded, so the change history stays a record of real
+        changes.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: Expense ID
+        in: path
+        name: expenseId
+        required: true
+        type: string
+      - description: The expense
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            amountCents:
+              type: integer
+            date:
+              type: integer
+            description:
+              type: string
+            paidBy:
+              type: string
+            participants:
+              items:
+                type: string
+              type: array
+            splitMode:
+              type: string
+            splits:
+              items:
+                type: object
+              type: array
+            title:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: invalid-amount / invalid-title / split-mismatch / no-changes
+          schema:
+            $ref: '#/definitions/responses.Error'
+        "403":
+          description: not-authorized
+          schema:
+            $ref: '#/definitions/responses.Error'
+      summary: Edits an expense
+      tags:
+      - events
+  /events/{eventId}/expenses/{expenseId}/receipts:
+    post:
+      consumes:
+      - application/json
+      description: Accepts a base64 data URL (JPEG or PNG). The image is downscaled
+        to a 2000px long edge and re-encoded as JPEG before storage, so EXIF metadata
+        — including the GPS tag on a phone photo — is discarded. The member who entered
+        the expense, or any admin.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: Expense ID
+        in: path
+        name: expenseId
+        required: true
+        type: string
+      - description: Data URL of the image to store
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            image:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExpenseReceiptRef'
+        "400":
+          description: invalid-image
+          schema:
+            $ref: '#/definitions/responses.Error'
+        "413":
+          description: image-too-large / too-many-receipts
+          schema:
+            $ref: '#/definitions/responses.Error'
+      summary: Attaches a receipt photo to an expense
+      tags:
+      - events
+  /events/{eventId}/expenses/{expenseId}/receipts/{receiptId}:
+    delete:
+      description: The member who entered the expense, or any admin.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: Expense ID
+        in: path
+        name: expenseId
+        required: true
+        type: string
+      - description: Receipt ID
+        in: path
+        name: receiptId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "403":
+          description: not-authorized
+          schema:
+            $ref: '#/definitions/responses.Error'
+      summary: Removes a receipt photo from an expense
+      tags:
+      - events
+    get:
+      description: Readable by anyone signed in who can see the gathering, guests
+        included — the ledger is theirs to read too.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: Expense ID
+        in: path
+        name: expenseId
+        required: true
+        type: string
+      - description: Receipt ID
+        in: path
+        name: receiptId
+        required: true
+        type: string
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: receipt-not-found
+          schema:
+            $ref: '#/definitions/responses.Error'
+      summary: Serves a receipt photo
+      tags:
+      - events
+  /events/{eventId}/expenses/participants:
+    get:
+      description: Everyone who took part in this gathering and is a member or above,
+        plus the caller. Guests are excluded — they read the ledger but never share
+        an expense — and are refused this endpoint outright.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.User'
+            type: array
+      summary: Lists the members an expense may be split between
       tags:
       - events
   /events/{eventId}/ics:

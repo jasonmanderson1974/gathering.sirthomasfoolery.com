@@ -26,6 +26,8 @@ var ChronicleCollection *mongo.Collection
 var AvatarsCollection *mongo.Collection
 var PersonalListsCollection *mongo.Collection
 var PersonalNotesCollection *mongo.Collection
+var ExpensesCollection *mongo.Collection
+var ExpenseReceiptsCollection *mongo.Collection
 
 func Init() func() {
 	// Establish mongodb connection
@@ -61,6 +63,8 @@ func Init() func() {
 	AvatarsCollection = Db.Collection("avatars")
 	PersonalListsCollection = Db.Collection("personalLists")
 	PersonalNotesCollection = Db.Collection("personalNotes")
+	ExpensesCollection = Db.Collection("expenses")
+	ExpenseReceiptsCollection = Db.Collection("expenseReceipts")
 
 	// Unique per (eventId, startDate) so a gathering occurrence is captured into
 	// the Chronicle at most once (belt-and-suspenders against racing scheduler
@@ -108,6 +112,20 @@ func Init() func() {
 	ensureIndex("personalNotes (userId, eventId) unique", PersonalNotesCollection, mongo.IndexModel{
 		Keys:    personalKeys,
 		Options: options.Index().SetUnique(true),
+	})
+
+	// The Settle Up ledger (F22). NOT unique — a gathering has many expenses and
+	// an expense many receipts; these exist so the two queries that run on every
+	// event page (list the ledger, sweep the photos on hard delete) are indexed
+	// rather than collection scans.
+	ensureIndex("expenses (eventId, date)", ExpensesCollection, mongo.IndexModel{
+		Keys: bson.D{{Key: "eventId", Value: 1}, {Key: "date", Value: -1}},
+	})
+	ensureIndex("expenseReceipts expenseId", ExpenseReceiptsCollection, mongo.IndexModel{
+		Keys: bson.M{"expenseId": 1},
+	})
+	ensureIndex("expenseReceipts eventId", ExpenseReceiptsCollection, mongo.IndexModel{
+		Keys: bson.M{"eventId": 1},
 	})
 
 	// Return a function to close the connection

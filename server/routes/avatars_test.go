@@ -99,15 +99,15 @@ func TestDecodeAvatarPayload_Rejects(t *testing.T) {
 		payload string
 		want    error
 	}{
-		"empty":               {"", errAvatarInvalid},
-		"whitespace only":     {"   ", errAvatarInvalid},
-		"not base64":          {"@@@ this is not base64 @@@", errAvatarInvalid},
-		"empty payload":       {dataURL("image/png", nil), errAvatarInvalid},
-		"non-base64 data URL": {"data:image/png,%89PNG", errAvatarInvalid},
-		"data URL no comma":   {"data:image/png;base64", errAvatarInvalid},
+		"empty":               {"", errImageInvalid},
+		"whitespace only":     {"   ", errImageInvalid},
+		"not base64":          {"@@@ this is not base64 @@@", errImageInvalid},
+		"empty payload":       {dataURL("image/png", nil), errImageInvalid},
+		"non-base64 data URL": {"data:image/png,%89PNG", errImageInvalid},
+		"data URL no comma":   {"data:image/png;base64", errImageInvalid},
 		// A base64 blob past the encoded cap must be refused before it is
 		// expanded, so this is the check that actually bounds memory.
-		"over the encoded cap": {strings.Repeat("A", maxAvatarEncodedBytes+4), errAvatarTooLarge},
+		"over the encoded cap": {strings.Repeat("A", maxAvatarEncodedBytes+4), errImageTooLarge},
 	}
 	for name, tc := range tests {
 		_, err := decodeAvatarPayload(tc.payload)
@@ -127,9 +127,9 @@ func TestDecodeAvatarPayload_RejectsOverDecodedCap(t *testing.T) {
 		t.Fatalf("fixture is %d encoded bytes, over the %d encoded cap — the first check would fire and this test would be asserting the wrong guard",
 			len(encoded), maxAvatarEncodedBytes)
 	}
-	if _, err := decodeAvatarPayload(encoded); err != errAvatarTooLarge {
+	if _, err := decodeAvatarPayload(encoded); err != errImageTooLarge {
 		t.Errorf("got %v, want %v — %d encoded bytes decode to %d, over the %d cap",
-			err, errAvatarTooLarge, len(encoded), len(raw), maxAvatarDecodedBytes)
+			err, errImageTooLarge, len(encoded), len(raw), maxAvatarDecodedBytes)
 	}
 }
 
@@ -242,8 +242,8 @@ func TestNormalizeAvatar_RejectsJunk(t *testing.T) {
 		"truncated PNG":      encodePNG(t, 64, 64, color.White)[:20],
 		"GIF (unregistered)": []byte("GIF89a\x01\x00\x01\x00\x00\x00\x00;"),
 	} {
-		if _, err := normalizeAvatar(raw); err != errAvatarInvalid {
-			t.Errorf("%s: got %v, want %v", name, err, errAvatarInvalid)
+		if _, err := normalizeAvatar(raw); err != errImageInvalid {
+			t.Errorf("%s: got %v, want %v", name, err, errImageInvalid)
 		}
 	}
 }
@@ -255,8 +255,8 @@ func TestNormalizeAvatar_RejectsOversizedCanvas(t *testing.T) {
 	if len(bomb) > 100 {
 		t.Fatalf("the bomb fixture is %d bytes — it is meant to be tiny, or it isn't testing what it claims", len(bomb))
 	}
-	if _, err := normalizeAvatar(bomb); err != errAvatarTooLarge {
-		t.Errorf("got %v, want %v — a 900-megapixel canvas must be refused before Decode allocates it", err, errAvatarTooLarge)
+	if _, err := normalizeAvatar(bomb); err != errImageTooLarge {
+		t.Errorf("got %v, want %v — a 900-megapixel canvas must be refused before Decode allocates it", err, errImageTooLarge)
 	}
 }
 
