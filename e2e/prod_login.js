@@ -5,7 +5,13 @@
 // round trip isn't scriptable. That needs an SSH host, which is deliberately
 // NOT hardcoded (this repo is public): set TIMEFUL_VM.
 //
-//   TIMEFUL_VM=user@host node prod_login.js [email]
+//   TIMEFUL_VM=root@host node prod_login.js [email]
+//
+// The credentials are never passed in: Mongo requires auth, and the connection
+// string already exists on the host as MONGODB_URI in /etc/thegathering/env.
+// Source it there rather than threading a password through argv (where it would
+// land in this box's shell history and the remote's process list).
+// That file is root-readable only, so TIMEFUL_VM needs to be a root login.
 //
 // prod_state.json holds a live session cookie and is gitignored. Don't commit it.
 const { chromium } = require("playwright");
@@ -14,12 +20,12 @@ const { execSync } = require("child_process");
 const EMAIL = process.argv[2] || process.env.TIMEFUL_EMAIL;
 const BASE = process.env.TIMEFUL_BASE || "https://gathering.sirthomasfoolery.com";
 const VM = process.env.TIMEFUL_VM;
-const REPO_DIR = process.env.TIMEFUL_VM_DIR || "~/docker/timeful.app";
+const ENV_FILE = process.env.TIMEFUL_ENV_FILE || "/etc/thegathering/env";
 
 if (!VM) {
   console.error(
-    "Set TIMEFUL_VM=user@host (the box running the deployment) — the OTP is\n" +
-      "read from that host's Mongo. Optionally TIMEFUL_VM_DIR, TIMEFUL_BASE."
+    "Set TIMEFUL_VM=root@host (the box running the deployment) — the OTP is\n" +
+      "read from that host's Mongo. Optionally TIMEFUL_ENV_FILE, TIMEFUL_BASE."
   );
   process.exit(2);
 }
@@ -41,8 +47,8 @@ if (!EMAIL) {
   await page.waitForTimeout(1500);
 
   const code = execSync(
-    `ssh ${VM} 'cd ${REPO_DIR} && docker compose exec -T mongo ` +
-      `mongosh --quiet schej-it --eval ` +
+    `ssh ${VM} 'set -a; . ${ENV_FILE}; set +a; ` +
+      `mongosh --quiet "$MONGODB_URI" --eval ` +
       `"db.otpCodes.find({email: \\"${EMAIL}\\"}).sort({_id:-1}).limit(1).toArray()[0].code"'`
   )
     .toString()

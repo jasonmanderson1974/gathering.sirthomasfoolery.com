@@ -30,7 +30,7 @@ Monorepo for Timeful (formerly Schej.it), a group availability/scheduling app.
 - `frontend/` — Vue 2 + Vuetify + Tailwind single-page app (Vue CLI). Built output lands in `frontend/dist`.
 - `server/` — Go (Gin) HTTP API backed by MongoDB. Also serves the built frontend as static files at the root.
 - `deploy/` — the production host's configuration, version-controlled so the host is reproducible rather than remembered: systemd units, `mongod.conf`, logrotate, and the `install.sh` / `mongo-bootstrap.sh` bootstrap scripts. See `DEPLOYMENT.md`.
-- `compose.yaml` — the **old** Docker production stack, kept only as the migration rollback. Delete once the old host is decommissioned. Local dev uses `compose.dev.yaml`, which stays.
+- `compose.dev.yaml` — the **local dev** stack (Mongo + a built frontend + the server). Docker is used *only* here; production runs no containers. The old Docker production stack (`compose.yaml`) was deleted on 2026-08-05 after the migration; recover it from git history if you ever need it.
 - `PLUGIN_API_README.md` — `window.postMessage` API used by browser plugins to read/write availability on the frontend.
 
 The Go module is `sirtom/server` (renamed from `schej.it/server`, 2026-07-23). The Mongo DB name (`schej-it`) and the `SCHEJ_EMAIL_ADDRESS` env var are intentionally left unchanged (internal/infra — see TODO D0/D2).

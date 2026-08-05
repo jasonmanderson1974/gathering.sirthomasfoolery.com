@@ -78,7 +78,7 @@ Where the key goes depends on how you're running the frontend:
 | ---------------------------------- | ------------------------------------------------- |
 | `npm run serve` / `npm run build`  | `frontend/.env` as `VUE_APP_GOOGLE_MAPS_API_KEY`  |
 | `compose.dev.yaml` (local Docker)  | root `.env` as `GOOGLE_MAPS_API_KEY`              |
-| production (`compose.yaml`)        | root `.env` as `GOOGLE_MAPS_API_KEY`              |
+| production (`./deploy.sh`)         | root `.env` as `GOOGLE_MAPS_API_KEY`, **on the build box** |
 
 **`frontend/.env` does not work inside Docker.** The Dockerfile always sets
 `ENV VUE_APP_GOOGLE_MAPS_API_KEY` (empty when no build arg is passed), and

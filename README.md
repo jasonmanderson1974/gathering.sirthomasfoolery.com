@@ -21,7 +21,7 @@ It is a hardened, rebranded derivative of [Timeful](https://github.com/schej-it/
 
 > **Working on this repo? Read [`DEVELOPMENT.md`](./DEVELOPMENT.md) first.** It covers the multi-machine
 > workflow (always `git fetch` + sync to the latest `main` before making changes), deploys (`./deploy.sh`
-> on the VM — manual and gate-kept), local dev (`compose.dev.yaml`), and testing/CI.
+> on the build box — manual and gate-kept), local dev (`compose.dev.yaml`), and testing/CI.
 > **AI assistants:** the authoritative project + workflow instructions live in [`CLAUDE.md`](./CLAUDE.md)
 > (auto-loaded by Claude Code); if your tool doesn't load it, read `CLAUDE.md` and `DEVELOPMENT.md` first.
 
@@ -55,7 +55,9 @@ See the [Plugin API Docs](./PLUGIN_API_README.md).
 
 ## Self-hosting
 
-See the [Deployment Guide](./DEPLOYMENT.md) for Docker Compose setup.
+See the [Deployment Guide](./DEPLOYMENT.md). Production runs no containers: MongoDB,
+one static Go binary and a Cloudflare Tunnel connector, all under systemd. Docker is
+used only for local development.
 
 ## Credits & license
 
