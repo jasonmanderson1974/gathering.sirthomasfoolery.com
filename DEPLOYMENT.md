@@ -123,13 +123,48 @@ The old host had no backup cron; dumps were taken when someone remembered.
   hides best.
 - **On the dev box:** `deploy/pull-backups.sh` pulls them into
   `/root/backups/timeful/`. The direction matters — the VLAN is egress-only, so
-  the server *cannot* push; the dev box must pull.
+  the server *cannot* push; the dev box must pull. Wired into root's crontab at
+  04:30, after the host's 03:15 dump:
 
-Restore:
+  ```
+  30 4 * * * /root/projects/timeful.app/deploy/pull-backups.sh >> /var/log/timeful-backup-pull.log 2>&1
+  ```
+
+  It exits non-zero if the newest archive is over 48h old or implausibly small,
+  so a stopped timer surfaces in that log rather than during a restore.
+
+Restore into the live database — destructive, and what you'd run in a real
+recovery:
 
 ```bash
 mongorestore --uri="$MONGODB_URI" --archive=<file>.archive.gz --gzip --drop
 ```
+
+### Testing a restore without touching prod
+
+A backup nobody has restored is a guess. Restore into a throwaway container
+instead, and diff it against the real thing:
+
+```bash
+docker run -d --name restore-test mongo:8.2          # 8.2, not 8.0 — see below
+docker cp /root/backups/timeful/<file>.archive.gz restore-test:/tmp/b.gz
+docker exec restore-test mongorestore --archive=/tmp/b.gz --gzip
+
+# Compare CONTENT, not just counts. Both sides are 8.2, so dbHash is comparable.
+H='const r=db.runCommand({dbHash:1}); Object.keys(r.collections).sort().forEach(c=>print(c+" "+r.collections[c]));'
+docker exec restore-test mongosh --quiet schej-it --eval "$H"
+ssh 192.168.24.56 "mongosh --quiet '<admin-uri>' --eval '$H'"
+
+docker rm -f restore-test    # it holds every member's data — don't leave it up
+```
+
+Matching collection counts prove very little; matching `dbHash` per collection
+proves every document survived. Use `mongo:8.2` and not `8.0`: containers share
+the host kernel, so an 8.0 image hits the same SERVER-121912 refusal the host
+does.
+
+**Last verified: 2026-08-05** — all 11 collections and all 15 indexes restored
+from the nightly archive, every content hash identical to production.
 
 ## Configuration
 
