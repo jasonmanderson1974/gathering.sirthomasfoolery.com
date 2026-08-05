@@ -264,8 +264,21 @@ export const applyToolbarAction = (action, selection) => {
  * A string comparison rather than a flag set on input, because typing a
  * character and deleting it again must leave the note clean — and a flag cannot
  * know that.
+ *
+ * COMPARED TRIMMED, because that is the unit the server stores in: setPersonalNote
+ * does strings.TrimSpace before writing, so "note\n" comes back as "note". Comparing
+ * raw, the draft and the saved copy could never agree about a note ending in
+ * whitespace — and since a save that leaves the note dirty schedules another one,
+ * the two of them sat there PUTting the same text at each other every 1.5s
+ * forever. A trailing newline is not exotic: the divider button ends in one, and
+ * so does pressing Enter.
+ *
+ * Trimmed comparison is also just correct on its own terms. Trailing whitespace is
+ * the one edit the server will discard, so it is the one edit there is no point
+ * saving.
  */
-export const isNoteDirty = (draft, saved) => (draft ?? "") !== (saved ?? "")
+export const isNoteDirty = (draft, saved) =>
+  (draft ?? "").trim() !== (saved ?? "").trim()
 
 /**
  * The one-line status under the editor.

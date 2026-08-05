@@ -299,7 +299,14 @@ export default {
       }
 
       // Typed while that was away — go again.
-      if (!this.failed && this.dirty) this.scheduleSave()
+      //
+      // Compared against what was SENT, not against `dirty`. The two usually
+      // agree, but only this one can never loop: it re-arms solely when the
+      // draft actually changed during the request. Keying off `dirty` meant any
+      // disagreement between client and server about what "saved" looks like —
+      // the server's trim, once — re-armed the timer forever, and the note
+      // saved itself every 1.5 seconds with nobody typing.
+      if (!this.failed && this.draft !== sending) this.scheduleSave()
     },
 
     /**

@@ -189,8 +189,30 @@ describe("isNoteDirty", () => {
     expect(isNoteDirty("", undefined)).toBe(false)
   })
 
-  it("notices a real difference, whitespace included", () => {
-    expect(isNoteDirty("abc ", "abc")).toBe(true)
+  it("notices a real difference", () => {
+    expect(isNoteDirty("abc", "abd")).toBe(true)
+    expect(isNoteDirty("abc", "")).toBe(true)
+  })
+
+  // The autosave loop, pinned. The server trims before storing, so a note
+  // ending in whitespace comes back shorter than the draft that produced it.
+  // Compared raw, it stays dirty forever — and because a save that leaves the
+  // note dirty schedules another, it re-saved every 1.5s with nobody typing.
+  // A trailing newline is the common case, not a corner one: the divider
+  // button ends in one, and so does pressing Enter.
+  it("is CLEAN when the draft differs from the saved copy only by whitespace", () => {
+    expect(isNoteDirty("note\n", "note")).toBe(false)
+    expect(isNoteDirty("note   ", "note")).toBe(false)
+    expect(isNoteDirty("\n\nnote\n\n", "note")).toBe(false)
+    expect(isNoteDirty("## Title\n\n---\n", "## Title\n\n---")).toBe(false)
+  })
+
+  it("still notices a difference that survives trimming", () => {
+    expect(isNoteDirty("note\nmore\n", "note")).toBe(true)
+  })
+
+  it("treats a whitespace-only note as empty", () => {
+    expect(isNoteDirty("   \n  ", "")).toBe(false)
   })
 })
 
