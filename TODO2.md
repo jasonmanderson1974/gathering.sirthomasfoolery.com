@@ -1184,6 +1184,107 @@ won't-do. See their entries. The sequencing that got there is at the bottom.
 
 </details>
 
+- [x] **F19 · My Lists: private, per-gathering lists as a fourth band tab.** `M` · **P1** —
+  **DONE 2026-08-05.** Two more tabs on the event band, both private to the signed-in user and
+  scoped to the one gathering, open to **any signed-in user including guests**. Decisions taken
+  with the user before building: per-event rather than global; notes are one document rather
+  than many (F20); `marked` + `dompurify` for the markdown.
+  - **Separate collections, never a field on the Event.** `GET /events/:id` hands the whole event
+    document to any signed-in caller, so anything private hung there is one forgotten projection
+    away from being everyone's. `personalLists` and `personalNotes`, each keyed
+    `(userId, eventId)` with a unique compound index, make the leak *unrepresentable* rather than
+    guarded against. `TestPersonal_NotReachableThroughTheEventDocument` asserts it against the raw
+    stored document, so it catches a field added anywhere in the tree later.
+  - **`models.EventList` / `EventListItem` reused verbatim**, so kinds, 3-level nesting,
+    fractional ordering and checklist state behave identically. Private items carry **no**
+    `authorName` / `checkedByName`: one author, and a snapshot nothing re-resolves can only go
+    stale. `resolveListDisplayNames` is deliberately not called on this path.
+  - **`db/event_lists.go` was parameterised, not copied.** Its ten update bodies now take
+    `(collection, filter)` and the exported `*EventList*` names are one-line delegates —
+    `UpdateByID(id, …)` → `UpdateOne({_id: id}, …)`. `db/personal_lists.go` passes
+    `PersonalListsCollection` + `{userId, eventId}` and gets the atomic cascade and cross-list
+    move for free. The existing DB tests, untouched, are what proved the extraction
+    behaviour-preserving. `setListItemChecked` became `setListItemFields(…, bson.M)` so the
+    private path writes only `checked`+`checkedAt` instead of storing a zero ObjectID and an
+    empty name as junk.
+  - **Routes reuse every validator** in `routes/event_lists.go` (caps, error codes,
+    `listItemDepth`, `validateMoveParent`, `collectDescendantIds`…). Only `findEventList` needed
+    splitting — `findListIn(lists, id)` for the path that holds a bare slice. Registered inside
+    `InitEvents` on the same `authed` group so they share the `:eventId` wildcard name; the
+    **auth-gate table test caught all eleven** the first time they were added, which is exactly
+    what it is for.
+  - **There is no permission check, and that absence is deliberate** — the userId in every Mongo
+    filter *is* the check. A caller holding someone else's list id gets **404, not 403**: the
+    document genuinely isn't there, which is both correct and the answer that leaks least.
+  - **The short-id trap.** Private documents key off the canonical `event._id`, but a route param
+    may be a short id — so `loadPersonalOwner` resolves through `GetEventByEitherId` and keys off
+    `event.Id`. Arriving by the two URLs must find ONE document;
+    `TestPersonal_ShortIdAndLongIdShareOneDocument` pins it. (Note `GetEventByEitherId` switches
+    on `len(id) <= 10`, so a test short id has to be ≤10 chars or it never takes that branch.)
+  - **One `EventLists.vue`, generalized — not a copy.** `event` gave way to `lists` +
+    `canManage` + `viewerOwnsAll` + `collaborative` + `dragGroup` + `title`. `collaborative`
+    governs the refresh button *and* the refetch-on-expand — they exist for the same reason, and
+    neither means anything on a document only you can write. The attribution footer became
+    `v-if` on the **data** (`authorName || checkLabel`), not on a prop: private entries have
+    neither, and an unconditional div left an empty line under every row. `canManage` moved out
+    to `canManageEventLists` in `eventLists.js`, where it could finally be tested.
+  - **`dragGroup` is the one real cross-panel hazard.** Both panels are mounted at once
+    (`v-show`), so a shared vuedraggable group would let an entry be dragged out of the club's
+    lists into a private one, emitting a move naming a list id from the other collection. The
+    harness asserts the two live components hold different group names.
+  - **`PersonalLists.vue` owns its own I/O** rather than pushing nine more handlers into
+    `Event.vue` (already 1,100 lines, and otherwise about calendars). It emits only `loaded` for
+    the tab count. It refreshes off an `active` prop — the band has no `created()` meaning "the
+    user just opened this". `Event.vue` gained a `sharedLists` computed because an inline
+    `event.lists ?? []` allocates a new array each render and would fire the `lists` watcher
+    continuously.
+
+- [x] **F20 · My Notes: one private markdown document per person per gathering.** `M` · **P1** —
+  **DONE 2026-08-05**, with F19.
+  - **`marked` + `dompurify` added** (first markdown in the app). `utils/markdown.js` holds
+    configuration only and is **deliberately untested**: DOMPurify needs a DOM and the vitest env
+    is node with no jsdom, so every decision lives in `components/event/markdownEditor.js`, which
+    is pure and has 38 tests. `breaks: true` is the consequential setting — nobody typing a
+    personal note means "two blank lines or it doesn't count".
+  - **Not exported through `utils/index.js`.** That barrel is `export *` and 42 components import
+    `@/utils`; routing a DOM-dependent module through it would drag DOMPurify into all of their
+    import graphs. Import `@/utils/markdown` directly.
+  - **Explicit tag allowlist**, and `img` is absent on purpose: a note is private, and an
+    `<img src>` is an outbound request that would tell a third party the note had been opened —
+    the one way a private document could leak the fact of itself. An `afterSanitizeAttributes`
+    hook (registered ONCE at module scope; DOMPurify is a singleton and `addHook` appends) forces
+    `target="_blank" rel="noopener noreferrer"`.
+  - **`.flw-prose` went in `index.css`, not a scoped block** — a correctness point, not taste:
+    `v-html` content carries no `data-v-` attribute, so scoped rules never match it. Tailwind's
+    preflight strips list markers and heading sizes, so both are restored explicitly.
+  - **Toolbar semantics, all pure and all tested**: wrap actions toggle off from markers *inside*
+    or *outside* the selection and leave the selection over the text so the button is a real
+    toggle; line prefixes expand to whole lines and strip only when every non-blank line already
+    carries one; heading replaces any `#`-level with `## ` rather than cycling h1→h6; link
+    selects whichever half still needs filling in. Unknown actions return the selection
+    untouched, so a template typo can't corrupt a note.
+  - **The note is REJECTED over 20,000 runes, not truncated** — the one place this codebase's
+    free-text handling departs from `trimAndTruncate`. A list name losing its tail is a visible
+    annoyance; silently eating the end of four pages someone typed by hand is not. The client
+    caps at the same number, so the rejection is unreachable from a browser.
+  - **`Text *string` with `binding:"required"`** — a bare string fails the binding on `""`, which
+    is exactly what "clear my note" sends. Same trap as `Checked *bool`. There is no DELETE:
+    a PUT of `""` is the clear, and a second verb for one state transition is a second thing to
+    keep consistent.
+  - **Saving**: 1.5s debounce, plus a flush on blur, on switching to Preview, on the tab going
+    inactive, and on destroy; one request in flight at a time (two overlapping whole-document
+    PUTs is the one way this could lose text — the second could land first and the first would
+    resurrect the older copy on top of it); a `beforeunload` guard while dirty, the same one
+    `Event.vue` already uses for unsaved availability. `updatedAt` comes back from the server so
+    "Saved 12:04" is its clock, not the browser's.
+  - **Verified** with `/root/tools/browser/verify_f19f20_local.js` — 39 checks, two clean runs,
+    driving two different signed-in users against one event: tabs absent signed-out and present
+    for a guest; a guest's list and note invisible to the event's own planner (the most
+    privileged person on it); the shared Lists tab unchanged; the drag groups distinct; every
+    toolbar button; `<script>` and `<img onerror>` typed into a note rendering inert; and both
+    surviving a reload. Both standing harnesses green (`CHROME_PATH` must point at Playwright's
+    chromium on this box — there is no system `google-chrome`).
+
 ---
 
 ## PART G — Carried forward from TODO.md (re-verified 2026-07-28)

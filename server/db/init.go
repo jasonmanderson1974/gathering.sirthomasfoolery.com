@@ -24,6 +24,8 @@ var AllowlistCollection *mongo.Collection
 var CommentsCollection *mongo.Collection
 var ChronicleCollection *mongo.Collection
 var AvatarsCollection *mongo.Collection
+var PersonalListsCollection *mongo.Collection
+var PersonalNotesCollection *mongo.Collection
 
 func Init() func() {
 	// Establish mongodb connection
@@ -57,6 +59,8 @@ func Init() func() {
 	CommentsCollection = Db.Collection("comments")
 	ChronicleCollection = Db.Collection("chronicle")
 	AvatarsCollection = Db.Collection("avatars")
+	PersonalListsCollection = Db.Collection("personalLists")
+	PersonalNotesCollection = Db.Collection("personalNotes")
 
 	// Unique per (eventId, startDate) so a gathering occurrence is captured into
 	// the Chronicle at most once (belt-and-suspenders against racing scheduler
@@ -90,6 +94,21 @@ func Init() func() {
 		),
 	}
 	ensureIndex("folders (userId, defaultKind) unique", FoldersCollection, defaultFolderIndexModel)
+
+	// One private-lists document and one private-note document per person per
+	// gathering (F19/F20). The uniqueness is what makes the $setOnInsert upserts
+	// in db/personal_lists.go and db/personal_notes.go race-safe: two tabs
+	// opening the same tab at once can't seed two documents and then write to
+	// different ones.
+	personalKeys := bson.D{{Key: "userId", Value: 1}, {Key: "eventId", Value: 1}}
+	ensureIndex("personalLists (userId, eventId) unique", PersonalListsCollection, mongo.IndexModel{
+		Keys:    personalKeys,
+		Options: options.Index().SetUnique(true),
+	})
+	ensureIndex("personalNotes (userId, eventId) unique", PersonalNotesCollection, mongo.IndexModel{
+		Keys:    personalKeys,
+		Options: options.Index().SetUnique(true),
+	})
 
 	// Return a function to close the connection
 	return func() {

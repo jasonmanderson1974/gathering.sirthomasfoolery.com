@@ -75,6 +75,11 @@ func InitEvents(router *gin.RouterGroup) {
 	authed.PUT("/:eventId/lists/:listId/items/:itemId/checked", setEventListItemChecked)
 	authed.PUT("/:eventId/lists/:listId/items/:itemId/move", moveEventListItem)
 	authed.DELETE("/:eventId/lists/:listId/items/:itemId", deleteEventListItem)
+
+	// The private "My Lists" / "My Notes" tabs (F19/F20). Registered on this
+	// group rather than one of their own so they share the :eventId parameter
+	// name — Gin rejects two different wildcard names at the same position.
+	initPersonalRoutes(authed)
 }
 
 // trimmedLocation normalizes a venue submitted by a client. A nil pointer means
@@ -755,6 +760,23 @@ func deleteEvent(c *gin.Context) {
 			logger.StdErr.Println(err)
 			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 			return
+		}
+
+		// Everyone's private lists and notes on this gathering go with it (F19/
+		// F20) — they are keyed by eventId and nothing can reach them once the
+		// event is gone.
+		//
+		// Best-effort, unlike the folder cleanup above: the event is already
+		// gone by this point, so failing the request would report a deletion
+		// that plainly happened as an error. A stranded personal document is
+		// unreachable rather than exposed (every personal route resolves the
+		// event first), so it costs storage and nothing else.
+		//
+		// Deliberately NOT done on the soft-delete branch: a soft delete is
+		// reversible, and destroying someone's private notes would be the one
+		// irreversible thing in it.
+		if err := db.DeletePersonalDataForEvent(objectId); err != nil {
+			logger.StdErr.Println("personal data cleanup after event delete:", err)
 		}
 	}
 

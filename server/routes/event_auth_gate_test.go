@@ -63,6 +63,21 @@ var eventRoutes = []struct {
 	{http.MethodPut, "/api/events/abc/lists/l1/items/i1/checked", false},
 	{http.MethodPut, "/api/events/abc/lists/l1/items/i1/move", false},
 	{http.MethodDelete, "/api/events/abc/lists/l1/items/i1", false},
+
+	// The private tabs (F19/F20). Signed-in only, guests included — there is no
+	// personal document without an account to key it to, so anonymous access
+	// isn't restricted here so much as meaningless.
+	{http.MethodGet, "/api/events/abc/my-lists", false},
+	{http.MethodPost, "/api/events/abc/my-lists", false},
+	{http.MethodPatch, "/api/events/abc/my-lists/l1", false},
+	{http.MethodDelete, "/api/events/abc/my-lists/l1", false},
+	{http.MethodPost, "/api/events/abc/my-lists/l1/items", false},
+	{http.MethodPut, "/api/events/abc/my-lists/l1/items/i1", false},
+	{http.MethodPut, "/api/events/abc/my-lists/l1/items/i1/checked", false},
+	{http.MethodPut, "/api/events/abc/my-lists/l1/items/i1/move", false},
+	{http.MethodDelete, "/api/events/abc/my-lists/l1/items/i1", false},
+	{http.MethodGet, "/api/events/abc/my-notes", false},
+	{http.MethodPut, "/api/events/abc/my-notes", false},
 }
 
 func newEventRouter() *gin.Engine {

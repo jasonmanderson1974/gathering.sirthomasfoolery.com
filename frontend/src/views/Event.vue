@@ -181,7 +181,8 @@
             </div>
             <div v-show="bandTab === 'lists'">
               <EventLists
-                :event="event"
+                :lists="sharedLists"
+                :can-manage="canManageLists"
                 :refreshing="refreshingLists"
                 @refresh="refreshLists"
                 @create-list="onCreateList"
@@ -192,6 +193,25 @@
                 @delete-item="onDeleteListItem"
                 @move-item="onMoveListItem"
                 @toggle-item-checked="onToggleListItemChecked"
+              />
+            </div>
+            <!-- The two private tabs (F19/F20). Both panels own their own
+                 fetching, so each is told only whether it is the one on screen.
+                 v-if on authUser as well as the tab: without an account there
+                 is nothing to key a private document to. -->
+            <div v-show="bandTab === 'my-lists'">
+              <PersonalLists
+                v-if="authUser"
+                :event-id="bandEventId"
+                :active="bandTab === 'my-lists'"
+                @loaded="(n) => (personalListCount = n)"
+              />
+            </div>
+            <div v-show="bandTab === 'my-notes'">
+              <PersonalNotes
+                v-if="authUser"
+                :event-id="bandEventId"
+                :active="bandTab === 'my-notes'"
               />
             </div>
           </div>
@@ -263,6 +283,9 @@ import GatheringRsvp from "@/components/event/GatheringRsvp.vue"
 import EventComments from "@/components/event/EventComments.vue"
 import EventPolls from "@/components/event/EventPolls.vue"
 import EventLists from "@/components/event/EventLists.vue"
+import PersonalLists from "@/components/event/PersonalLists.vue"
+import PersonalNotes from "@/components/event/PersonalNotes.vue"
+import { canManageEventLists } from "@/components/event/eventLists"
 import {
   setRsvp,
   clearRsvp,
@@ -315,6 +338,8 @@ export default {
     EventComments,
     EventPolls,
     EventLists,
+    PersonalLists,
+    PersonalNotes,
   },
 
   data: () => ({
@@ -348,6 +373,10 @@ export default {
     bandTab: "discussion",
     refreshingLists: false,
 
+    // The private tabs (F19/F20). Only the count comes back up here — the
+    // panels own everything else about themselves.
+    personalListCount: 0,
+
     // Who the discussion may @mention (F9), fetched once per event.
     mentionables: [],
   }),
@@ -363,15 +392,36 @@ export default {
 
   computed: {
     ...mapState(["authUser", "events"]),
-    ...mapGetters(["canInvite"]),
+    ...mapGetters(["canInvite", "canManageUsers"]),
     /**
-     * The discussion/lists tabs (F16). Counts are the only sign that there is
-     * anything behind the tab you aren't looking at, so they matter more here
-     * than they would beside an always-visible panel. Omitted at zero.
+     * A computed, not an inline `event.lists ?? []` in the template: an inline
+     * fallback allocates a fresh array on every render, which changes the
+     * prop's identity every time and would fire EventLists' `lists` watcher
+     * continuously.
+     */
+    sharedLists() {
+      return this.event?.lists ?? []
+    },
+    canManageLists() {
+      return canManageEventLists({
+        authUser: this.authUser,
+        event: this.event,
+        canManageUsers: this.canManageUsers,
+        canInvite: this.canInvite,
+      })
+    },
+    /** What the band's panels call the event — short id where there is one. */
+    bandEventId() {
+      return this.event?.shortId ?? this.event?._id ?? ""
+    },
+    /**
+     * The band's tabs (F16, extended by F19/F20). Counts are the only sign that
+     * there is anything behind the tab you aren't looking at, so they matter
+     * more here than they would beside an always-visible panel. Omitted at zero.
      */
     bandTabs() {
       const count = (n) => (n ? ` (${n})` : "")
-      return [
+      const tabs = [
         {
           value: "discussion",
           title: `Discussion${count((this.event?.comments ?? []).length)}`,
@@ -381,6 +431,20 @@ export default {
           title: `Lists${count((this.event?.lists ?? []).length)}`,
         },
       ]
+
+      // Any signed-in user, guests included. Absent when signed out — there is
+      // no private document without an account to key it to.
+      if (this.authUser) {
+        tabs.push({
+          value: "my-lists",
+          title: `My Lists${count(this.personalListCount)}`,
+        })
+        // No count: a character total would be noise, and "you have a note" is
+        // not news to the only person who can read it.
+        tabs.push({ value: "my-notes", title: "My Notes" })
+      }
+
+      return tabs
     },
     allowScheduleEvent() {
       return this.scheduleOverlapComponent?.allowScheduleEvent
@@ -1107,6 +1171,16 @@ export default {
     bandTab(tab) {
       if (tab === "lists") {
         this.refreshLists()
+      }
+      // The two private panels refresh themselves off their `active` prop —
+      // they own their own data, so there is nothing to fetch from here.
+    },
+    authUser(now) {
+      // Signing out, or a session expiring, while a private tab is selected
+      // must not leave the band pointing at a panel that no longer exists.
+      if (!now && (this.bandTab === "my-lists" || this.bandTab === "my-notes")) {
+        this.bandTab = "discussion"
+        this.personalListCount = 0
       }
     },
     event() {

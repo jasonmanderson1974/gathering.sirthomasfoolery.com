@@ -10,6 +10,7 @@ import {
   countDescendants,
   describeListDeletion,
   describeItemDeletion,
+  canManageEventLists,
 } from "./eventLists"
 
 const item = (id, parentId = null, overrides = {}) => ({
@@ -553,5 +554,67 @@ describe("describeItemDeletion", () => {
     const got = describeItemDeletion(long, "x")
     expect(got.title.length).toBeLessThan(100)
     expect(got.title).toContain("…")
+  })
+})
+
+// The rule that decides whether the "Add list" button and the per-list
+// rename/delete buttons appear. It lived in EventLists.vue until F19, where
+// making the component serve a second panel meant lifting it out — which is
+// also the first time it could be tested.
+describe("canManageEventLists", () => {
+  const user = { _id: "u1" }
+  const owned = { ownerId: "u1" }
+  const someoneElses = { ownerId: "u2" }
+  const legacy = {} // no ownerId — created before anonymous creation was removed
+
+  it("refuses a signed-out visitor outright", () => {
+    expect(
+      canManageEventLists({ authUser: null, event: owned, canManageUsers: true, canInvite: true })
+    ).toBe(false)
+  })
+
+  it("lets an admin manage someone else's event", () => {
+    expect(
+      canManageEventLists({
+        authUser: user, event: someoneElses, canManageUsers: true, canInvite: true,
+      })
+    ).toBe(true)
+  })
+
+  it("lets the planner manage their own", () => {
+    expect(
+      canManageEventLists({
+        authUser: user, event: owned, canManageUsers: false, canInvite: true,
+      })
+    ).toBe(true)
+  })
+
+  it("refuses a member who isn't the planner", () => {
+    expect(
+      canManageEventLists({
+        authUser: user, event: someoneElses, canManageUsers: false, canInvite: true,
+      })
+    ).toBe(false)
+  })
+
+  it("falls back to member+ on an ownerless legacy event", () => {
+    expect(
+      canManageEventLists({
+        authUser: user, event: legacy, canManageUsers: false, canInvite: true,
+      })
+    ).toBe(true)
+    expect(
+      canManageEventLists({
+        authUser: user, event: legacy, canManageUsers: false, canInvite: false,
+      })
+    ).toBe(false)
+  })
+
+  it("treats ownerId 0 as ownerless, not as a user id", () => {
+    expect(
+      canManageEventLists({
+        authUser: user, event: { ownerId: 0 }, canManageUsers: false, canInvite: true,
+      })
+    ).toBe(true)
   })
 })

@@ -154,14 +154,21 @@ func validListKind(kind string) bool {
 		kind == models.ListKindChecklist
 }
 
-// findEventList locates a list on an event by hex id.
-func findEventList(event *models.Event, listId string) (*models.EventList, bool) {
-	for i := range event.Lists {
-		if event.Lists[i].Id.Hex() == listId {
-			return &event.Lists[i], true
+// findListIn locates a list in a slice by hex id. Split out from findEventList
+// so the private-lists routes (F19), which hold a bare slice and no event, share
+// the same lookup.
+func findListIn(lists []models.EventList, listId string) (*models.EventList, bool) {
+	for i := range lists {
+		if lists[i].Id.Hex() == listId {
+			return &lists[i], true
 		}
 	}
 	return nil, false
+}
+
+// findEventList locates a list on an event by hex id.
+func findEventList(event *models.Event, listId string) (*models.EventList, bool) {
+	return findListIn(event.Lists, listId)
 }
 
 // findListItem locates an item on a list by hex id.

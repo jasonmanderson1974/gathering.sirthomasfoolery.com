@@ -6,8 +6,12 @@
     class="tw-mt-3 tw-rounded-md tw-border tw-border-brass-dim tw-bg-leather tw-p-3 tw-text-parchment sm:tw-p-4"
   >
     <div class="tw-mb-2 tw-flex tw-items-center tw-justify-between">
-      <div class="tw-text-base tw-font-medium">Lists</div>
+      <div class="tw-text-base tw-font-medium">{{ title }}</div>
+      <!-- Only where someone else could have written since the page loaded.
+           On a document only you can write, a refresh button is an invitation
+           to wonder what you might be missing. -->
       <v-btn
+        v-if="collaborative"
         icon
         x-small
         class="tw-text-parchment-dim"
@@ -102,7 +106,7 @@
         <draggable
           v-if="isExpanded(list._id)"
           :list="rowsOf(list)"
-          group="event-list-items"
+          :group="dragGroup"
           draggable=".list-row"
           :delay="200"
           :delay-on-touch-only="true"
@@ -218,7 +222,15 @@
                 >
                   {{ row.item.text }}
                 </span>
-                <div class="tw-text-xs tw-text-parchment-dim">
+                <!-- Conditional on the DATA, not on a prop. A private entry
+                     carries no authorName and no checker, so an unconditional
+                     line would leave an empty row of whitespace under every
+                     one of them — and this also tidies a shared entry whose
+                     author no longer resolves. -->
+                <div
+                  v-if="row.item.authorName || checkLabel(row.item)"
+                  class="tw-text-xs tw-text-parchment-dim"
+                >
                   {{ row.item.authorName
                   }}<span v-if="checkLabel(row.item)">
                     · {{ checkLabel(row.item) }}</span
@@ -426,15 +438,23 @@ import {
 } from "@/components/event/eventLists"
 
 /**
- * Shared lists on an event (F14) — "Menu", "Bars to Visit". Presentational:
- * reads event.lists and emits for Event.vue to persist + refresh, the same
- * contract EventPolls uses.
+ * A panel of lists — "Menu", "Bars to Visit" (F14) — rendering, drag, nesting
+ * and the delete dialogs. Presentational: it reads the `lists` prop and emits
+ * for its parent to persist and refetch, the same contract EventPolls uses.
  *
- * The rights split mirrors the server (see routes/event_lists.go): the planner
- * or an admin creates, renames and deletes the lists; anyone signed in adds
- * entries; an entry may be edited only by its author, but removed by its author
- * or by any member. These checks are for the UI's benefit only — the server
- * enforces the same rules and is what actually decides.
+ * ONE component serves two panels (F19). The shared lists on an event use the
+ * defaults below; a viewer's own private lists pass `viewerOwnsAll`,
+ * `collaborative: false` and their own `dragGroup`. It is deliberately not two
+ * components: the drag resolution, the three-level tree and the focus handling
+ * were each got wrong once already, and a copy would have to be got right
+ * twice every time.
+ *
+ * The rights the shared panel shows mirror the server (see
+ * routes/event_lists.go): the planner or an admin creates, renames and deletes
+ * the lists; anyone signed in adds entries; an entry may be edited only by its
+ * author, but removed by its author or by any member. These checks are for the
+ * UI's benefit only — the server enforces the same rules and is what actually
+ * decides.
  */
 export default {
   name: "EventLists",
@@ -446,9 +466,48 @@ export default {
   },
 
   props: {
-    event: { type: Object, required: true },
-    // True while the parent is refetching, so the refresh button can't be
-    // hammered into a queue of overlapping requests.
+    /**
+     * The lists to render, passed in rather than read off an event.
+     *
+     * The parent must REPLACE this array on refresh, never mutate it in place:
+     * the `lists` watcher below fires on identity change, and an in-place
+     * splice would silently stop a just-created list from auto-expanding.
+     */
+    lists: { type: Array, required: true },
+    /**
+     * Whether this viewer may create, rename and delete whole lists. Hoisted to
+     * the parent so the rule lives in `canManageEventLists` (eventLists.js),
+     * where it can be tested — it could not be, inside a .vue.
+     */
+    canManage: { type: Boolean, default: false },
+    /**
+     * True when every entry here belongs to the viewer, which collapses the
+     * per-entry edit and delete rights to always-allowed. Not cosmetic: it is
+     * what makes a private panel private-feeling rather than one where you
+     * appear to need permission from yourself.
+     */
+    viewerOwnsAll: { type: Boolean, default: false },
+    /**
+     * Whether anyone else can be writing to these lists. Governs BOTH the
+     * refresh button and the refetch-on-expand — they exist for the same
+     * reason, and neither means anything on a document only you can write.
+     */
+    collaborative: { type: Boolean, default: true },
+    /**
+     * The vuedraggable group name. MUST differ between panels: both are mounted
+     * at once (the band uses v-show, not v-if), so a shared name would let an
+     * entry be dragged out of the club's lists into a private one — and the
+     * move it emitted would name a list id from the other collection entirely.
+     */
+    dragGroup: { type: String, default: "event-list-items" },
+    /** The panel heading: "Lists", or "My Lists". */
+    title: { type: String, default: "Lists" },
+    /**
+     * True while the parent is refetching, so the refresh button can't be
+     * hammered into a queue of overlapping requests. Load-bearing beyond that:
+     * the true→false TRANSITION is what restores the cursor after an add (see
+     * applyPendingFocus), so a parent must produce exactly one per mutation.
+     */
     refreshing: { type: Boolean, default: false },
   },
 
@@ -511,33 +570,12 @@ export default {
 
   computed: {
     ...mapState(["authUser"]),
-    ...mapGetters(["canInvite", "canManageUsers"]),
-    lists() {
-      return this.event.lists ?? []
-    },
+    ...mapGetters(["canInvite"]),
     // The icon buttons on a row sit close together and are the controls most
     // likely to be used one-handed, standing in a shop. $vuetify.breakpoint is
     // reactive, so this follows a rotation without a resize listener.
     phone() {
       return isPhone(this.$vuetify)
-    },
-    isEventOwner() {
-      return (
-        !!this.authUser &&
-        !!this.event.ownerId &&
-        this.event.ownerId !== 0 &&
-        this.authUser._id === this.event.ownerId
-      )
-    },
-    // Who may create/rename/delete a whole list. Ownerless legacy events fall
-    // back to member+, matching canManageLists on the server.
-    canManage() {
-      if (!this.authUser) return false
-      if (this.canManageUsers) return true
-      if (this.event.ownerId && this.event.ownerId !== 0) {
-        return this.isEventOwner
-      }
-      return this.canInvite
     },
     kindHint() {
       if (this.newKind === "location") {
@@ -589,7 +627,9 @@ export default {
         this.expandedLists.push(listId)
         // Opening a list is a request to read it, so fetch it fresh — this is
         // the moment someone else's entries are most likely to be missing.
-        this.$emit("refresh")
+        // Only where there IS someone else: on a private list the fetch could
+        // only ever return what is already on screen.
+        if (this.collaborative) this.$emit("refresh")
       } else {
         this.expandedLists.splice(i, 1)
         // A draft edit or sub-entry belongs to the open list; leaving one armed
@@ -665,10 +705,15 @@ export default {
       })
     },
     isMine(item) {
+      // On a private panel there is nobody else's entry to be looking at, and
+      // the id comparison is not merely redundant there — it is the wrong
+      // question to be asking about your own notebook.
+      if (this.viewerOwnsAll) return true
       return !!this.authUser && item.userId === this.authUser._id
     },
     // Own entries always; anyone's from member upwards.
     canDelete(item) {
+      if (this.viewerOwnsAll) return true
       return this.isMine(item) || this.canInvite
     },
 

@@ -309,3 +309,28 @@ export const checkStateLabel = (item) => {
     ? `Checked by ${item.checkedByName}`
     : `Unchecked by ${item.checkedByName}`
 }
+
+/**
+ * Who may create, rename and delete whole lists on an event.
+ *
+ * Mirrors canManageLists in server/routes/event_lists.go — the server is what
+ * actually decides; this exists so the UI doesn't offer what would be refused.
+ * Lifted out of EventLists.vue when that component became shared with the
+ * private lists panel (F19): the private panel passes this right straight
+ * through as `true`, and lifting the rule here is what finally made it
+ * testable, since nothing inside a .vue can be.
+ *
+ * Ownerless legacy events — created before anonymous creation was removed —
+ * fall back to member and above.
+ */
+export const canManageEventLists = ({
+  authUser,
+  event,
+  canManageUsers,
+  canInvite,
+}) => {
+  if (!authUser) return false
+  if (canManageUsers) return true
+  if (event?.ownerId && event.ownerId !== 0) return authUser._id === event.ownerId
+  return !!canInvite
+}

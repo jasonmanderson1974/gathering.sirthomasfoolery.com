@@ -133,6 +133,106 @@
   .flw-btn:active {
     transform: translateY(1px);
   }
+
+  /* Rendered markdown, in the club's voice (F20 · My Notes).
+   *
+   * GLOBAL, not a `<style scoped>` block in PersonalNotes.vue, and that is a
+   * correctness point rather than a preference: content injected with `v-html`
+   * carries no `data-v-` attribute, so a scoped rule never matches it. The
+   * alternative is `::v-deep` on every selector; this is the same thing without
+   * the noise, and it sits with its `.flw-` siblings ready for the next
+   * markdown surface.
+   *
+   * Tailwind's preflight strips list markers and heading sizes, so both have to
+   * be put back explicitly. */
+  .flw-prose {
+    @apply tw-text-parchment;
+    line-height: 1.6;
+  }
+  .flw-prose > * + * {
+    margin-top: 0.75rem;
+  }
+  .flw-prose h1,
+  .flw-prose h2,
+  .flw-prose h3,
+  .flw-prose h4,
+  .flw-prose h5,
+  .flw-prose h6 {
+    @apply tw-font-display tw-text-brass;
+    letter-spacing: 0.06em;
+  }
+  .flw-prose h1 {
+    font-size: 1.35rem;
+  }
+  .flw-prose h2 {
+    font-size: 1.15rem;
+  }
+  .flw-prose h3 {
+    font-size: 1.02rem;
+  }
+  .flw-prose h4,
+  .flw-prose h5,
+  .flw-prose h6 {
+    font-size: 0.95rem;
+  }
+  .flw-prose a {
+    @apply tw-text-brass;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .flw-prose ul {
+    list-style: disc;
+    padding-left: 1.25rem;
+  }
+  .flw-prose ol {
+    list-style: decimal;
+    padding-left: 1.5rem;
+  }
+  .flw-prose li + li {
+    margin-top: 0.2rem;
+  }
+  .flw-prose blockquote {
+    @apply tw-text-parchment-dim;
+    border-left: 2px solid #8a7333;
+    padding-left: 0.75rem;
+    font-style: italic;
+  }
+  .flw-prose code {
+    @apply tw-text-brass-bright;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 3px;
+    padding: 0.05em 0.3em;
+    font-size: 0.9em;
+  }
+  .flw-prose pre {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(138, 115, 51, 0.4);
+    border-radius: 3px;
+    padding: 0.6rem;
+    /* Long code lines scroll inside the block rather than widening the panel. */
+    overflow-x: auto;
+  }
+  .flw-prose pre code {
+    background: none;
+    padding: 0;
+  }
+  .flw-prose hr {
+    border-color: #8a7333;
+    opacity: 0.5;
+  }
+  .flw-prose table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .flw-prose th,
+  .flw-prose td {
+    border: 1px solid rgba(138, 115, 51, 0.5);
+    padding: 0.3rem 0.5rem;
+    text-align: left;
+  }
+  .flw-prose th {
+    @apply tw-text-brass;
+  }
 }
 
 /* Tint Vuetify's generic dark dialog/menu surfaces to the Fellowship wood tone */
