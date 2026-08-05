@@ -73,7 +73,34 @@
       <div
         class="tw-mx-auto tw-mt-4 lg:tw-flex lg:tw-items-start lg:tw-justify-center lg:tw-gap-6"
       >
-        <div class="tw-mx-auto tw-max-w-5xl tw-flex-1">
+        <!-- The gathering at a glance, once a time is confirmed and the
+             calendar has collapsed (F21). Only exists wide enough for two
+             columns; narrower than that the same three panels render inline in
+             the column below, under the title where they read in order. -->
+        <div
+          v-if="showGatheringSidebar"
+          class="tw-mx-4 lg:tw-sticky lg:tw-top-16 lg:tw-order-2 lg:tw-w-72 lg:tw-flex-none"
+        >
+          <GatheringSummary
+            :event="event"
+            :canEdit="canEdit"
+            @reschedule="rescheduleGathering"
+            @cancel-gathering="cancelGathering"
+          />
+
+          <EventLocation
+            :event.sync="event"
+            :canEdit="event.ownerId != 0 && canEdit"
+          />
+
+          <GatheringRsvp
+            :event="event"
+            @set-rsvp="setRsvp"
+            @clear-rsvp="clearRsvp"
+          />
+        </div>
+
+        <div class="tw-mx-auto tw-max-w-5xl tw-flex-1 lg:tw-order-1">
           <div v-if="!isSettingSpecificTimes" class="tw-mx-4">
             <!-- Title, chips, date, and action buttons -->
             <EventHeader
@@ -100,15 +127,27 @@
               :canEdit="event.ownerId != 0 && canEdit"
             />
 
-            <!-- Venue / location (C12) -->
+            <!-- The confirmed gathering, the venue (C12) and the RSVP panel
+                 (C1). All three live in the sidebar once the calendar
+                 collapses, and inline here when it doesn't — gated so they
+                 render in exactly one place, never both. Expanding the
+                 availability grid must not make the confirmed time disappear. -->
+            <GatheringSummary
+              v-if="isScheduled && !showGatheringSidebar"
+              :event="event"
+              :canEdit="canEdit"
+              @reschedule="rescheduleGathering"
+              @cancel-gathering="cancelGathering"
+            />
+
             <EventLocation
+              v-if="!showGatheringSidebar"
               :event.sync="event"
               :canEdit="event.ownerId != 0 && canEdit"
             />
 
-            <!-- RSVP to the confirmed gathering (C1) -->
             <GatheringRsvp
-              v-if="event.scheduledEvent"
+              v-if="event.scheduledEvent && !showGatheringSidebar"
               :event="event"
               @set-rsvp="setRsvp"
               @clear-rsvp="clearRsvp"
@@ -128,6 +167,7 @@
           <ScheduleOverlap
             ref="scheduleOverlap"
             :event="event"
+            :collapsed="calendarCollapsed"
             :fromEditEvent="fromEditEvent"
             :loadingCalendarEvents="loading"
             :calendarEventsMap="calendarEventsMap"
@@ -150,6 +190,21 @@
                discussion on a phone. Panels use v-show, not v-if, so drafts and
                what you had expanded survive a switch back and forth. -->
           <div v-if="!isSettingSpecificTimes" class="tw-mx-4">
+            <!-- Availability is still there once a time is set, just out of the
+                 way. Anyone can look; only a manager can act on it. -->
+            <v-btn
+              v-if="isScheduled"
+              text
+              small
+              class="tw-mb-1 tw-text-xs tw-text-parchment-dim"
+              @click="calendarExpanded = !calendarExpanded"
+            >
+              <v-icon small left>{{
+                calendarExpanded ? "mdi-chevron-up" : "mdi-chevron-down"
+              }}</v-icon>
+              {{ calendarExpanded ? "Hide availability" : "View availability" }}
+            </v-btn>
+
             <div class="tw-flex tw-gap-1">
               <v-btn
                 v-for="t in bandTabs"
@@ -252,6 +307,7 @@ import {
   processEvent,
   getCalendarEventsMap,
   getDateRangeStringForEvent,
+  getStartEndDateString,
   isDstObserved,
   doesDstExist,
 } from "@/utils"
@@ -280,6 +336,7 @@ import EventBottomBar from "@/components/event/EventBottomBar.vue"
 import EventDescription from "@/components/event/EventDescription.vue"
 import EventLocation from "@/components/event/EventLocation.vue"
 import GatheringRsvp from "@/components/event/GatheringRsvp.vue"
+import GatheringSummary from "@/components/event/GatheringSummary.vue"
 import EventComments from "@/components/event/EventComments.vue"
 import EventPolls from "@/components/event/EventPolls.vue"
 import EventLists from "@/components/event/EventLists.vue"
@@ -335,6 +392,7 @@ export default {
     EventDescription,
     EventLocation,
     GatheringRsvp,
+    GatheringSummary,
     EventComments,
     EventPolls,
     EventLists,
@@ -379,6 +437,11 @@ export default {
 
     // Who the discussion may @mention (F9), fetched once per event.
     mentionables: [],
+
+    // Whether the user has asked to see the availability grid again after it
+    // collapsed on a confirmed gathering (F21). Not persisted — landing on the
+    // page should always show the gathering, not the poll it came from.
+    calendarExpanded: false,
   }),
 
   mounted() {
@@ -452,8 +515,54 @@ export default {
     calendarTypes() {
       return calendarTypes
     },
+    /**
+     * The line under the title. Once a time is confirmed it shows that time —
+     * before this it kept showing the polling window ("Mar 3 - Mar 17") long
+     * after the answer was known, which read as though nothing had been decided.
+     */
     dateString() {
+      const scheduled = this.event.scheduledEvent
+      if (scheduled?.startDate && scheduled?.endDate) {
+        return getStartEndDateString(
+          new Date(scheduled.startDate),
+          new Date(scheduled.endDate)
+        )
+      }
       return getDateRangeStringForEvent(this.event)
+    },
+    isScheduled() {
+      return !!this.event?.scheduledEvent
+    },
+    /**
+     * Once a gathering is confirmed the availability grid has done its job, so
+     * it gets out of the way and the discussion and lists move up (F21).
+     *
+     * The three state guards matter: anything that drives the calendar —
+     * editing availability, picking a time, setting specific times — must
+     * reveal it, or the phone's bottom bar would be operating a grid nobody
+     * can see.
+     */
+    calendarCollapsed() {
+      return (
+        this.isScheduled &&
+        !this.calendarExpanded &&
+        !this.isEditing &&
+        !this.isScheduling &&
+        !this.isSettingSpecificTimes
+      )
+    },
+    /**
+     * Whether the summary / venue / RSVP panels get their own column on the
+     * right, or render inline under the title instead.
+     *
+     * Measured against Tailwind's `lg` (1024px) rather than a Vuetify
+     * breakpoint, because the column itself is laid out by `lg:` classes and
+     * the two scales don't line up — Vuetify's own `lg` starts at 1264.
+     * Stacking the sidebar above everything on a narrow screen would put the
+     * summary above the gathering's own title.
+     */
+    showGatheringSidebar() {
+      return this.calendarCollapsed && this.$vuetify.breakpoint.width >= 1024
     },
     isEditing() {
       return this.scheduleOverlapComponent?.editing
@@ -953,11 +1062,27 @@ export default {
     scheduleEvent() {
       this.scheduleOverlapComponent?.scheduleEvent()
     },
+    /**
+     * Reschedule from the summary card. The grid has to be back in the DOM
+     * before SCHEDULE_EVENT is entered, hence the nextTick — otherwise the user
+     * lands in a picking state with nothing to pick on.
+     */
+    rescheduleGathering() {
+      this.calendarExpanded = true
+      this.$nextTick(() => this.scheduleOverlapComponent?.scheduleEvent())
+    },
+    cancelGathering() {
+      this.scheduleOverlapComponent?.cancelGathering()
+      this.calendarExpanded = false
+    },
     cancelScheduleEvent() {
       this.scheduleOverlapComponent?.cancelScheduleEvent()
     },
     saveScheduleEvent() {
       this.scheduleOverlapComponent?.saveScheduleEvent()
+      // Confirming a time is the moment the grid stops being the point of the
+      // page, whether the user got here from "View availability" or Reschedule.
+      this.calendarExpanded = false
     },
 
     highlightAvailabilityBtn() {

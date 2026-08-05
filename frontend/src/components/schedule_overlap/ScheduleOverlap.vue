@@ -1,7 +1,17 @@
 <template>
   <span>
     <Tooltip :content="tooltipContent">
-      <div class="tw-select-none tw-py-4" style="-webkit-touch-callout: none">
+      <!-- Collapsed once a gathering is confirmed: the grid, the tool row and
+           the phone bottom stack all go, leaving the page to the discussion and
+           the lists. v-if rather than v-show — tailwind.config.js sets
+           `important: true`, so tw-flex on the row below would beat the inline
+           display:none that v-show sets. The component itself stays mounted:
+           Event.vue reads ~8 computeds through this instance. -->
+      <div
+        v-if="!collapsed"
+        class="tw-select-none tw-py-4"
+        style="-webkit-touch-callout: none"
+      >
         <div class="tw-flex tw-flex-col sm:tw-flex-row">
           <div class="tw-flex tw-grow tw-pl-4 tw-pr-4">
             <template v-if="event.daysOnly">
@@ -1042,6 +1052,7 @@ export default {
     alwaysShowCalendarEvents: { type: Boolean, default: false }, // Whether to show calendar events all the time
     noEventNames: { type: Boolean, default: false }, // Whether to show "busy" instead of the event name
     calendarOnly: { type: Boolean, default: false }, // Whether to only show calendar and not respondents or any other controls
+    collapsed: { type: Boolean, default: false }, // Whether to render nothing at all (gathering already scheduled) while staying mounted
     interactable: { type: Boolean, default: true }, // Whether to allow user to interact with component
     showSnackbar: { type: Boolean, default: true }, // Whether to show snackbar when availability is automatically filled in
     animateTimeslotAlways: { type: Boolean, default: false }, // Whether to animate timeslots all the time
@@ -1513,6 +1524,63 @@ export default {
     //#endregion
 
     // -----------------------------------
+    //#region Grid interactions
+    // -----------------------------------
+    /**
+     * Attach everything that hangs off the #drag-section element: the
+     * ResizeObserver that keeps timeslot geometry honest through layout changes
+     * no window resize fires for, and the pointer listeners that drive
+     * drag-to-select.
+     *
+     * Called from mounted() and again whenever `collapsed` goes false, because
+     * a page that first rendered collapsed had no #drag-section to bind to —
+     * without the re-bind, dragging on the re-expanded grid silently does
+     * nothing.
+     */
+    bindGridInteractions() {
+      const dragSection = document.getElementById("drag-section")
+      if (!dragSection) return
+      this._gridEl = dragSection
+
+      this._resizeObserver = new ResizeObserver(() => {
+        this.setTimeslotSize()
+      })
+      this._resizeObserver.observe(dragSection)
+
+      if (this.calendarOnly) return
+      if (isTouchEnabled()) {
+        dragSection.addEventListener("touchstart", this.startDrag)
+        dragSection.addEventListener("touchmove", this.moveDrag)
+        dragSection.addEventListener("touchend", this.endDrag)
+        dragSection.addEventListener("touchcancel", this.endDrag)
+      }
+      dragSection.addEventListener("mousedown", this.startDrag)
+      dragSection.addEventListener("mousemove", this.moveDrag)
+      dragSection.addEventListener("mouseup", this.endDrag)
+    },
+
+    /** Undo bindGridInteractions, against the element it actually bound to. */
+    unbindGridInteractions() {
+      if (this._resizeObserver) {
+        this._resizeObserver.disconnect()
+        this._resizeObserver = null
+      }
+
+      const dragSection = this._gridEl
+      if (!dragSection) return
+      this._gridEl = null
+
+      dragSection.removeEventListener("touchstart", this.startDrag)
+      dragSection.removeEventListener("touchmove", this.moveDrag)
+      dragSection.removeEventListener("touchend", this.endDrag)
+      dragSection.removeEventListener("touchcancel", this.endDrag)
+      dragSection.removeEventListener("mousedown", this.startDrag)
+      dragSection.removeEventListener("mousemove", this.moveDrag)
+      dragSection.removeEventListener("mouseup", this.endDrag)
+    },
+    //#endregion
+
+    // -----------------------------------
     //#region Schedule event
     // -----------------------------------
     scheduleEvent() {
@@ -1734,6 +1802,21 @@ export default {
         this.unsavedChanges = true
       }
     },
+    /**
+     * The grid is torn out of the DOM while collapsed, taking #drag-section
+     * with it, so its listeners have to be re-attached to the new element on
+     * the way back. setTimeslotSize() too: geometry last measured against a
+     * grid that wasn't rendered is meaningless.
+     */
+    collapsed(isCollapsed) {
+      this.unbindGridInteractions()
+      if (isCollapsed) return
+
+      this.$nextTick(() => {
+        this.bindGridInteractions()
+        this.setTimeslotSize()
+      })
+    },
     event: {
       immediate: true,
       handler(newEvent, oldEvent) {
@@ -1906,40 +1989,15 @@ export default {
     addEventListener("resize", this.onResize)
     addEventListener("scroll", this.onScroll)
 
-    // Watch for layout changes (e.g. ads loading, flex reflows) that resize
-    // the grid without triggering a window resize event
-    const dragSection = document.getElementById("drag-section")
-    if (dragSection) {
-      this._resizeObserver = new ResizeObserver(() => {
-        this.setTimeslotSize()
-      })
-      this._resizeObserver.observe(dragSection)
-    }
-
-    if (!this.calendarOnly) {
-      const timesEl = dragSection
-      if (timesEl && isTouchEnabled()) {
-        timesEl.addEventListener("touchstart", this.startDrag)
-        timesEl.addEventListener("touchmove", this.moveDrag)
-        timesEl.addEventListener("touchend", this.endDrag)
-        timesEl.addEventListener("touchcancel", this.endDrag)
-      }
-      if (timesEl) {
-        timesEl.addEventListener("mousedown", this.startDrag)
-        timesEl.addEventListener("mousemove", this.moveDrag)
-        timesEl.addEventListener("mouseup", this.endDrag)
-      }
-    }
+    this.bindGridInteractions()
 
     // Parse sign up blocks and responses
   },
   beforeDestroy() {
+    this.unbindGridInteractions()
     removeEventListener("click", this.deselectRespondents)
     removeEventListener("resize", this.onResize)
     removeEventListener("scroll", this.onScroll)
-    if (this._resizeObserver) {
-      this._resizeObserver.disconnect()
-    }
   },
   components: {
     AvailabilityTypeToggle,

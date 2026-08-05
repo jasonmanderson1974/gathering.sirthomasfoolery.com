@@ -230,8 +230,13 @@ import GCalWeekSelector from "./GCalWeekSelector.vue"
 import { isPhone } from "@/utils"
 import EventOptions from "./EventOptions.vue"
 import LocationInput from "@/components/LocationInput.vue"
-import { timeTypes, isOwnerlessEvent, serverURL } from "@/constants"
+import { timeTypes, isOwnerlessEvent } from "@/constants"
 import { mapState } from "vuex"
+import {
+  recurrenceLabel,
+  reminderSummaryText,
+  icsUrl,
+} from "@/components/event/gatheringSummary"
 
 export default {
   name: "ToolRow",
@@ -322,16 +327,7 @@ export default {
     },
     // Human label for the event's stored recurrence (shown in the summary).
     recurrenceLabel() {
-      switch (this.event.gatheringRecurrence?.frequency) {
-        case "weekly":
-          return "Repeats weekly"
-        case "biweekly":
-          return "Repeats every 2 weeks"
-        case "monthly":
-          return "Repeats monthly"
-        default:
-          return ""
-      }
+      return recurrenceLabel(this.event)
     },
     scheduledGatheringText() {
       const s = this.event.scheduledEvent
@@ -353,18 +349,11 @@ export default {
       }
     },
     reminderSummaryText() {
-      const parts = []
-      if (this.recurrenceLabel) parts.push(this.recurrenceLabel)
-      const r = this.event.gatheringReminder
-      if (r && r.enabled)
-        parts.push(`Reminder ${r.leadTimeHours ?? 24}h before`)
-      else parts.push("No reminder email")
-      return parts.join(" · ")
+      return reminderSummaryText(this.event)
     },
     // Universal .ics download for the confirmed gathering (served by getEventIcs)
     icsUrl() {
-      const id = this.event.shortId ?? this.event._id
-      return `${serverURL}/events/${id}/ics`
+      return icsUrl(this.event)
     },
   },
 }

@@ -21,25 +21,10 @@
           class="tw-cursor-pointer tw-select-none tw-rounded tw-bg-leather tw-px-2 tw-font-medium sm:tw-px-3"
           >Imported from when2meet</v-chip
         >
-        <v-chip
-          v-if="event.scheduledEvent"
-          :href="icsUrl"
-          :small="isPhone"
-          class="tw-cursor-pointer tw-select-none tw-rounded tw-bg-brass tw-px-2 tw-font-medium tw-text-wood-deep sm:tw-px-3"
-        >
-          <v-icon small left class="tw-text-wood-deep"
-            >mdi-calendar-plus</v-icon
-          >
-          Add to calendar
-        </v-chip>
-        <v-chip
-          v-if="event.scheduledEvent && recurrenceLabel"
-          :small="isPhone"
-          class="tw-select-none tw-rounded tw-bg-leather tw-px-2 tw-font-medium sm:tw-px-3"
-        >
-          <v-icon small left>mdi-repeat</v-icon>
-          {{ recurrenceLabel }}
-        </v-chip>
+        <!-- "Add to calendar" and the recurrence label used to live here as
+             chips. Once a gathering is confirmed they are both on the
+             GatheringSummary card in the sidebar, a few centimetres away, so
+             repeating them in the header was pure noise. -->
       </div>
       <div class="tw-flex tw-items-baseline tw-gap-1">
         <div
@@ -112,7 +97,6 @@
 <script>
 import { isPhone } from "@/utils"
 import { mapState } from "vuex"
-import { serverURL } from "@/constants"
 
 /**
  * Event page header: title (+ when2meet chip), date
@@ -153,25 +137,6 @@ export default {
     ...mapState(["authUser"]),
     isPhone() {
       return isPhone(this.$vuetify)
-    },
-    // Universal "add to calendar" (.ics) download for a confirmed gathering —
-    // works without any calendar account. Served by the backend getEventIcs.
-    icsUrl() {
-      const id = this.event.shortId ?? this.event._id
-      return `${serverURL}/events/${id}/ics`
-    },
-    // Human label for a repeating gathering (C5); "" for a one-off.
-    recurrenceLabel() {
-      switch (this.event.gatheringRecurrence?.frequency) {
-        case "weekly":
-          return "Repeats weekly"
-        case "biweekly":
-          return "Repeats every 2 weeks"
-        case "monthly":
-          return "Repeats monthly"
-        default:
-          return ""
-      }
     },
   },
 }
