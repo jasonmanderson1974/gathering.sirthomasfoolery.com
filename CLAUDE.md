@@ -81,6 +81,17 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
 - `src/components/` — organized by feature folder (`event/`, `home/`, `landing/`, `pricing/`, `settings/`, `schedule_overlap/`, `calendar_permission_dialogs/`, `sign_up_form/`, `general/`) plus top-level shared components.
 - `src/utils/` — date math (`date_utils.js`, uses `dayjs`/`moment`/`spacetime`), `fetch_utils.js` (API client), `plugin_utils.js` (handles the postMessage plugin API — see `PLUGIN_API_README.md`), `sign_in_utils.js`, `location_utils.js`, `services/` (`EventService.js`, `FolderService.js` — thin wrappers over `fetch_utils` for event and folder API calls).
 - Tailwind + Vuetify coexist; `tailwind.config.js` purges `src/**/*.{vue,js,...}`.
+- **`tailwind.config.js` sets `important: true`, which breaks `v-show`.** `tw-flex`/`tw-block`/
+  `tw-grid` compile to `display: … !important` and beat the inline `display: none` that `v-show`
+  sets, so the element stays visible with no error anywhere. Use `v-if` on any element that both
+  toggles and carries a Tailwind display utility (or move the utility to a child). Lint, unit
+  tests and the build all pass with this bug present — only looking at the page catches it.
+- **Tailwind purges on literal source text**, so a class name must appear whole in the source. Build
+  a static map (`["", "tw-pl-6", "tw-pl-12"]`), never a template string like `` `tw-pl-${n}` `` —
+  that emits no CSS at all.
+- **`src/utils/index.js` is an `export *` barrel imported by ~40 components.** Don't add modules with
+  heavy or DOM-dependent dependencies to it (e.g. `utils/markdown.js`, which pulls in DOMPurify);
+  import those directly by path.
 - There is **no service worker** — the PWA was deliberately removed (commit `f857320`), and `kill-sw.js` at the repo root unregisters any stale one still installed on a client. Do not reintroduce one casually; see TODO C8.
 
 ### Frontend ↔ backend contract
