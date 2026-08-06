@@ -141,11 +141,97 @@ export const simplifyDebts = (balances) => {
 }
 
 /**
- * Everything the summary panel needs, in one pass over the ledger: the payments
- * that would settle it, named, plus the totals the panel shows when it is
- * already square.
+ * What each person put in, and what each person is on the hook for.
  *
- * @returns {{payments: Array, totalCents: number, people: number}}
+ * Two different questions, and the gap between them is the whole point of the
+ * feature: paying for dinner does not make it yours, and being in the split does
+ * not mean you paid. `netCents` is the difference — positive means owed,
+ * negative means owing — and it is the same number `netBalances` produces, from
+ * the same rows.
+ *
+ * Both columns sum to the ledger total, because every expense has exactly one
+ * payer and its shares always sum to its amount. That is what lets the panel
+ * print one "Total" line under either.
+ *
+ * Sorted by name, not by amount: alphabetical order is stable as expenses are
+ * added, so a row does not jump position because somebody bought a round. It
+ * matches how the participants picker is sorted server-side, too.
+ *
+ * @returns {Array<{userId, name, paidCents, shareCents, netCents}>}
+ */
+export const personTotals = (expenses) => {
+  const rows = expenses ?? []
+  const totals = new Map()
+
+  const bump = (id, field, cents) => {
+    if (!id) return
+    const entry = totals.get(id) ?? { paidCents: 0, shareCents: 0 }
+    entry[field] += cents
+    totals.set(id, entry)
+  }
+
+  for (const expense of rows) {
+    bump(expense.paidBy, "paidCents", expense.amountCents ?? 0)
+    for (const split of expense.splits ?? []) {
+      bump(split.userId, "shareCents", split.amountCents ?? 0)
+    }
+  }
+
+  const names = namesFromExpenses(rows)
+
+  return [...totals]
+    .map(([userId, entry]) => ({
+      userId,
+      name: names.get(userId) ?? "Someone",
+      paidCents: entry.paidCents,
+      shareCents: entry.shareCents,
+      netCents: entry.paidCents - entry.shareCents,
+    }))
+    .sort(
+      (a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
+        (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0)
+    )
+}
+
+/**
+ * One person's costs, expense by expense — what the hover panel shows.
+ *
+ * An expense appears if the person paid for it, shares it, or both; a row where
+ * they did neither is not their business and is left out. Ledger order is
+ * preserved (newest first, as the API returns it) so the breakdown reads in the
+ * same order as the list beside it.
+ *
+ * @returns {Array<{expenseId, title, date, paidCents, shareCents}>}
+ */
+export const personBreakdown = (expenses, userId) => {
+  const rows = []
+  if (!userId) return rows
+
+  for (const expense of expenses ?? []) {
+    const paidCents = expense.paidBy === userId ? expense.amountCents ?? 0 : 0
+    const split = (expense.splits ?? []).find((s) => s.userId === userId)
+    const shareCents = split ? split.amountCents ?? 0 : 0
+
+    if (paidCents || shareCents) {
+      rows.push({
+        expenseId: expense._id,
+        title: expense.title,
+        date: expense.date,
+        paidCents,
+        shareCents,
+      })
+    }
+  }
+
+  return rows
+}
+
+/**
+ * Everything the summary panel needs, in one pass over the ledger: what each
+ * person paid, the ledger total, and the payments that would settle it.
+ *
+ * @returns {{totals: Array, payments: Array, totalCents: number}}
  *   payments carry fromName/toName resolved from the ledger's own snapshots.
  */
 export const settleUpSummary = (expenses) => {
@@ -162,8 +248,8 @@ export const settleUpSummary = (expenses) => {
   }))
 
   return {
+    totals: personTotals(rows),
     payments,
     totalCents: rows.reduce((sum, expense) => sum + (expense.amountCents ?? 0), 0),
-    people: balances.size,
   }
 }

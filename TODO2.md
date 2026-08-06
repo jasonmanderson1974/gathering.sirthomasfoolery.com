@@ -1332,13 +1332,40 @@ won't-do. See their entries. The sequencing that got there is at the bottom.
     one. Only looking at the page on a phone catches this; lint, tests and the build were all green.
   - **`event_auth_gate_test.go` earned its keep**: it failed the moment the eight routes were
     registered and not listed, exactly as designed.
-  - **Verified** with `/root/tools/browser/verify_f22_local.js` — 42 checks across four roles on one
+  - **2026-08-05, follow-up (user request):** the summary moved into the right sidebar permanently,
+    and gained per-person totals.
+    - **The sidebar now has two independent reasons to exist**: a confirmed gathering (F21) and a
+      non-empty ledger. Each panel inside carries its own condition rather than relying on the
+      wrapper's — otherwise an expense on an *unscheduled* gathering would drag the venue and RSVP
+      panels up beside a calendar that still needs them inline. Below 1024px there is no sidebar at
+      all, so the balances fall back to the top of the tab; `showSettleUpSidebar` is what the tab is
+      told, so the two can never both render.
+    - **Rows show what each person PAID**, with the ledger total beneath; what they are
+      *responsible for* is a different number and lives in the hover breakdown, along with the
+      itemised costs. Sorted by name, not amount, so a row does not jump position because somebody
+      bought a round.
+    - **The breakdown expands in place, not in a `v-menu`.** Vuetify rendered the activator as a
+      *sibling* of `.v-menu` and never bound the hover listeners — but the deciding reasons are that
+      a floating panel over an 18rem sidebar covers the very rows you are comparing against, and
+      `open-on-hover` binds no click handler, so on a phone (where this panel renders inline and
+      nothing hovers) it would have been unreachable. It opens BELOW its row, so the row under the
+      cursor never moves and there is no hover/unhover flicker loop, and clicking pins it open.
+    - Three test-harness bugs surfaced and were fixed, none of them app defects: a panel selector
+      that matched any element whose text merely *started* with "Settle Up" (so a gathering named
+      "Settle Up totals fixture" counted as a second panel); a read-back query keyed on an expense
+      title without scoping to its event, which two fixtures shared; and a "date defaults to today"
+      assertion built from a naive UTC `now`, which failed at 23:16 local for a field showing
+      exactly the right date — the app deliberately uses the *viewer's* calendar day, stored at UTC
+      noon.
+  - **Verified** with `/root/tools/browser/verify_f22_local.js` — 43 checks across four roles on one
     event (author, another member, an admin, a guest): the split preview and what actually lands in
     Mongo; save disabled until a by-amount split reconciles; a 1200x3000 PNG arriving as an 800x2000
     JPEG; the history reading back on the page; 403 on a direct PUT as another member and on a
     direct POST as a guest; a guest opening a receipt; and the soft delete leaving the row on disk
-    with its trail. Plus `probe_f22_sidebar.js` — the balances render in exactly one place, never
-    two, across the sidebar/inline breakpoint.
+    with its trail. Plus `verify_f22_summary.js` — 26 checks on the sidebar placement, the figures
+    from the brief ($266.00 / $343.50 / $609.50 / $38.75), and the breakdown reconciling to the row
+    above it — and `probe_f22_sidebar.js`, which covers the case where both sidebar reasons are
+    active at once.
 
 ---
 

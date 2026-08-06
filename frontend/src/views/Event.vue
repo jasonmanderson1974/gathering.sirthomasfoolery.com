@@ -73,15 +73,19 @@
       <div
         class="tw-mx-auto tw-mt-4 lg:tw-flex lg:tw-items-start lg:tw-justify-center lg:tw-gap-6"
       >
-        <!-- The gathering at a glance, once a time is confirmed and the
-             calendar has collapsed (F21). Only exists wide enough for two
-             columns; narrower than that the same three panels render inline in
-             the column below, under the title where they read in order. -->
+        <!-- The right-hand column. Two things can put it on screen and they are
+             independent: the gathering at a glance once a time is confirmed and
+             the calendar has collapsed (F21), and the Settle Up balances as soon
+             as there is anything to settle (F22). Each panel therefore carries
+             its own condition rather than relying on the wrapper's — a ledger on
+             an unscheduled gathering must not drag the venue and RSVP panels up
+             here, where the calendar below still needs them inline. -->
         <div
-          v-if="showGatheringSidebar"
+          v-if="showSidebar"
           class="tw-mx-4 lg:tw-sticky lg:tw-top-16 lg:tw-order-2 lg:tw-w-72 lg:tw-flex-none"
         >
           <GatheringSummary
+            v-if="showGatheringSidebar"
             :event="event"
             :canEdit="canEdit"
             @reschedule="rescheduleGathering"
@@ -89,21 +93,22 @@
           />
 
           <EventLocation
+            v-if="showGatheringSidebar"
             :event.sync="event"
             :canEdit="event.ownerId != 0 && canEdit"
           />
 
           <GatheringRsvp
+            v-if="showGatheringSidebar"
             :event="event"
             @set-rsvp="setRsvp"
             @clear-rsvp="clearRsvp"
           />
 
-          <!-- Who owes whom (F22). Derived from the same rows the Settle Up
-               tab renders, so it is right whether or not that tab has ever
-               been opened. Hidden entirely for someone with no account: every
-               expense route is behind a session. -->
-          <SettleUpSummary v-if="authUser" :expenses="expenses" />
+          <!-- Who owes whom. Derived from the same rows the Settle Up tab
+               renders, so it is right whether or not that tab has ever been
+               opened. -->
+          <SettleUpSummary v-if="showSettleUpSidebar" :expenses="expenses" />
         </div>
 
         <div class="tw-mx-auto tw-max-w-5xl tw-flex-1 lg:tw-order-1">
@@ -289,7 +294,7 @@
                 :event-id="bandEventId"
                 :expenses="expenses"
                 :refreshing="refreshingExpenses"
-                :has-sidebar="showGatheringSidebar"
+                :has-sidebar="showSettleUpSidebar"
                 @create-expense="onCreateExpense"
                 @edit-expense="onEditExpense"
                 @delete-expense="onDeleteExpense"
@@ -602,6 +607,27 @@ export default {
      */
     showGatheringSidebar() {
       return this.calendarCollapsed && this.$vuetify.breakpoint.width >= 1024
+    },
+    /**
+     * The Settle Up balances belong in the sidebar whenever there is a ledger —
+     * not only once a time is confirmed. Money gets spent on a gathering that is
+     * still being arranged, and the balances are the one panel you want in view
+     * while reading the expenses beside them.
+     *
+     * Gated on there being expenses at all so an empty panel doesn't conjure a
+     * second column onto every gathering, and on `authUser` because every
+     * expense route is behind a session.
+     */
+    showSettleUpSidebar() {
+      return (
+        !!this.authUser &&
+        this.expenses.length > 0 &&
+        this.$vuetify.breakpoint.width >= 1024
+      )
+    },
+    /** Whether the right-hand column exists at all. */
+    showSidebar() {
+      return this.showGatheringSidebar || this.showSettleUpSidebar
     },
     isEditing() {
       return this.scheduleOverlapComponent?.editing

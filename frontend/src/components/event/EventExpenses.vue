@@ -1,9 +1,9 @@
 <template>
   <div>
-    <!-- The balances, inline. Gated so they render in exactly one place: on a
-         wide screen with a confirmed gathering they live in the sidebar, which
-         is visible while this tab is open, and showing the same figures twice
-         reads as two different answers. -->
+    <!-- The balances, inline. Gated so they render in exactly one place: above
+         1024px they live in the right-hand sidebar, which is visible while this
+         tab is open, and showing the same figures twice reads as two different
+         answers. Below that there is no sidebar, so they come back here. -->
     <SettleUpSummary v-if="!hasSidebar" :expenses="expenses" />
 
     <div
@@ -238,8 +238,8 @@ export default {
     expenses: { type: Array, default: () => [] },
     refreshing: { type: Boolean, default: false },
     /**
-     * Whether the gathering sidebar is on screen. When it is, it is already
-     * showing the balances, so this panel must not show them too.
+     * Whether the right-hand sidebar is showing the balances. When it is, this
+     * panel must not show them too.
      */
     hasSidebar: { type: Boolean, default: false },
   },

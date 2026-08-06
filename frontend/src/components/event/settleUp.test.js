@@ -3,6 +3,8 @@ import {
   netBalances,
   namesFromExpenses,
   simplifyDebts,
+  personTotals,
+  personBreakdown,
   settleUpSummary,
 } from "./settleUp"
 
@@ -249,6 +251,169 @@ describe("namesFromExpenses", () => {
   })
 })
 
+describe("personTotals", () => {
+  it("separates what someone paid from what they owe for", () => {
+    // A paid for everything; B was at both. Paying does not make it yours.
+    const totals = personTotals([
+      evenExpense(A, 9000, [A, B]),
+      evenExpense(A, 1000, [A, B]),
+    ])
+
+    const byId = Object.fromEntries(totals.map((t) => [t.userId, t]))
+    expect(byId[A].paidCents).toBe(10000)
+    expect(byId[A].shareCents).toBe(5000)
+    expect(byId[A].netCents).toBe(5000)
+    expect(byId[B].paidCents).toBe(0)
+    expect(byId[B].shareCents).toBe(5000)
+    expect(byId[B].netCents).toBe(-5000)
+  })
+
+  it("reproduces the two-person case from the brief", () => {
+    // Phil paid $266.00, Jason $343.50, split evenly: $609.50 in all, and Phil
+    // owes Jason $38.75.
+    const phil = "phil"
+    const jason = "jason"
+    const totals = personTotals([
+      {
+        paidBy: phil,
+        paidByName: "Phil",
+        amountCents: 26600,
+        splits: [
+          { userId: phil, name: "Phil", amountCents: 13300 },
+          { userId: jason, name: "Jason", amountCents: 13300 },
+        ],
+      },
+      {
+        paidBy: jason,
+        paidByName: "Jason",
+        amountCents: 34350,
+        splits: [
+          { userId: phil, name: "Phil", amountCents: 17175 },
+          { userId: jason, name: "Jason", amountCents: 17175 },
+        ],
+      },
+    ])
+
+    const byId = Object.fromEntries(totals.map((t) => [t.userId, t]))
+    expect(byId[phil].paidCents).toBe(26600)
+    expect(byId[jason].paidCents).toBe(34350)
+    // Each is responsible for half of $609.50.
+    expect(byId[phil].shareCents).toBe(30475)
+    expect(byId[jason].shareCents).toBe(30475)
+    expect(byId[phil].netCents).toBe(-3875)
+    expect(byId[jason].netCents).toBe(3875)
+  })
+
+  it("has both columns summing to the ledger total", () => {
+    const rows = [
+      evenExpense(A, 9000, [A, B, C]),
+      evenExpense(B, 3000, [A, B, C]),
+      evenExpense(C, 1500, [A, B, C]),
+    ]
+    const totals = personTotals(rows)
+    const ledger = rows.reduce((sum, e) => sum + e.amountCents, 0)
+
+    expect(totals.reduce((s, t) => s + t.paidCents, 0)).toBe(ledger)
+    expect(totals.reduce((s, t) => s + t.shareCents, 0)).toBe(ledger)
+  })
+
+  it("agrees with netBalances, which the settlement is built from", () => {
+    const rows = [
+      evenExpense(A, 9000, [A, B, C]),
+      evenExpense(B, 4500, [B, C]),
+    ]
+    const balances = netBalances(rows)
+
+    for (const person of personTotals(rows)) {
+      // netBalances drops anyone who nets to zero; personTotals keeps them.
+      expect(person.netCents).toBe(balances.get(person.userId) ?? 0)
+    }
+  })
+
+  it("keeps someone who paid exactly their own share, at zero", () => {
+    // netBalances drops them — they are not part of the settlement — but the
+    // table must still show what they put in.
+    const totals = personTotals([evenExpense(B, 2000, [B])])
+
+    expect(totals).toHaveLength(1)
+    expect(totals[0].paidCents).toBe(2000)
+    expect(totals[0].shareCents).toBe(2000)
+    expect(totals[0].netCents).toBe(0)
+  })
+
+  it("includes a payer who is not in the split", () => {
+    const totals = personTotals([evenExpense(A, 6000, [B, C])])
+    const byId = Object.fromEntries(totals.map((t) => [t.userId, t]))
+
+    expect(byId[A].paidCents).toBe(6000)
+    expect(byId[A].shareCents).toBe(0)
+    expect(totals).toHaveLength(3)
+  })
+
+  it("sorts by name so rows do not jump when an expense is added", () => {
+    const named = (id, label) => ({
+      paidBy: id,
+      paidByName: label,
+      amountCents: 100,
+      splits: [{ userId: id, name: label, amountCents: 100 }],
+    })
+
+    const totals = personTotals([named(C, "Zoe"), named(A, "adam"), named(B, "Mel")])
+    expect(totals.map((t) => t.name)).toEqual(["adam", "Mel", "Zoe"])
+  })
+
+  it("is empty for an empty ledger", () => {
+    expect(personTotals([])).toEqual([])
+    expect(personTotals(undefined)).toEqual([])
+  })
+})
+
+describe("personBreakdown", () => {
+  const rows = [
+    { ...evenExpense(A, 9000, [A, B]), _id: "x1", title: "Dinner" },
+    { ...evenExpense(B, 3000, [B, C]), _id: "x2", title: "Cab" },
+  ]
+
+  it("shows what someone paid and what they owe, per expense", () => {
+    const breakdown = personBreakdown(rows, A)
+
+    expect(breakdown).toEqual([
+      { expenseId: "x1", title: "Dinner", date: undefined, paidCents: 9000, shareCents: 4500 },
+    ])
+  })
+
+  it("includes an expense someone shares but did not pay for", () => {
+    const breakdown = personBreakdown(rows, B)
+
+    expect(breakdown.map((r) => r.title)).toEqual(["Dinner", "Cab"])
+    expect(breakdown[0]).toMatchObject({ paidCents: 0, shareCents: 4500 })
+    expect(breakdown[1]).toMatchObject({ paidCents: 3000, shareCents: 1500 })
+  })
+
+  it("leaves out expenses that are none of their business", () => {
+    // C was not on the dinner at all.
+    expect(personBreakdown(rows, C).map((r) => r.title)).toEqual(["Cab"])
+  })
+
+  it("adds up to that person's row in the totals", () => {
+    for (const person of personTotals(rows)) {
+      const breakdown = personBreakdown(rows, person.userId)
+      expect(breakdown.reduce((s, r) => s + r.paidCents, 0)).toBe(person.paidCents)
+      expect(breakdown.reduce((s, r) => s + r.shareCents, 0)).toBe(person.shareCents)
+    }
+  })
+
+  it("preserves ledger order", () => {
+    expect(personBreakdown(rows, B).map((r) => r.expenseId)).toEqual(["x1", "x2"])
+  })
+
+  it("is empty for somebody with no id, or nobody", () => {
+    expect(personBreakdown(rows, null)).toEqual([])
+    expect(personBreakdown(rows, "nobody")).toEqual([])
+    expect(personBreakdown(undefined, A)).toEqual([])
+  })
+})
+
 describe("settleUpSummary", () => {
   it("names both ends of every payment", () => {
     const { payments } = settleUpSummary([evenExpense(A, 5000, [A, B])])
@@ -258,14 +423,18 @@ describe("settleUpSummary", () => {
     ])
   })
 
-  it("totals the ledger and counts who is involved", () => {
+  it("totals the ledger and carries a row per person", () => {
     const summary = settleUpSummary([
       evenExpense(A, 9000, [A, B, C]),
       evenExpense(B, 3000, [A, B, C]),
     ])
 
     expect(summary.totalCents).toBe(12000)
-    expect(summary.people).toBe(3)
+    expect(summary.totals).toHaveLength(3)
+    // The Total line under the Paid column is the ledger total.
+    expect(summary.totals.reduce((s, t) => s + t.paidCents, 0)).toBe(
+      summary.totalCents
+    )
   })
 
   it("reports an empty ledger as square", () => {
@@ -273,7 +442,7 @@ describe("settleUpSummary", () => {
 
     expect(summary.payments).toEqual([])
     expect(summary.totalCents).toBe(0)
-    expect(summary.people).toBe(0)
+    expect(summary.totals).toEqual([])
   })
 
   it("falls back to a placeholder for an account with no name anywhere", () => {
