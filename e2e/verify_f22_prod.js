@@ -127,12 +127,17 @@ const domClick = (locator) => locator.evaluate((el) => el.click());
       (await page.locator('text="Expenses"').count()) > 0
     );
 
+    // Matched on the panel's heading being EXACTLY "Settle Up". Not on the text
+    // merely starting with it — a gathering whose NAME begins with those words
+    // has a title element that would count as a second panel — and not on the
+    // heading being a <span>, which it briefly was.
     const panels = await page.evaluate(
       () =>
-        [...document.querySelectorAll("div")].filter((d) => {
-          const label = d.querySelector(":scope > div > span");
-          return label && label.textContent.trim() === "Settle Up";
-        }).length
+        [...document.querySelectorAll("div")].filter(
+          (d) =>
+            d.className.includes?.("tw-bg-leather") &&
+            d.firstElementChild?.textContent.trim() === "Settle Up"
+        ).length
     );
     ok("the balances render in exactly one place", panels === 1, `${panels} panels`);
 
