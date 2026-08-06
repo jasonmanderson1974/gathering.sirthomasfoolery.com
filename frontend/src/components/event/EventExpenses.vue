@@ -32,6 +32,32 @@
         </div>
       </div>
 
+      <!-- What each person has put in, at the top of the list they are the sum
+           of. The same figures as the summary panel, which on a wide screen is
+           off in the sidebar — this is the column you are actually reading when
+           you want to know whether a number looks right. -->
+      <div
+        v-if="expenses.length"
+        class="tw-mb-3 tw-flex tw-flex-wrap tw-items-baseline tw-gap-x-4 tw-gap-y-1 tw-border-b tw-border-brass-dim/60 tw-pb-2 tw-text-sm"
+      >
+        <span
+          v-for="person in totals"
+          :key="person.userId"
+          class="tw-text-parchment-dim"
+        >
+          {{ person.name }}
+          <span class="tw-tabular-nums tw-text-parchment">
+            {{ formatCents(person.paidCents) }}
+          </span>
+        </span>
+        <span class="tw-ml-auto tw-font-medium">
+          Total
+          <span class="tw-tabular-nums tw-text-brass">
+            {{ formatCents(totalCents) }}
+          </span>
+        </span>
+      </div>
+
       <div v-if="!expenses.length" class="tw-text-sm tw-text-parchment-dim">
         {{
           canAdd
@@ -194,6 +220,7 @@ import { mapGetters } from "vuex"
 import SettleUpSummary from "@/components/event/SettleUpSummary.vue"
 import ExpenseDialog from "@/components/event/ExpenseDialog.vue"
 import ConfirmDeleteDialog from "@/components/general/ConfirmDeleteDialog.vue"
+import { personTotals } from "@/components/event/settleUp"
 import { formatCents, formatExpenseDate } from "@/components/event/expenseForm"
 import { expenseReceiptUrl } from "@/utils/services/ExpenseService"
 
@@ -238,8 +265,8 @@ export default {
     expenses: { type: Array, default: () => [] },
     refreshing: { type: Boolean, default: false },
     /**
-     * Whether the right-hand sidebar is showing the balances. When it is, this
-     * panel must not show them too.
+     * Whether the content column's right-hand strip is showing the balances.
+     * When it is, this panel must not show them too.
      */
     hasSidebar: { type: Boolean, default: false },
   },
@@ -260,6 +287,18 @@ export default {
   computed: {
     // Guests read the ledger but never write to it.
     ...mapGetters({ canAdd: "canSeeMembersOnly" }),
+
+    /** What each person has paid — the same figures the summary panel shows. */
+    totals() {
+      return personTotals(this.expenses)
+    },
+
+    totalCents() {
+      return this.expenses.reduce(
+        (sum, expense) => sum + (expense.amountCents ?? 0),
+        0
+      )
+    },
   },
 
   methods: {

@@ -9,26 +9,30 @@
     </div>
 
     <template v-else>
-      <!-- What each person put in, with their breakdown opening beneath the row
-           on hover.
+      <!-- What each person put in, with their breakdown expanding beneath the
+           row when it is clicked.
 
-           Expanded in place rather than in a floating v-menu, for two reasons.
-           A panel floating over an 18rem sidebar covers the very rows you are
-           comparing against; and hover alone is unreachable on a phone, where
-           this same panel renders inline in the tab and nothing hovers — so the
-           row is clickable too, and a tap does the same thing.
+           Click, not hover, and closed to begin with — the same idiom as a
+           discussion thread, down to the chevron. Hover was worse in both
+           directions: nothing hovers on a phone, where this panel renders
+           inline in the tab, and on a desktop a breakdown that appears and
+           vanishes as the pointer crosses the column is hard to read against
+           the expenses beside it.
 
-           The breakdown opens BELOW its row, so the row under the cursor never
-           moves and there is no hover/unhover flicker loop. -->
+           Several may be open at once, as several threads may be, so two
+           people's costs can be compared without re-opening one each time.
+
+           It opens BELOW its row, so the row being clicked never moves. -->
       <div v-for="person in summary.totals" :key="person.userId">
         <div
-          class="tw-flex tw-cursor-pointer tw-items-baseline tw-justify-between tw-gap-2 tw-rounded tw-px-1 tw-py-0.5 tw-text-sm hover:tw-bg-brass/10"
+          class="tw-flex tw-cursor-pointer tw-items-baseline tw-gap-1 tw-rounded tw-px-1 tw-py-0.5 tw-text-sm hover:tw-bg-brass/10"
           :class="isOpen(person) ? 'tw-bg-brass/10' : ''"
-          @mouseenter="open = person.userId"
-          @mouseleave="open = null"
           @click="toggle(person.userId)"
         >
-          <span class="tw-min-w-0 tw-truncate">{{ person.name }}</span>
+          <v-icon x-small class="tw-flex-none tw-text-parchment-dim">
+            {{ isOpen(person) ? "mdi-chevron-down" : "mdi-chevron-right" }}
+          </v-icon>
+          <span class="tw-min-w-0 tw-flex-grow tw-truncate">{{ person.name }}</span>
           <span class="tw-flex-none tw-tabular-nums">
             {{ formatCents(person.paidCents) }}
           </span>
@@ -39,9 +43,7 @@
              the inline display:none v-show sets. See CLAUDE.md. -->
         <div
           v-if="isOpen(person)"
-          class="tw-mb-1 tw-ml-1 tw-border-l tw-border-brass-dim tw-pl-2 tw-text-xs"
-          @mouseenter="open = person.userId"
-          @mouseleave="open = null"
+          class="tw-mb-1 tw-ml-3 tw-border-l tw-border-brass-dim tw-pl-2 tw-text-xs"
         >
           <div class="tw-flex tw-justify-between tw-gap-3 tw-text-parchment-dim">
             <span>Responsible for</span>
@@ -147,11 +149,14 @@ export default {
 
   data: () => ({
     /**
-     * Whose breakdown is showing, by user id. One at a time: this is a glance
-     * at one person's costs, not a table to read all of at once, and in a
-     * narrow column several open at once would push the settlement off screen.
+     * Whose breakdowns are expanded, by user id. An array rather than a single
+     * id, matching how the discussion tracks expanded threads: two people's
+     * costs are often worth having open side by side.
+     *
+     * Starts empty — everything collapsed — so the panel opens as a summary
+     * and only becomes a ledger when asked.
      */
-    open: null,
+    expanded: [],
   }),
 
   computed: {
@@ -169,18 +174,14 @@ export default {
     formatCents,
 
     isOpen(person) {
-      return this.open === person.userId
+      return this.expanded.includes(person.userId)
     },
 
-    /**
-     * Tap to pin a breakdown open, tap again to close.
-     *
-     * On a phone the click is the only way in — there is no hover — and on a
-     * desktop it lets someone hold one open while reading the expenses beside
-     * it, instead of it vanishing the moment the pointer leaves.
-     */
+    /** Click to expand a person's costs, click again to collapse. */
     toggle(userId) {
-      this.open = this.open === userId ? null : userId
+      const i = this.expanded.indexOf(userId)
+      if (i === -1) this.expanded.push(userId)
+      else this.expanded.splice(i, 1)
     },
 
     breakdownFor(userId) {

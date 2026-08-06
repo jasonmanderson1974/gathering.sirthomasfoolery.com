@@ -1350,6 +1350,20 @@ won't-do. See their entries. The sequencing that got there is at the bottom.
       `open-on-hover` binds no click handler, so on a phone (where this panel renders inline and
       nothing hovers) it would have been unreachable. It opens BELOW its row, so the row under the
       cursor never moves and there is no hover/unhover flicker loop, and clicking pins it open.
+    - **2026-08-05, second follow-up (user request):** the panel moved again, out of the page
+      sidebar and into the **content column's right-hand strip**, flush with the right edge of the
+      calendar's own Responses / Options column so it continues straight down from it — the page
+      sidebar had it out at the window edge (1096–1384 at 1400px) while the content ended at 1040.
+      Rendered at `tw-w-72` rather than Responses' own 208px: at 208 the panel truncated names
+      ("Jason Ander…") and wrapped every figure onto two lines, and the right edge is what reads as
+      the alignment. **Known trade-off, accepted by the user:** once a time IS confirmed the
+      calendar collapses and takes Responses with it, so Settle Up and the Gathering/Venue/RSVP
+      panels then sit in different columns.
+    - Also: **per-person totals on the expense list itself** (`personTotals` reused), and the
+      breakdown became **click-to-expand, collapsed by default, several at once** — the discussion
+      thread idiom, chevron included. Hover was worse in both directions: nothing hovers on a phone,
+      and on a desktop a breakdown that vanishes when the pointer leaves is hard to read against the
+      expenses beside it.
     - Three test-harness bugs surfaced and were fixed, none of them app defects: a panel selector
       that matched any element whose text merely *started* with "Settle Up" (so a gathering named
       "Settle Up totals fixture" counted as a second panel); a read-back query keyed on an expense
