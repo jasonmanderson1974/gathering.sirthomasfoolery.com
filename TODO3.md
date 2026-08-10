@@ -4,7 +4,8 @@
 > of this file — nothing in either needs updating again, and the three items still open in
 > TODO2.md Part G are restated below as pointers rather than copied.
 >
-> **Status: nothing queued.** This is a blank slate awaiting the next round of work.
+> **Status: Part J queued (2026-08-10).** A fresh full-codebase review pass — improvements and
+> optimizations only, nothing implemented yet.
 >
 > Context unchanged: self-hosted, invite-only fork for a ~30–40 person club. Reliability and
 > small-club utility over scale. All event access requires sign-in; roles are
@@ -57,9 +58,107 @@ and leave the old entry alone.
 
 ---
 
-## PART J — (empty)
+## PART J — 2026-08-10 review findings (improvements & optimizations)
 
-Nothing queued. New work goes here.
+From a full review pass at `38b613f7`. The codebase has been through two prior waves (A–E, H), so
+these are what's left: mostly performance and robustness, no known user-facing breakage except J2.
+Nothing here is implemented — each item waits for a go-ahead.
+
+### J1 — `getEvent` looks up users one at a time · **P1 · S**
+
+`routes/events.go:521` — the "populate user fields" loop calls `db.GetUserById(userId)` once per
+responder, on the hottest route in the app (every event page load). With a full-club gathering
+that's ~30–40 sequential Mongo round-trips before the page can render. `db.GetUsersByIds` already
+exists and is what every newer surface (display names, mentions, expenses) uses — collect the
+responder ids first, do one `$in` query, then walk the map. Bonus: `resolveEventDisplayNames`
+(called later in the same handler, `events.go:617`) does its own batched lookup over a heavily
+overlapping id set; folding the two into one query is fair game while in there. The guest/deleted-
+user branches in the loop must survive exactly as they are — that logic is subtle (guest keys
+switch from id to name) and tested behavior.
+
+### J2 — a duplicated event inherits last time's RSVPs, poll votes and lists · **P2 · S**
+
+`routes/events.go:846` — `duplicateEvent` takes the event document as read, swaps `Id`/`Name`/
+`NumResponses`, and inserts it. But `Rsvps`, `Polls` (votes included) and `Lists` (items included)
+are all embedded in that document now (`models/event.go:364–371`), so the copy starts life with
+everyone's old RSVPs, their poll votes, and the old menu — presented as if they answered for the
+new gathering. Only availability copying is opt-in; the rest rides along invisibly. Clear all
+three on the duplicate (or make each opt-in like availability). While in there: the
+`copyAvailability` branch inserts responses in a per-document `InsertOne` loop
+(`events.go:856–866`) — one `InsertMany` does it.
+
+### J3 — every event page load pays a dead `/ids` round-trip · **P2 · S**
+
+`views/Event.vue:1003–1019` (`refreshEvent`) — the handler awaits `GET /events/:id/ids`, stores
+the result in `resolvedLongId`, then discards it (`void resolvedLongId`, a leftover from the
+guestName-era code the E-wave removed) and fetches the event by the original id anyway. Because
+the two awaits are sequential, the discarded call adds a full round-trip of latency to the
+page's critical path — first paint of the grid waits on it. Delete the `/ids` fetch; nothing
+consumes it. (`getEventIds` itself stays — the router redirect still uses it.)
+
+### J4 — hashed frontend assets are served with no cache headers · **P2 · S**
+
+`main.go:173–186` — every file in `frontend/dist` is registered via `router.StaticFile` with no
+`Cache-Control`, so browsers revalidate each bundle on every visit and the Cloudflare edge is left
+to guess. Vue CLI content-hashes its filenames (`app.[hash].js`), which is precisely the case for
+`Cache-Control: public, max-age=31536000, immutable` — a returning member's load drops to just
+`index.html` (already `no-cache` via the NoRoute handler, `main.go:316`, so deploys still
+propagate instantly). Gate the header on the path carrying a content hash (`/js/`, `/css/`,
+hashed `img/` names) rather than blanket-applying it — `favicon.ico` and friends aren't hashed.
+
+### J5 — a non-`error` panic in a calendar provider kills the whole server · **P2 · S**
+
+`services/calendar/calendar.go:21,41` — both async helpers recover with `c <- …{Error:
+err.(error)}`. If any provider code panics with a non-error value (`panic("boom")`, an int — and
+these are goroutines wrapping three external APIs plus a CalDAV library), the type assertion
+itself panics inside the deferred function, the recovery is lost, and the unrecovered goroutine
+panic takes down the process. Replace with `fmt.Errorf("%v", r)` (and recover into a plain
+`interface{}` first). Two-line fix, removes a latent crash-on-weird-input in the one subsystem
+that talks to the most third-party code.
+
+### J6 — the dashboard ships every event's full embedded document · **P2 · S/M**
+
+`routes/user.go:441` (`getEvents`) — the query returns whole event documents: embedded `rsvps`,
+`polls`, `lists` (items and all), `dates`, `remindees`, for every event the member ever touched,
+with no projection and no pagination. The dashboard renders a name, a date range and a folder.
+Payload grows with club history and every F-track feature made each document fatter; it also
+leaks data the dashboard has no business holding client-side (other people's RSVP emails are
+stripped only by `getEvent`'s per-event logic, not here — worth confirming what `remindees`
+serializes on this path while fixing it). Add a `Find` projection down to the fields the
+dashboard and folder logic actually use.
+
+### J7 — DB accessors that report an outage as "not found" · **P3 · S**
+
+`db/expenses.go:70` (`GetExpenseById`) — any `Decode` failure returns `nil, nil`, so a Mongo
+outage mid-request answers 404 `expense-not-found` instead of 500, and the comment says
+`GetCommentById` set the pattern (same shape in `db/comments.go`). A malformed id as "not found"
+is right; a connection error is not. Distinguish `mongo.ErrNoDocuments` from everything else and
+return real errors — the route layers already have the 500 branch wired for it.
+
+### J8 — disabled calendars are still fetched from the providers · **P3 · S**
+
+`services/calendar/calendar.go:142` — after the calendar list resolves, events are fetched for
+*every* sub-calendar, including those the member toggled off (`SubCalendar.Enabled` false) and
+accounts toggled off wholesale (`CalendarAccount.Enabled`). Each is a live round-trip to
+Google/Microsoft/CalDAV. Before skipping them, check what the frontend expects: if toggling a
+calendar on merely re-filters client-side (instant today), skipping the fetch changes that to a
+refetch — acceptable, but a product call to make knowingly, not a silent optimization.
+
+### J9 — CLAUDE.md still says date math uses three libraries · **P3 · S**
+
+`CLAUDE.md` (frontend utils bullet) claims `date_utils.js` "uses `dayjs`/`moment`/`spacetime`".
+`moment` and `spacetime` are gone — not in `frontend/package.json`, not imported anywhere;
+`date_utils.js` is dayjs-only. One-line doc fix; flagged because the 2026-08-10 doc audit
+(`3972f71e`) missed it, and a stale claim in CLAUDE.md steers every future session.
+
+### J10 — an expense accepts any date a client sends · **P3 · S**
+
+`routes/expenses.go:380–384` — `payload.Date` is trusted verbatim (unix ms, unbounded). The
+ledger sorts by date descending (`db/expenses.go:48`), so a hand-rolled client can stamp an
+expense with year 9999 and pin it above every real row forever, or go negative and bury it. The
+official client always sends a sane value; clamp server-side anyway (say, within a year around
+now) to the same standard the amount cap already sets — "a guard against nonsense, not a
+business rule".
 
 ---
 
