@@ -1,8 +1,9 @@
 # Timeful / The Fellowship — Backlog 3 (active)
 
 > Opened **2026-08-10**, at `be30197d`. `TODO.md` and `TODO2.md` are both **closed archives** as
-> of this file — nothing in either needs updating again, and the three items still open in
-> TODO2.md Part G are restated below as pointers rather than copied.
+> of this file — nothing in either needs updating again. The three items that were still open in
+> TODO2.md Part G are restated below as pointers rather than copied, and all three are now closed
+> won't-do; their `TODO2.md` entries were deliberately left untouched.
 >
 > **Status: Part J complete (2026-08-10), no loose ends.** A fresh full-codebase review pass —
 > improvements and optimizations only. **J1–J11 all shipped**, and **J8's browser check has now been
@@ -12,9 +13,17 @@
 > pass, because all three prior waves audited *our* code and nobody had ever audited what we depend
 > on. **Nothing in Part J is open.**
 >
-> Still open beyond Part J: the three inherited `P3` items below (`TODO2.md` G2 and G4, plus what
-> remains of G3), all parked by the user. **G3's cheap loose end is now closed as J11** — the rest of
-> G3 (web push itself) stays parked.
+> **The backlog is empty.** The three inherited `P3` items (`TODO2.md` G2, G3, G4) were **closed
+> won't-do on 2026-08-10** by user decision — see the section below for the reasoning, which is
+> what a future review pass needs to read before re-filing any of them. Nothing else is open in any
+> of the three backlog files.
+>
+> **The one thing not on any list**, because it is a decision rather than a task: **Vue 2 is EOL.**
+> It carries an unfixable ReDoS (no 2.x release will ever fix it — see J12), it will receive no
+> further security fixes, and Vuetify 2 and Vuex 3 are pinned behind it. `npm audit fix --force`
+> "resolves" this by installing Vue 3 and breaking the app. A migration is a project and may well
+> not be worth it for a ~30–40 person club; it is logged here so the choice stays deliberate
+> instead of drifting.
 >
 > Context unchanged: self-hosted, invite-only fork for a ~30–40 person club. Reliability and
 > small-club utility over scale. All event access requires sign-in; roles are
@@ -45,24 +54,33 @@ the plan didn't predict. Read them before re-opening anything — several entrie
 that were described wrongly by the finding that raised them, and the corrections are in the
 entries, not in the code.
 
-## Inherited, still open — all `P3`, all parked by the user
+## Inherited — CLOSED 2026-08-10, won't do
 
-Carried across as pointers only; the detail stays in `TODO2.md` and is still accurate. None of
-these has a known failure mode in production. If one is picked up, give it a fresh `J*` ID here
-and leave the old entry alone.
+**All three were closed by user decision on 2026-08-10: not worth the effort.** They had been
+parked for weeks rather than scheduled, which is the same answer with more bookkeeping. This is a
+decision, not an oversight — recorded here because each one is the kind of thing a future
+full-codebase review will happily rediscover and file as new.
 
-- **`TODO2.md` G2 — split `date_utils.js`** (`L`). The only part of G2 left; everything else
-  (the eleven dead exports, `newEventFormMixin`, the `ScheduleOverlap` computed block) shipped
-  2026-07-29/30. 946 lines / 32 exports. The entry's caveat stands: verify a split with the app
-  running, not blind — the earlier passes found three live bugs precisely because they were
-  exercised.
-- **`TODO2.md` G3 — web push** (`M`). Deferred pending a value reassessment; reintroducing a
-  service worker reverses a deliberate removal (`f857320`) and email reminders already cover iOS.
-  Its `kill-sw.js` / stale-eslint-env loose end is **done — see J11 below**; only web push itself is
-  still parked.
-- **`TODO2.md` G4 — rename the `schej-it` Mongo database** (`L`). A data migration (dump →
-  restore under the new name → cutover in a deploy window), human-run. Zero user-facing benefit,
-  which is why it's parked.
+**If a later pass re-raises any of these, it is not a new finding.** Re-opening one means arguing
+against the reasoning below, not merely noticing the code again. Give it a fresh `J*` ID if that
+argument succeeds; the `TODO2.md` entries keep the full technical detail and stay untouched.
+
+- **`TODO2.md` G2 — split `date_utils.js`** (`L`) — **won't do.** 946 lines / 32 exports, and the
+  rest of G2 (eleven dead exports, `newEventFormMixin`, the `ScheduleOverlap` computed block) already
+  shipped 2026-07-29/30, so what remains is pure file-shuffling with no user-visible payoff. The
+  original entry's caveat is what kills it: a split has to be verified with the app running, because
+  the earlier passes found three live bugs precisely by exercising them. That is real risk and real
+  effort against zero benefit. A large file is not by itself a defect.
+- **`TODO2.md` G3 — web push** (`M`) — **won't do.** Email reminders already cover iOS, so the
+  feature's value was never established, and it reverses the deliberate PWA removal in `f857320`.
+  J11 raised the cost of getting it wrong: because the SPA fallback serves `index.html` for
+  `/service-worker.js`, a mis-registered worker **cannot 404 itself out of existence** — it fails its
+  update check on the MIME type and pins that client to a cached build indefinitely. Only revisit if
+  the push notifications are actually wanted; the kill-switch lesson in `CLAUDE.md` stays regardless.
+- **`TODO2.md` G4 — rename the `schej-it` Mongo database** (`L`) — **won't do.** Zero user-facing
+  benefit, and since the old host was decommissioned (2026-08-05) the backup chain is the only safety
+  net under a human-run dump→restore→cutover. The name is internal and already documented as
+  intentional in `CLAUDE.md` (with `SCHEJ_EMAIL_ADDRESS`, TODO D0/D2). Risk without upside.
 
 ---
 
