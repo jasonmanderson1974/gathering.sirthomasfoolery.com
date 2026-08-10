@@ -1,11 +1,35 @@
 package calendar
 
 import (
+	"fmt"
+	"runtime/debug"
 	"time"
 
+	"sirtom/server/logger"
 	"sirtom/server/models"
 	"sirtom/server/services/auth"
 )
+
+// recoveredError turns whatever came out of recover() into an error (J5).
+//
+// These helpers run as goroutines around three external calendar APIs plus a
+// CalDAV library, and the recovery used to be a bare `err.(error)` type
+// assertion. A provider panicking with anything that isn't an error — a string,
+// an int, the runtime's own non-error values — made the assertion itself panic
+// *inside the deferred function*, which loses the recovery entirely: an
+// unrecovered panic in a goroutine takes down the whole process. So the one
+// place meant to contain provider misbehaviour was the place that escalated it.
+//
+// The panic is logged with its stack here because the caller only ever sees it
+// as a per-account error string on the calendar list — without this it would
+// vanish with no way to find the provider that caused it.
+func recoveredError(r interface{}) error {
+	logger.StdErr.Printf("recovered panic in calendar provider: %v\n%s", r, debug.Stack())
+	if err, ok := r.(error); ok {
+		return err
+	}
+	return fmt.Errorf("calendar provider panicked: %v", r)
+}
 
 type GetCalendarListData struct {
 	CalendarList       map[string]models.SubCalendar `json:"calendarList"`
@@ -15,10 +39,13 @@ type GetCalendarListData struct {
 
 // Calls GetCalendarList but broadcasts the result to channel
 func GetCalendarListAsync(calendarAccountKey string, calendarProvider *CalendarProvider, c chan GetCalendarListData) {
-	// Recover from panics
+	// Recover from panics. The account key is set here too: the caller keys its
+	// results map by it, so a panic that reported an empty key filed the error
+	// against a phantom account and left the real one looking like it returned
+	// no calendars at all.
 	defer func() {
-		if err := recover(); err != nil {
-			c <- GetCalendarListData{Error: err.(error)}
+		if r := recover(); r != nil {
+			c <- GetCalendarListData{CalendarAccountKey: calendarAccountKey, Error: recoveredError(r)}
 		}
 	}()
 
@@ -35,10 +62,10 @@ type GetCalendarEventsData struct {
 
 // Get the user's list of calendar events for the given calendar
 func GetCalendarEventsAsync(calendarAccountKey string, calendarProvider *CalendarProvider, calendarId string, timeMin time.Time, timeMax time.Time, c chan GetCalendarEventsData) {
-	// Recover from panics
+	// Recover from panics (see GetCalendarListAsync on the account key).
 	defer func() {
-		if err := recover(); err != nil {
-			c <- GetCalendarEventsData{Error: err.(error)}
+		if r := recover(); r != nil {
+			c <- GetCalendarEventsData{CalendarAccountKey: calendarAccountKey, Error: recoveredError(r)}
 		}
 	}()
 

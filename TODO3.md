@@ -5,7 +5,7 @@
 > TODO2.md Part G are restated below as pointers rather than copied.
 >
 > **Status: Part J in progress (2026-08-10).** A fresh full-codebase review pass — improvements and
-> optimizations only. **J1–J4 shipped**; J5–J10 still queued, each waiting for a go-ahead.
+> optimizations only. **J1–J7 shipped**; **J8, J9 and J10 remain**, each waiting for a go-ahead.
 >
 > Context unchanged: self-hosted, invite-only fork for a ~30–40 person club. Reliability and
 > small-club utility over scale. All event access requires sign-in; roles are
@@ -62,7 +62,7 @@ and leave the old entry alone.
 
 From a full review pass at `38b613f7`. The codebase has been through two prior waves (A–E, H), so
 these are what's left: mostly performance and robustness, no known user-facing breakage except J2.
-J1–J4 are done; everything from J5 down waits for a go-ahead.
+J1–J7 are done; J8–J10 wait for a go-ahead.
 
 ### J1 — `getEvent` looks up users one at a time · **P1 · S** — DONE 2026-08-10
 
@@ -187,7 +187,7 @@ locally-built filename returns `200` with `Content-Type: text/html` — the SPA 
 `index.html`, which looks like the header simply failed to apply. Read the filenames out of the
 container before testing.
 
-### J5 — a non-`error` panic in a calendar provider kills the whole server · **P2 · S**
+### J5 — a non-`error` panic in a calendar provider kills the whole server · **P2 · S** — DONE 2026-08-10
 
 `services/calendar/calendar.go:21,41` — both async helpers recover with `c <- …{Error:
 err.(error)}`. If any provider code panics with a non-error value (`panic("boom")`, an int — and
@@ -197,7 +197,24 @@ panic takes down the process. Replace with `fmt.Errorf("%v", r)` (and recover in
 `interface{}` first). Two-line fix, removes a latent crash-on-weird-input in the one subsystem
 that talks to the most third-party code.
 
-### J6 — the dashboard ships every event's full embedded document · **P2 · S/M**
+**Found on implementation.** Done via a shared `recoveredError(r interface{}) error` helper rather
+than inline, because there are two identical sites and a third would be easy to get wrong.
+
+**A second defect at the same two lines, not in the finding: neither panic path set
+`CalendarAccountKey`.** `GetUsersCalendarEvents` keys its results map by exactly that field, so a
+recovered panic filed the error against a phantom `""` account and left the real account looking
+like it had simply returned no calendars — the error was recovered and then lost. Both paths set it
+now.
+
+The helper also logs the panic value with `debug.Stack()`. Without that the panic is invisible: the
+caller only ever renders it as a per-account error string on the calendar list, with nothing
+naming the provider that blew up.
+
+Covered by `services/calendar/panic_recovery_test.go` (string, int and error panics, both
+helpers). Note the test's real assertion is structural — a panic escaping these goroutines would
+take the *test binary* down, so the suite completing at all is the regression signal.
+
+### J6 — the dashboard ships every event's full embedded document · **P2 · S/M** — DONE 2026-08-10
 
 `routes/user.go:441` (`getEvents`) — the query returns whole event documents: embedded `rsvps`,
 `polls`, `lists` (items and all), `dates`, `remindees`, for every event the member ever touched,
@@ -208,13 +225,67 @@ stripped only by `getEvent`'s per-event logic, not here — worth confirming wha
 serializes on this path while fixing it). Add a `Find` projection down to the fields the
 dashboard and folder logic actually use.
 
-### J7 — DB accessors that report an outage as "not found" · **P3 · S**
+**Found on implementation. The disclosure suspicion was correct, and worse than "worth
+confirming".** Both leaks were reproduced against the running server before the fix: an event
+carrying one RSVP and one remindee shipped `"rsvps":{"Zoe":{...,"email":"zoe@example.com"}}` and
+`"remindees":[{"email":"invitee@example.com"}]` to the dashboard. So every member's dashboard load
+handed them other people's RSVP email addresses *and* the owner's full invite roll — the two things
+`getEvent` takes specific care to strip and hide, bypassed simply by asking a different endpoint.
+
+The projection is the union of two consumers, and the comment in `routes/user.go` names both so the
+next person to add a dashboard field knows where to add it (it would otherwise read as `undefined`
+with nothing failing):
+
+- **client** — `EventItem.vue`: `_id`, `shortId`, `ownerId`, `name`, `isArchived`, `type`,
+  `daysOnly`, `numResponses`; plus `dates`, which `getDateRangeStringForEvent` needs.
+- **server** — `AssignUnfiledEventsToDefaults`, which files unfiled events by `Id` and `OwnerId`.
+
+**Two dead things found while auditing the consumers, deliberately left alone** (neither is a bug,
+both are cleanup someone might otherwise "fix" into existence):
+
+- `event.hasResponded` **does not exist on the server at all** — no field on `models.Event`, nothing
+  that sets it. `EventItem.vue:231` and `Home.vue:86` both read `event.hasResponded ?? false`, so
+  the dashboard's responded indicator is permanently false. Correctly absent from the projection;
+  adding it there would be cargo-culting a field with no source.
+- `Event.vue:504` maps `events` from the store and never reads it.
+
+Verified live, not just in tests: with the projection in place the same seeded event returns all
+nine dashboard fields intact and `rsvps`/`polls`/`lists`/`remindees` all `null`. Note they
+serialize as `null` rather than vanishing — `models.Event`'s json tags carry no `omitempty` — so
+tests must assert null-or-absent, not key absence. `routes/user_events_projection_db_test.go`
+asserts both directions and fails without the projection.
+
+### J7 — DB accessors that report an outage as "not found" · **P3 · S** — DONE 2026-08-10
 
 `db/expenses.go:70` (`GetExpenseById`) — any `Decode` failure returns `nil, nil`, so a Mongo
 outage mid-request answers 404 `expense-not-found` instead of 500, and the comment says
 `GetCommentById` set the pattern (same shape in `db/comments.go`). A malformed id as "not found"
 is right; a connection error is not. Distinguish `mongo.ErrNoDocuments` from everything else and
 return real errors — the route layers already have the 500 branch wired for it.
+
+**Found on implementation.** Both accessors fixed. The claim that the route layers already handle
+the error was checked rather than taken on faith — all five call sites do
+(`routes/expenses.go:130`, `routes/comments.go:152/196/318`, and `mention_emails.go:271`, which
+withholds notification emails on either an error or a nil).
+
+The contract now, pinned in `db/not_found_vs_error_test.go` in both directions:
+
+| case | returns |
+|---|---|
+| absent row | `(nil, nil)` — a real 404 |
+| malformatted id | `(nil, nil)` — also a real 404 |
+| undecodable row / Mongo failure | `(nil, error)` — a 500 |
+
+**The sharpest consequence was in `deleteComment`, not the 404s.** `routes/comments.go:318` treats
+`comment == nil` as "already gone" and answers `200`, which is right for an idempotent delete and
+exactly wrong when nothing was actually read: while Mongo was unreachable, the client was told the
+comment had been deleted. That path now 500s.
+
+Testing note for anyone extending this: a real outage can't be staged against the shared test Mongo,
+so the tests use the other member of the same error class — a stored document whose field types
+don't match the model (`userId` as an int, `description` as a sub-document). That fails `Decode`
+with a type error rather than `ErrNoDocuments`, which is precisely the distinction the fix
+introduced; before it, the two were indistinguishable.
 
 ### J8 — disabled calendars are still fetched from the providers · **P3 · S**
 

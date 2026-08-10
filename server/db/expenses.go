@@ -2,9 +2,11 @@ package db
 
 import (
 	"context"
+	"errors"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"sirtom/server/logger"
 	"sirtom/server/models"
@@ -67,6 +69,13 @@ func GetExpenses(eventId string) ([]models.Expense, error) {
 // GetExpenseById returns a single live expense, or nil if it doesn't exist or
 // has been deleted. A malformatted id is "not found", not an error — the same
 // contract GetCommentById offers.
+//
+// A Mongo outage is NOT "not found" (J7). Every Decode failure used to collapse
+// to `nil, nil`, so a connection error mid-request surfaced as a 404
+// `expense-not-found` — telling a member their expense had been deleted when the
+// database was merely unreachable. Only mongo.ErrNoDocuments means absent;
+// anything else is a real error, and the route layer already has the 500 branch
+// wired for it.
 func GetExpenseById(expenseId string) (*models.Expense, error) {
 	objectId, err := primitive.ObjectIDFromHex(expenseId)
 	if err != nil {
@@ -78,7 +87,11 @@ func GetExpenseById(expenseId string) (*models.Expense, error) {
 		context.Background(),
 		activeExpenses(bson.M{"_id": objectId}),
 	).Decode(&expense); err != nil {
-		return nil, nil
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, nil
+		}
+		logger.StdErr.Println(err)
+		return nil, err
 	}
 	return &expense, nil
 }

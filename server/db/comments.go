@@ -2,9 +2,11 @@ package db
 
 import (
 	"context"
+	"errors"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"sirtom/server/logger"
 	"sirtom/server/models"
@@ -37,7 +39,8 @@ func GetComments(eventId string) ([]models.Comment, error) {
 	return comments, nil
 }
 
-// GetCommentById returns a single comment, or nil if it doesn't exist.
+// GetCommentById returns a single comment, or nil if it doesn't exist. A
+// malformatted id is "not found"; a Mongo failure is a real error (J7).
 func GetCommentById(commentId string) (*models.Comment, error) {
 	objectId, err := primitive.ObjectIDFromHex(commentId)
 	if err != nil {
@@ -46,7 +49,15 @@ func GetCommentById(commentId string) (*models.Comment, error) {
 	result := CommentsCollection.FindOne(context.Background(), bson.M{"_id": objectId})
 	var comment models.Comment
 	if err := result.Decode(&comment); err != nil {
-		return nil, nil // not found
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, nil // not found
+		}
+		// An outage is not a missing comment (J7). Collapsing every Decode
+		// failure to "not found" made deleteComment answer 200 "already gone"
+		// while Mongo was down, which is the one wrong answer for an idempotent
+		// delete: it tells the client the row is gone when nothing was read.
+		logger.StdErr.Println(err)
+		return nil, err
 	}
 	return &comment, nil
 }

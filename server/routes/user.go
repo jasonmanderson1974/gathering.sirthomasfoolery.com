@@ -442,9 +442,39 @@ func getEvents(c *gin.Context) {
 	user := utils.GetAuthUser(c)
 	userId := user.Id
 
-	// Get the events associated with the current user
+	// Get the events associated with the current user.
+	//
+	// Projected down to what the dashboard actually renders (J6). This used to
+	// return whole event documents — every embedded rsvps map, every poll with
+	// its votes, every list with its items, plus remindees — for every event the
+	// member had ever touched, unpaginated. The payload grew with club history
+	// and with every F-track feature that made the document fatter, and it handed
+	// the client data the dashboard has no business holding: getEvent strips
+	// other people's RSVP emails and hides remindees from non-owners, but that
+	// logic is per-event and never ran on this path, so the roll of invitee
+	// addresses shipped to anyone who loaded the dashboard.
+	//
+	// The field list is exactly the union of two consumers, both of which must be
+	// checked before trimming it further:
+	//   - the client: EventItem.vue (_id, shortId, ownerId, name, isArchived,
+	//     type, daysOnly, numResponses) and getDateRangeStringForEvent (dates);
+	//   - the server: AssignUnfiledEventsToDefaults below, which files unfiled
+	//     events by comparing Id and OwnerId.
+	// Adding a field to the dashboard means adding it here too — it will read as
+	// undefined otherwise, with nothing failing loudly.
 	events := make([]models.Event, 0)
-	opts := options.Find().SetSort(bson.M{"_id": -1})
+	opts := options.Find().
+		SetSort(bson.M{"_id": -1}).
+		SetProjection(bson.M{
+			"shortId":      1,
+			"ownerId":      1,
+			"name":         1,
+			"isArchived":   1,
+			"dates":        1,
+			"type":         1,
+			"daysOnly":     1,
+			"numResponses": 1,
+		})
 
 	// Get all the event ids that the user has responded to
 	cursor, err := db.EventResponsesCollection.Find(context.Background(), bson.M{"userId": userId.Hex()})
