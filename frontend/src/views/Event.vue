@@ -502,7 +502,7 @@ export default {
   },
 
   computed: {
-    ...mapState(["authUser", "events"]),
+    ...mapState(["authUser"]),
     ...mapGetters(["canInvite", "canManageUsers"]),
     /**
      * A computed, not an inline `event.lists ?? []` in the template: an inline

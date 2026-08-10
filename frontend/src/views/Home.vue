@@ -82,9 +82,6 @@ export default {
   methods: {
     ...mapMutations(["setAuthUser", "setNewDialogOptions"]),
     ...mapActions(["getEvents", "createNew"]),
-    userRespondedToEvent(event) {
-      return event.hasResponded ?? false
-    },
     _createNew() {
       this.createNew()
     },

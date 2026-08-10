@@ -7,9 +7,10 @@
 > **Status: Part J complete (2026-08-10), no loose ends.** A fresh full-codebase review pass —
 > improvements and optimizations only. **J1–J11 all shipped**, and **J8's browser check has now been
 > done against the deployed build** (2026-08-10) — the toggle→refetch path works, so nothing in Part
-> J is left pending a deploy. **J12 (dependency vulnerabilities) was added and shipped later the
-> same day** — it came out of a `govulncheck`/`npm audit` sweep, not the review pass, because all
-> three prior waves audited *our* code and nobody had ever audited what we depend on.
+> J is left pending a deploy. **J12 (dependency vulnerabilities) and J13 (dead code) were added and
+> shipped later the same day** — J12 came out of a `govulncheck`/`npm audit` sweep, not the review
+> pass, because all three prior waves audited *our* code and nobody had ever audited what we depend
+> on. **Nothing in Part J is open.**
 >
 > Still open beyond Part J: the three inherited `P3` items below (`TODO2.md` G2 and G4, plus what
 > remains of G3), all parked by the user. **G3's cheap loose end is now closed as J11** — the rest of
@@ -496,7 +497,7 @@ ranking is misleading:
   `npm audit fix --force` in `frontend/`.** A Vue 3 migration is a project of its own; if it is ever
   wanted it needs a fresh item and a plan, not a security bump.
 
-### J13 — dead code left behind by J3 and J6 · **P3 · S** — OPEN
+### J13 — dead code left behind by J3 and J6 · **P3 · S** — DONE 2026-08-10
 
 Small, safe, and already scoped — split out of J12's sweep rather than done inside it, to keep a
 security bump free of unrelated edits. All four were found by following J6's "two dead things"
@@ -512,6 +513,58 @@ note and re-checking it:
   J3. Keep or drop is a judgement call — it is auth-gated and covered by
   `routes/event_auth_gate_test.go`, so it is not a liability; it is just surface. Decide
   deliberately rather than deleting it by reflex.
+
+**Found on implementation.**
+
+**`userHasResponded` is two different things sharing a name, and that is the whole danger of this
+item.** A repo-wide grep returns ~20 hits and they look like one heavily-used property, which
+argues against deleting anything. They are unrelated:
+
+| | reads | status |
+|---|---|---|
+| `EventItem.vue:230` | `event.hasResponded` — **a field the server never sets** | dead, deleted |
+| `Event.vue:669` | `authUser._id in event.responses` | **live**, drives the availability button |
+| `availabilityMixin.js:88` | `authUser._id in parsedResponses` | **live**, drives `ScheduleOverlap` |
+
+Anyone doing this by grep-and-delete either removes the working ones or, seeing the traffic on the
+name, concludes the item is wrong and closes it. Match on **what the computed reads**, not its name.
+
+**The `/ids` endpoint was kept.** It is published Swagger surface, auth-gated and tested, and this
+app documents a third-party client API (`PLUGIN_API_README.md`) — so "nothing in `frontend/src`
+calls it" is *not* "nothing calls it", and there is no way to audit unofficial clients of a
+self-hosted app. Deleting a documented contract to save ~15 lines is the wrong trade. A comment now
+says so at the handler, because previously only `Event.vue` recorded it and the note a server-side
+reader needs was on the wrong side of the codebase.
+
+**That comment exposed a swag trap worth knowing.** Swag treats a non-annotation line in a
+function's doc comment as the endpoint's **description**, so an internal note written directly above
+`@Summary` gets published into the public API docs. It is kept as a separate comment group with a
+blank line before `@Summary`. Verified rather than assumed: `swag init --parseDependency
+--parseInternal` regenerates `docs/` **byte-identically** with the comment in place.
+
+**Browser-verified** (`/root/tools/browser/verify_j13_local.js`, screenshots `j13_home.png` /
+`j13_event.png`), because deleting a computed that a template still referenced is a Vue *runtime*
+warning — lint, unit tests and the build pass either way, which is exactly the failure class the
+"look at the page" rule exists for. Dashboard cards and the event page both render with **zero
+console errors or Vue warnings**, and the event page still shows "Mark availability" — the string
+produced by the *live* `userHasResponded` ternary, which is the direct evidence the surviving twin
+still works.
+
+**Two local-harness gotchas, both of which cost a cycle:**
+
+- **Rebuilding the dev stack without the secrets overlay silently breaks OTP login.**
+  `docker compose -f compose.dev.yaml up -d --build` drops the untracked
+  `compose.dev.secrets.yaml`, and the symptom is the sign-in page never advancing to the OTP field
+  — it reads as a frontend regression from the change under test. Always pass **both** `-f` files.
+- **The local allowlist is not the prod one.** `login.js` defaulted to
+  `jason@sirthomasfoolery.com`, which is not on the local roll; the invite gate refuses it at the
+  email step, which again looks like the OTP screen failing rather than a rejected address. The
+  local superAdmin is `jason@jasonmanderson.com`. Default fixed in `login.js`, with the mongosh
+  one-liner to list the roll.
+
+**Reconfirmed the golangci-lint no-op** (already in `CLAUDE.md`, worth restating because it bit
+again): run from the repo root instead of `server/`, it prints a typechecking error **and then
+`0 issues`**, so a green-looking line can mean it linted nothing. Read the line above the count.
 
 ---
 

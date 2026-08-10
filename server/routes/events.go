@@ -457,6 +457,17 @@ func editEvent(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+// J13: the official client has no caller for this. Event.vue used to await it
+// and discard the result, which J3 removed. It is kept deliberately rather than
+// deleted: it is published Swagger surface, auth-gated and covered by
+// routes/event_auth_gate_test.go, and this app documents a third-party client
+// API (PLUGIN_API_README.md), so "nothing in frontend/src calls it" is not the
+// same as "nothing calls it". Don't go hunting for the caller — there isn't one.
+//
+// Kept as its own comment group, separated by the blank line below: swag treats
+// a non-annotation line in the doc comment as the endpoint's description, so
+// writing this immediately above @Summary would publish it in the API docs.
+
 // @Summary Resolves an event identifier to both short and long IDs
 // @Tags events
 // @Produce json

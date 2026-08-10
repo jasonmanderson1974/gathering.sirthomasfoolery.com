@@ -227,9 +227,6 @@ export default {
     typeText() {
       return "event"
     },
-    userHasResponded() {
-      return this.event.hasResponded ?? false
-    },
   },
 
   methods: {
