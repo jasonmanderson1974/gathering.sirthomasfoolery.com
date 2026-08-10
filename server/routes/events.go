@@ -517,12 +517,29 @@ func getEvent(c *gin.Context) {
 	// Convert responses to map format for JSON response
 	responsesMap := getResponsesMap(eventResponses)
 
-	// Populate user fields
+	// Populate user fields.
+	//
+	// One $in for every responder rather than a GetUserById per row (J1): this is
+	// the hottest route in the app and a full-club gathering was paying ~30-40
+	// sequential round-trips before the page could render. Keys that aren't valid
+	// ObjectIDs are legacy guest rows keyed by name — they were never going to
+	// match an account, so they're left out of the query and fall through to the
+	// guest branch below exactly as they did when GetUserById returned nil for a
+	// malformed id.
+	responderIds := make([]primitive.ObjectID, 0, len(responsesMap))
+	for userId := range responsesMap {
+		if objectId, err := primitive.ObjectIDFromHex(userId); err == nil {
+			responderIds = append(responderIds, objectId)
+		}
+	}
+	responders := db.GetUsersByIds(responderIds)
+
 	for userId, response := range responsesMap {
-		user, userErr := db.GetUserById(userId)
-		if userErr != nil {
-			logger.StdErr.Println(userErr)
-			continue
+		var user *models.User
+		if found, ok := responders[userId]; ok {
+			// Copy: the loop nils out CalendarAccounts on it just below, and the
+			// map's value must not be mutated for any other holder.
+			user = &found
 		}
 		if user == nil {
 			if len(response.Name) == 0 {
@@ -847,22 +864,54 @@ func duplicateEvent(c *gin.Context) {
 	event.Name = payload.EventName
 	numResponses := 0
 	event.NumResponses = &numResponses
+
+	// Everything anyone answered LAST time has to go (J2). Rsvps, Polls and
+	// Lists are embedded in the event document, so taking it as read carried
+	// every RSVP, every poll vote and the whole old menu onto the new gathering
+	// — rendered exactly as if those people had answered for this one. Only
+	// availability is opt-in; the rest was riding along invisibly.
+	//
+	// The owner's scaffolding survives, only the participation is cleared: a
+	// poll keeps its title and options but loses its votes, a list keeps its
+	// name and kind but loses its items. Re-using the structure is the point of
+	// duplicating an event; inheriting the answers is the bug.
+	event.Rsvps = nil
+	for i := range event.Polls {
+		for j := range event.Polls[i].Options {
+			event.Polls[i].Options[j].Votes = nil
+		}
+	}
+	for i := range event.Lists {
+		event.Lists[i].Items = nil
+	}
+
+	// Per-gathering lifecycle state, same problem: SentAt would suppress the new
+	// gathering's reminder email because the ORIGINAL's already went out, and an
+	// inherited Chronicled would stop the scheduler ever capturing this one.
+	if event.GatheringReminder != nil {
+		event.GatheringReminder.SentAt = nil
+	}
+	event.Chronicled = false
+
 	if *payload.CopyAvailability {
 		eventResponses, eventResponsesErr := db.GetEventResponses(eventId)
 		if eventResponsesErr != nil {
 			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 			return
 		}
-		for _, eventResponse := range eventResponses {
-			eventResponse.Id = primitive.NewObjectID()
-			eventResponse.EventId = event.Id
-			_, err := db.EventResponsesCollection.InsertOne(context.Background(), eventResponse)
-			if err != nil {
+		if len(eventResponses) > 0 {
+			docs := make([]interface{}, 0, len(eventResponses))
+			for _, eventResponse := range eventResponses {
+				eventResponse.Id = primitive.NewObjectID()
+				eventResponse.EventId = event.Id
+				docs = append(docs, eventResponse)
+			}
+			if _, err := db.EventResponsesCollection.InsertMany(context.Background(), docs); err != nil {
 				logger.StdErr.Println(err)
 				c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 				return
 			}
-			*event.NumResponses++
+			*event.NumResponses = len(docs)
 		}
 	}
 

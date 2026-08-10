@@ -1003,19 +1003,15 @@ export default {
     async refreshEvent() {
       let sanitizedId = this.eventId.replaceAll(".", "")
 
-      let resolvedLongId = this.event?._id || ""
-      try {
-        const ids = await get(`/events/${sanitizedId}/ids`)
-        if (ids?.longId) {
-          resolvedLongId = ids.longId
-        }
-      } catch (err) {
-        // If ID resolution fails, continue with existing fallback behavior.
-      }
       // The ?guestName= identity parameter is gone: the server keys the viewer
       // off the session now, and honouring a name from the client was how blind
       // availability could be read incognito.
-      void resolvedLongId
+      //
+      // No /ids call first (J3): its result was assigned and then discarded,
+      // left over from the guestName-era code, and because the two awaits were
+      // sequential it put a whole round-trip in front of the grid's first paint.
+      // The server's GET /events/:eventId/ids endpoint stays — this was its last
+      // caller in the app, but it is a documented part of the API surface.
       this.event = await get(`/events/${sanitizedId}`)
       processEvent(this.event)
     },

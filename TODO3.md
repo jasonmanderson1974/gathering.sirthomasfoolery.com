@@ -4,8 +4,8 @@
 > of this file — nothing in either needs updating again, and the three items still open in
 > TODO2.md Part G are restated below as pointers rather than copied.
 >
-> **Status: Part J queued (2026-08-10).** A fresh full-codebase review pass — improvements and
-> optimizations only, nothing implemented yet.
+> **Status: Part J in progress (2026-08-10).** A fresh full-codebase review pass — improvements and
+> optimizations only. **J1–J4 shipped**; J5–J10 still queued, each waiting for a go-ahead.
 >
 > Context unchanged: self-hosted, invite-only fork for a ~30–40 person club. Reliability and
 > small-club utility over scale. All event access requires sign-in; roles are
@@ -62,9 +62,9 @@ and leave the old entry alone.
 
 From a full review pass at `38b613f7`. The codebase has been through two prior waves (A–E, H), so
 these are what's left: mostly performance and robustness, no known user-facing breakage except J2.
-Nothing here is implemented — each item waits for a go-ahead.
+J1–J4 are done; everything from J5 down waits for a go-ahead.
 
-### J1 — `getEvent` looks up users one at a time · **P1 · S**
+### J1 — `getEvent` looks up users one at a time · **P1 · S** — DONE 2026-08-10
 
 `routes/events.go:521` — the "populate user fields" loop calls `db.GetUserById(userId)` once per
 responder, on the hottest route in the app (every event page load). With a full-club gathering
@@ -76,7 +76,29 @@ overlapping id set; folding the two into one query is fair game while in there. 
 user branches in the loop must survive exactly as they are — that logic is subtle (guest keys
 switch from id to name) and tested behavior.
 
-### J2 — a duplicated event inherits last time's RSVPs, poll votes and lists · **P2 · S**
+**Found on implementation.** The loop body is unchanged; only the lookup moved, so the guest and
+deleted-user branches are byte-for-byte what they were. Keys that don't parse as ObjectIDs are
+simply left out of the `$in` — `GetUserById` already returned `nil, nil` for a malformed id, so a
+name-keyed guest row reaches the same branch by the same route.
+
+Two things the entry didn't predict:
+
+- **The error branch is gone, and that's a small improvement.** `GetUserById` returned an error only
+  on a decode failure, and the old `continue` skipped the availability-stripping below it — so a
+  single undecodable user document leaked that responder's raw availability arrays to the client.
+  `GetUsersByIds` logs and omits instead, which drops the row into the deleted/guest branch and
+  always strips.
+- **Do NOT fold `resolveEventDisplayNames` into this query**, despite the entry calling it fair
+  game. It runs deliberately *after* `visibleComments`, so a hidden thread's authors are never
+  looked up at all; hoisting its lookup to the top of the handler would re-introduce exactly the
+  leak that ordering prevents. The overlap costs one extra `$in` and is worth paying.
+
+Verified against the running stack with Mongo profiling on: an event with five responders (three
+members, a name-keyed guest, a deleted account) went from five `_id` queries to one `$in`. The two
+remaining single-id lookups in the trace are the auth middleware's session user and the
+comment-viewer check — both outside this loop.
+
+### J2 — a duplicated event inherits last time's RSVPs, poll votes and lists · **P2 · S** — DONE 2026-08-10
 
 `routes/events.go:846` — `duplicateEvent` takes the event document as read, swaps `Id`/`Name`/
 `NumResponses`, and inserts it. But `Rsvps`, `Polls` (votes included) and `Lists` (items included)
@@ -87,7 +109,25 @@ three on the duplicate (or make each opt-in like availability). While in there: 
 `copyAvailability` branch inserts responses in a per-document `InsertOne` loop
 (`events.go:856–866`) — one `InsertMany` does it.
 
-### J3 — every event page load pays a dead `/ids` round-trip · **P2 · S**
+**Found on implementation.** Cleared, but not to the letter of "clear all three": the split is
+**participation vs. scaffolding**. A poll keeps its title and options and loses its votes; a list
+keeps its name and kind and loses its items; RSVPs go entirely, since an RSVP is nothing but a
+response. Re-using the structure is the whole point of duplicating an event — nuking the polls and
+lists outright would have removed a feature to fix a bug. If that call is ever revisited, the
+alternative is making each opt-in alongside `copyAvailability`.
+
+**Two more inherited fields, same defect class, not in the original finding:**
+`GatheringReminder.SentAt` (the copy would never send its reminder email, because the *original's*
+already went out) and `Chronicled` (the scheduler would never capture the new gathering). Both
+cleared here.
+
+`InsertMany` done, guarded on a non-empty batch — an empty `docs` slice is an error, not a no-op,
+so a duplicate-with-copy-availability of an event nobody had answered would have 500'd. Regression
+tests in `routes/events_duplicate_db_test.go` cover all three; confirmed they fail against the old
+handler (`inherited 1 RSVP`, `inherited 1 vote`, `inherited 1 item`) and that the **source** event
+keeps its own answers.
+
+### J3 — every event page load pays a dead `/ids` round-trip · **P2 · S** — DONE 2026-08-10
 
 `views/Event.vue:1003–1019` (`refreshEvent`) — the handler awaits `GET /events/:id/ids`, stores
 the result in `resolvedLongId`, then discards it (`void resolvedLongId`, a leftover from the
@@ -96,7 +136,20 @@ the two awaits are sequential, the discarded call adds a full round-trip of late
 page's critical path — first paint of the grid waits on it. Delete the `/ids` fetch; nothing
 consumes it. (`getEventIds` itself stays — the router redirect still uses it.)
 
-### J4 — hashed frontend assets are served with no cache headers · **P2 · S**
+**Correction to the entry.** "The router redirect still uses it" is wrong on two counts: `getEventIds`
+is the **Go handler** (`routes/events.go:44`), not a frontend function — there is no
+`getEventIds` in `frontend/src` and there was none before this change either. And `refreshEvent`
+was the endpoint's *last caller anywhere in the app*: `GET /events/:eventId/ids` is now unused by
+the official client. It stays regardless — it's a documented, auth-gated part of the API surface
+(`routes/event_auth_gate_test.go` covers it) — but nothing calls it, which is worth knowing before
+someone "fixes" a caller that doesn't exist. (The only "redirect" in the frontend router is the
+`?redirect` open-redirect guard in `router/index.js`, covered by `src/router/redirect.test.js` —
+nothing to do with resolving event ids.)
+
+Verified on the shipped artifact, not just the source: the string `/ids` appears zero times in the
+built `dist/js/*.js`.
+
+### J4 — hashed frontend assets are served with no cache headers · **P2 · S** — DONE 2026-08-10
 
 `main.go:173–186` — every file in `frontend/dist` is registered via `router.StaticFile` with no
 `Cache-Control`, so browsers revalidate each bundle on every visit and the Cloudflare edge is left
@@ -105,6 +158,34 @@ to guess. Vue CLI content-hashes its filenames (`app.[hash].js`), which is preci
 `index.html` (already `no-cache` via the NoRoute handler, `main.go:316`, so deploys still
 propagate instantly). Gate the header on the path carrying a content hash (`/js/`, `/css/`,
 hashed `img/` names) rather than blanket-applying it — `favicon.ico` and friends aren't hashed.
+
+**Found on implementation.** The gate ended up being the **content hash itself**
+(`\.[0-9a-f]{8}\.`, `contentHashedAsset` in `main.go`) rather than a directory allowlist, because
+`img/` is mixed: it holds hashed build output (`apple_logo.e6bf682d.svg`) *and* files copied
+verbatim from `public/` (`ogImage.png`, `when2meetOgImage2.png`). Matching on the hash sorts both
+cases correctly with no list to maintain.
+
+`gin.StaticFile` gives no way to set a header, so hashed files are registered as explicit
+`GET`+`HEAD` handlers (the two verbs `StaticFile` itself registers) that set `Cache-Control` and
+then `c.File`. Unhashed files still go through `StaticFile` untouched.
+
+Verified against the running dev stack, per-path:
+
+| Path | `Cache-Control` |
+|---|---|
+| `/js/app.457eeeac.js`, `/css/416.953510a1.css`, `/img/apple_logo.e6bf682d.svg` | `public, max-age=31536000, immutable` |
+| `/favicon.ico`, `/robots.txt`, `/img/ogImage.png` | *(none — unchanged default)* |
+| `/index.html` and `/` (SPA routes) | `no-cache, no-store, must-revalidate` |
+
+That last row is the one that matters for deploys: `index.html` is never registered by the static
+walk, so it keeps `noRouteHandler`'s `no-cache` and a deploy still propagates instantly even though
+the bundles it points at are pinned for a year.
+
+**Testing gotcha, cost a few confused minutes:** `compose.dev.yaml` bakes its *own* frontend build
+into the image, so the container's asset hashes differ from a local `npm run build`. Curling a
+locally-built filename returns `200` with `Content-Type: text/html` — the SPA fallback serving
+`index.html`, which looks like the header simply failed to apply. Read the filenames out of the
+container before testing.
 
 ### J5 — a non-`error` panic in a calendar provider kills the whole server · **P2 · S**
 

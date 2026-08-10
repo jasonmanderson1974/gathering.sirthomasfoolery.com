@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -34,6 +35,21 @@ import (
 // @description This is the API for The Fellowship!
 
 // @host localhost:3002/api
+
+// contentHashedAsset matches the eight-hex-character content hash Vue CLI puts
+// in every filename it emits — app.8bd8de3a.js, chunk-vendors.a014b665.css,
+// apple_logo.e6bf682d.svg. Those are safe to cache forever, because the name
+// changes whenever the bytes do (J4).
+//
+// The gate is the hash rather than the directory on purpose: img/ holds both
+// hashed build output and files copied verbatim from public/ (ogImage.png,
+// when2meetOgImage2.png), and those keep their default revalidate-every-time
+// behaviour, as do favicon.ico and robots.txt at the root.
+//
+// index.html is never registered by the static walk at all — it goes through
+// noRouteHandler, which sets no-cache — so a deploy still propagates instantly
+// even though the bundles it points at are pinned for a year.
+var contentHashedAsset = regexp.MustCompile(`\.[0-9a-f]{8}\.`)
 
 func init() {
 	// AddExtensionType only errors on an extension not starting with ".", which
@@ -180,7 +196,19 @@ func main() {
 			if err != nil || relPath == "" || relPath == "." {
 				return nil
 			}
-			router.StaticFile(fmt.Sprintf("/%s", relPath), path)
+			urlPath := fmt.Sprintf("/%s", relPath)
+			if contentHashedAsset.MatchString(d.Name()) {
+				filePath := path
+				serve := func(c *gin.Context) {
+					c.Header("Cache-Control", "public, max-age=31536000, immutable")
+					c.File(filePath)
+				}
+				// StaticFile registers both verbs; match it.
+				router.GET(urlPath, serve)
+				router.HEAD(urlPath, serve)
+			} else {
+				router.StaticFile(urlPath, path)
+			}
 		}
 		return nil
 	})
