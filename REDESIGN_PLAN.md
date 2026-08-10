@@ -1,8 +1,18 @@
 # The Fellowship — Redesign Plan
 
-Living plan for rebranding/redesigning the self-hosted Timeful instance into
+> **⚠️ HISTORICAL — completed 2026-06-20, last updated then. Not a live plan.**
+> The redesign shipped and the theme it describes is the app's current look, so
+> the design system in §2 and the gotchas in §5 are still worth reading. Do not
+> trust anything here about *process or infrastructure* — three things below are
+> now wrong: the work is on **`main`**, not `redesign/fellowship-phase1`;
+> production does **not** track a branch (a release is rsynced to it — see
+> `DEPLOYMENT.md`); and the Go module was renamed to **`sirtom/server`** on
+> 2026-07-23, reversing the "internal identifiers STAY" decision in §1. Only the
+> Mongo DB name (`schej-it`) kept the old branding. `CLAUDE.md` is authoritative.
+
+Plan for rebranding/redesigning the self-hosted Timeful instance into
 **The Fellowship / The Gathering** (a vintage gentleman's-club theme for a small
-men's event-planning club). Branch: `redesign/fellowship-phase1`.
+men's event-planning club).
 
 > Resume tip: read this top-to-bottom, then check **Current state** for exactly
 > where we left off. Design source of truth: `samples/the-gathering.html` + `.css`.
@@ -73,7 +83,11 @@ Captured 2026-06-20 (batch 2):
 
 - **Whole-app** re-skin — every screen, not just the landing.
 - **Rebrand the UI** to The Fellowship + the Sir Thomas Foolery hare crest.
-  Internal code identifiers (Go module `schej.it`, Mongo `schej-it`) STAY.
+  ~~Internal code identifiers (Go module `schej.it`, Mongo `schej-it`) STAY.~~
+  **Half-reversed 2026-07-23:** the Go module became `sirtom/server`. Only the
+  Mongo DB name `schej-it` and `SCHEJ_EMAIL_ADDRESS` still carry the old
+  branding, and renaming the database is parked (TODO2 G4) as a data migration
+  with no user-facing benefit.
 - **Full archaic "gentleman's club" voice** across all copy (buttons, labels,
   empty states, errors), while keeping things usable.
 - Mascot: **Sir Thomas Foolery** = "Eric the Hare" (Eric + Eloise collection)

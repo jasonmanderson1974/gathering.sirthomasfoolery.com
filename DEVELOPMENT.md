@@ -188,12 +188,19 @@ docker run --rm --network host -e MONGODB_URI=mongodb://localhost:27017 \
   sh -c "go test -race \$(go list ./... | grep -v '/scripts')"
 ```
 
-**What's covered today:** role/permission logic (`models`), the admin
-permission guards (`routes`, handler-level), the rate limiter + email/phone
-helpers (`utils`), the allowlist gate CRUD (`db`, integration), and the frontend
-role getters + phone formatter. **Not yet covered:** most HTTP handlers'
-happy-path, email-change/OTP flows, middleware. `go test` passing means "compiles
-+ these pass" — not full correctness.
+**What's covered today** (as of 2026-08-10: **432** Go test functions, **391**
+frontend unit tests): role/permission logic and money splitting (`models`); the
+handler layer broadly (`routes`, 288 functions) — admin permission guards, the
+event auth gate, responses, comments/mentions, polls, event lists, My Lists / My
+Notes, expenses + receipts, avatars, display names, chronicle, health, and the
+PII-leak and scoped-write regressions; the rate limiter and email/phone helpers
+(`utils`); allowlist CRUD, encryption migration and scoped writes (`db`,
+integration); calendar/contacts/Graph and the reminder scheduler (`services`).
+**Not yet covered:** `middleware` has no test files at all, and the
+email-change/OTP flows are only covered where a handler test happens to reach
+them. `go test` passing still means "compiles + these pass", not full
+correctness — and note that roughly half the backend suite skips without
+`MONGODB_URI`.
 
 ### Browser checks (manual, before deploying auth/UI changes)
 
@@ -287,13 +294,27 @@ Remember to delete the seeded documents afterwards.
 > code beside it behaved as expected. When a check passes but a hand-inspection of the response
 > disagrees, suspect the image before the code.
 
+### Post-deploy checks against the live site (`e2e/`)
+
+**`e2e/` is the current home for anything that drives the deployed site**, and it
+has its own guide — read [`e2e/README.md`](./e2e/README.md) before writing one.
+It uses **Playwright** (a dependency of `e2e/package.json` only, deliberately not
+of `frontend/`), reuses a session minted by `e2e/prod_login.js`, and is
+**assert-only**: these run against production data as a real member, so nothing
+there may create, edit or save. `e2e/smoke_prod.js` is the broad check.
+
+`prod_login.js` reads the OTP out of the deployment's Mongo over SSH, since the
+mail round trip isn't scriptable. It is in the repo — the *session file* it
+writes (`prod_state.json`) is what's gitignored, along with the screenshots.
+
 ### Live production verification (`verify_f9_prod.js`)
 
-A third, heavier check sits beside them: `frontend/scripts/verify_f9_prod.js`
-drives the **deployed** site to prove the @mention composer and rendering (F9)
-actually work there — the picker opening/filtering/inserting, the token
-surviving the round trip to a real `mentions` entry, the name rendering instead
-of the markup, thread headers flattening, mobile.
+An older, heavier check predates `e2e/` and still sits beside the two above:
+`frontend/scripts/verify_f9_prod.js` drives the **deployed** site to prove the
+@mention composer and rendering (F9) actually work there — the picker
+opening/filtering/inserting, the token surviving the round trip to a real
+`mentions` entry, the name rendering instead of the markup, thread headers
+flattening, mobile. New work of this kind belongs in `e2e/`, not here.
 
 It writes only to a throwaway gathering it creates and deletes in a `finally`
 (the delete is itself asserted), and the one mention it writes names the
@@ -301,10 +322,9 @@ signed-in account — `mentionRecipients` drops a comment's own author, so the r
 mails nobody. Keep both properties if you copy it as a template for the next
 feature.
 
-Unlike the two checks above it uses **Playwright**, which is deliberately not a
-dependency here, so run it from a box that has one plus a signed-in production
-storage state (`prod_login.js`, kept out of the repo because it reads OTPs from
-prod Mongo):
+Unlike the two checks above it uses **Playwright**, which is not a dependency of
+`frontend/`, so run it from a box that has one (`e2e/node_modules` will do) plus
+a signed-in production storage state from `e2e/prod_login.js`:
 
 ```bash
 NODE_PATH=/path/to/playwright/node_modules \
@@ -331,6 +351,7 @@ where its two screenshots land.
 
 - Go module path is `sirtom/server` (renamed 2026-07-23); Mongo DB stays `schej-it` — internal
   names keep the old branding, don't rename.
-- New API routes need Swag comments; run `swag init` in `server/` to regenerate
-  `docs/`.
+- New API routes need Swag comments. Regenerate `docs/` from `server/` with
+  `swag init --parseDependency --parseInternal` — **both flags are required**, a
+  bare `swag init` aborts on `primitive.DateTime`. Pin the CLI to `@v1.16.1`.
 - Server panics at startup if `SESSION_SECRET` is missing or < 32 chars.

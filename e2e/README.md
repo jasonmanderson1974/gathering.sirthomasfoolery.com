@@ -31,27 +31,36 @@ TIMEFUL_VM=user@host node prod_login.js someone@example.com
 
 | Env var | Default | Meaning |
 | --- | --- | --- |
-| `TIMEFUL_VM` | *(required for login)* | SSH target running the deployment |
-| `TIMEFUL_VM_DIR` | `~/docker/timeful.app` | Repo path on that host |
+| `TIMEFUL_VM` | *(required for login)* | SSH target running the deployment. Must be a **root** login — the env file below is `0600` root-owned. |
+| `TIMEFUL_ENV_FILE` | `/etc/thegathering/env` | Where `MONGODB_URI` is read from on that host. Mongo requires auth, and sourcing the URI there beats threading a password through argv — it would land in this box's shell history and the remote's process list. |
 | `TIMEFUL_BASE` | `https://gathering.sirthomasfoolery.com` | Instance under test |
 | `TIMEFUL_EMAIL` | — | Alternative to passing the email as argv |
 
 `prod_state.json` holds a live session cookie and is gitignored. So are the
 screenshots the scripts drop here.
 
-## The check
+## The checks
 
-`smoke_prod.js` — `/home`, `/settings`, `/members` and `/new` render, with no
-console errors, no failed requests and no 5xx. It exits non-zero on failure:
+`smoke_prod.js` is the broad one — `/home`, `/settings`, `/members` and `/new`
+render, with no console errors, no failed requests and no 5xx. It exits non-zero
+on failure:
 
 ```bash
 node smoke_prod.js
 ```
 
-That's deliberately the whole of it. Checks pinned to one past fix pass forever
-and then quietly rot; this repo keeps the broad post-deploy check tracked and
-treats fix-specific ones as throwaway — write them when a fix needs verifying,
-run them, don't commit them.
+Beside it are three feature-specific checks, committed 2026-08-05 with the
+features they cover: `verify_f19f20_prod.js` (My Lists / My Notes),
+`verify_f22_prod.js` (the Settle Up ledger) and `verify_notes_quiet_prod.js`
+(that the My Notes autosave stops firing when idle).
+
+> **Unresolved policy question.** This file used to state that only the broad
+> check is tracked and that fix-specific ones are throwaway — "write them when a
+> fix needs verifying, run them, don't commit them" — because checks pinned to
+> one past fix pass forever and then quietly rot. The three above were committed
+> anyway. Either they earn their keep as standing checks or they should go; until
+> someone decides, don't read either the old rule or these three files as
+> settled precedent.
 
 ## Two gotchas, for when you write a throwaway one
 

@@ -166,6 +166,14 @@ does.
 **Last verified: 2026-08-05** — all 11 collections and all 15 indexes restored
 from the nightly archive, every content hash identical to production.
 
+> **That run is now short of the database.** My Lists, My Notes and Settle Up
+> landed the same day and added four collections (`personalLists`,
+> `personalNotes`, `expenses`, `expenseReceipts`) and five named indexes, so the
+> schema is **15 collections / 9 named indexes** and the verification above
+> covered neither the new collections nor the expense receipts — which are the
+> largest documents in the database, being embedded images. Worth re-running
+> before trusting a restore.
+
 ## Configuration
 
 Secrets live in `/etc/thegathering/env` (root-owned, `0600`) and are read by the

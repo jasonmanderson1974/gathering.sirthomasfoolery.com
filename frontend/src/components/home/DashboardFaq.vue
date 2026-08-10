@@ -73,7 +73,11 @@
               <p class="tw-mb-2">
                 Press <strong>Call a Gathering</strong> (or the
                 <v-icon small class="tw-text-brass">mdi-plus</v-icon> beside a
-                folder) and choose how you'd like people to weigh in:
+                folder). There are <em>two</em> separate questions to answer, and
+                they combine freely.
+              </p>
+              <p class="tw-mb-2">
+                <strong>First, how precisely people answer:</strong>
               </p>
               <ul class="tw-list-disc tw-space-y-2 tw-pl-5">
                 <li>
@@ -91,8 +95,16 @@
                 </li>
                 <li>
                   <strong>Dates only</strong> — poll which whole days work, with
-                  no times at all, for when the hour doesn't matter.
+                  no times at all, for when the hour doesn't matter. Offered when
+                  creating a gathering, not when editing one: switching an
+                  existing gathering in or out of it would change what its dates
+                  mean.
                 </li>
+              </ul>
+              <p class="tw-mb-2 tw-mt-3">
+                <strong>Then, which days you're asking about:</strong>
+              </p>
+              <ul class="tw-list-disc tw-space-y-2 tw-pl-5">
                 <li>
                   <strong>Specific dates</strong> — drag across the calendar to
                   select particular calendar dates.
@@ -133,8 +145,12 @@
                 the entire block.
               </p>
               <p>
-                You can respond signed-in or as a guest; signing in lets the
-                organiser recognise you and lets you edit your response later.
+                You must be signed in to open a gathering at all — there is no
+                anonymous access. For someone without an account (a wife, a
+                visitor), any member can press
+                <strong>+ Add guest availability</strong> in the respondents list
+                and enter it on their behalf; edit it later with the pencil
+                beside their name.
               </p>
             </v-expansion-panel-content>
           </v-expansion-panel>
@@ -323,7 +339,9 @@
                 <li>
                   <strong>Discussion</strong> — every gathering carries a
                   comment thread beneath it, so the plan can be argued out in
-                  the open rather than scattered across email.
+                  the open rather than scattered across email. Type
+                  <strong>@</strong> to mention someone: pick them from the list
+                  and they get an email pointing back at the comment.
                 </li>
                 <li>
                   <strong>The Chronicle</strong> — every gathering that comes to
@@ -335,7 +353,86 @@
             </v-expansion-panel-content>
           </v-expansion-panel>
 
-          <!-- 9. Folders -->
+          <!-- 9. The tabs beneath a gathering -->
+          <v-expansion-panel>
+            <v-expansion-panel-header>
+              The tabs beneath a gathering — Lists, My Lists, My Notes, Settle Up
+            </v-expansion-panel-header>
+            <v-expansion-panel-content>
+              <p class="tw-mb-2">
+                Under the calendar sits a row of tabs. The first two are shared
+                with everyone on the gathering; the next two are yours alone.
+              </p>
+              <ul class="tw-list-disc tw-space-y-2 tw-pl-5">
+                <li>
+                  <strong>Lists</strong> — shared lists for the gathering: what
+                  to bring, who's driving, a running kit list. Items nest three
+                  deep, a list can be a <em>checklist</em> with tick-boxes, and
+                  you can drag entries into order or across to another list. The
+                  organiser and admins make and remove the lists themselves;
+                  anyone can add entries, you may edit only your own words, and
+                  members and up can remove anyone's.
+                </li>
+                <li>
+                  <strong>My Lists</strong> — the same idea, but
+                  <em>private to you</em> and tied to this one gathering. For
+                  what you personally need to pack or remember. Nobody else can
+                  see it, not even an admin.
+                </li>
+                <li>
+                  <strong>My Notes</strong> — one private notebook per gathering,
+                  written in Markdown, saved as you type. Also invisible to
+                  everyone else.
+                </li>
+                <li>
+                  <strong>Settle Up</strong> — the shared ledger, for when money
+                  changed hands. See below.
+                </li>
+              </ul>
+            </v-expansion-panel-content>
+          </v-expansion-panel>
+
+          <!-- 10. Settle Up -->
+          <v-expansion-panel>
+            <v-expansion-panel-header>
+              Settling the bill (Settle Up)
+            </v-expansion-panel-header>
+            <v-expansion-panel-content>
+              <p class="tw-mb-2">
+                Log what was spent and the ledger works out who owes whom. Add an
+                expense with what it was, what it cost, <strong>who paid</strong>
+                and who it's shared between; attach a photo of the receipt if you
+                have one.
+              </p>
+              <p class="tw-mb-2">Split it three ways:</p>
+              <ul class="tw-list-disc tw-space-y-2 tw-pl-5">
+                <li>
+                  <strong>Evenly</strong> — divided between everyone you tick,
+                  with any odd penny handled for you.
+                </li>
+                <li>
+                  <strong>By amount</strong> — type each person's share; it won't
+                  save until the parts add up to the total, to the penny.
+                </li>
+                <li>
+                  <strong>By share</strong> — for "he had two courses, I had
+                  one".
+                </li>
+              </ul>
+              <p class="tw-mt-2">
+                A running summary shows what each person <em>paid</em>, with the
+                gathering's total beneath it; click a row to expand what they
+                actually <em>owe</em> and the items behind it. Everyone on the
+                gathering can read the ledger — guests included, since a guest at
+                the dinner has a fair interest in the bill — but only members and
+                up can add to it, and only the person who entered a row (or an
+                admin) can change it. Every edit is kept, with who made it, and a
+                deleted expense leaves its trail behind.
+              </p>
+            </v-expansion-panel-content>
+          </v-expansion-panel>
+
+          <!-- 11. Folders -->
           <v-expansion-panel>
             <v-expansion-panel-header>
               Folders on your dashboard

@@ -1,5 +1,13 @@
 # The Fellowship — Invite-Only Access Control Plan
 
+> **⚠️ HISTORICAL — the plan shipped; §5's last entry is 2026-07-21. Not a live plan.**
+> §1 is still the best record of *why* access control works the way it does, and the
+> four-tier role model it describes is what `models/roles.go` implements. But the
+> mechanics below are pre-migration: commands like `docker compose up -d --build server`
+> refer to the deleted Docker production stack, and "the dev box has no Go/Docker" is no
+> longer true of either machine. For anything operational read `DEPLOYMENT.md` and
+> `DEVELOPMENT.md`; `CLAUDE.md` is authoritative on the codebase.
+
 Multi-day, phased plan to make the self-hosted instance **invite-only** (no open sign-ups).
 Companion to `REDESIGN_PLAN.md`. Memory: `project-fellowship-access-control`.
 

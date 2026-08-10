@@ -204,7 +204,12 @@ export default {
       {
         question: "How do I amend my availability?",
         answer:
-          'If you are signed in, simply press the "Edit availability" button. Should you have answered as a guest, hover upon your name and press the pencil beside it.',
+          'Simply press the "Edit availability" button. Should you have entered the hours of a guest on their behalf, hover upon their name in the list of respondents and press the pencil beside it.',
+      },
+      {
+        question: "Must I be a member to answer a summons?",
+        answer:
+          "You must. Every Gathering lies behind the door — none may view or answer one without entering first, and the Fellowship admits by invitation only. Should you wish to record the availability of a lady or a visitor who holds no account, any member may enter it upon their behalf.",
       },
       {
         question: "What sets the Fellowship apart from lesser tools?",
@@ -220,7 +225,17 @@ export default {
       },
       {
         question: "What becomes of a Gathering once the hour is settled?",
-        answer: `Your fellows mark themselves going, maybe, or unable — plus-ones and all. You may attach polls for the venue or the entertainment, and a discussion thread sits beneath for the arguing of details. Once the day has passed, the Gathering is entered into The Chronicle, the Order's standing record of what came to pass.`,
+        answer: `Your fellows mark themselves going, maybe, or unable — plus-ones and all. You may attach polls for the venue or the entertainment, and a discussion thread sits beneath for the arguing of details; write <strong>@</strong> and a man's name to summon his attention, and word is sent to him by post. Once the day has passed, the Gathering is entered into The Chronicle, the Order's standing record of what came to pass.`,
+      },
+      {
+        question: "May we keep lists against a Gathering?",
+        answer: `Indeed — beneath the calendar sit tabs for the purpose. <strong>Lists</strong> are shared with the whole party: what to bring, who drives, a kit list. They nest three deep, may be made tick-boxes, and entries may be dragged into whatever order pleases you, or across into another list. <strong>My Lists</strong> and <strong>My Notes</strong> are yours alone against that one Gathering — a private packing list and a private notebook — and no other man may read them, not even an Admin.`,
+        authRequired: true,
+      },
+      {
+        question: "How are the reckonings settled when coin has changed hands?",
+        answer: `Under <strong>Settle Up</strong>, each man logs what he paid, who he paid it for, and a likeness of the receipt should he have one — divided evenly, by exact amounts, or by shares, as the case demands. A summary then declares what each man laid out and what he truly owes. All may read the ledger; members and above may add to it; and every amendment is recorded against the man who made it.`,
+        authRequired: true,
       },
       {
         question: `I should like only myself to see the replies.`,

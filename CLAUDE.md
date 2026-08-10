@@ -67,20 +67,20 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
 ### Backend (Gin + MongoDB)
 `server/main.go` wires everything: CORS, cookie sessions, Mongo init (`db.Init`), the email scheduler (`services/reminders.StartReminderScheduler`), then mounts API groups under `/api` via `routes.Init*`. After API routes, it walks `frontend/dist` and registers each file as a static route, loads `index.html` as a template, and falls back to a `NoRoute` handler that injects per-route OG meta tags (e.g. for `/e/:eventId` it looks up the event to set the title and OG image).
 
-- `routes/` — HTTP handlers grouped by domain: `auth.go`, `user.go`, `users.go`, `events.go`, `folders.go`, `analytics.go`. Route comments use Swag annotations; `swag init` regenerates `docs/`.
-- `models/` — Mongo document structs (`Event`, `User`, `Response`, `Folder`, `Attendee`, `Calendar`, `Set`, `Otp`, `FriendRequest`, `Location`, `DailyUserLog`).
-- `db/` — Mongo accessors per model (`events.go`, `users.go`, `folders.go`, `analytics.go`, `utils.go`) plus `init.go`. Treat this as the only layer that talks to Mongo.
-- `services/` — external integrations. Notable: `calendar/` (Google, Outlook/Graph, Apple CalDAV via `jonyTF/go-webdav`, generic ICS), `auth/`, `contacts/`, `microsoftgraph/`, `reminders/` (in-process scheduler for every scheduled email).
+- `routes/` — HTTP handlers grouped by domain, one file per area rather than one per model: `auth.go`, `user.go`, `users.go`, `admin.go`/`admin_profile.go`, `display_names.go`, `avatars.go`, `images.go`, `events.go`, `event_responses.go`, `event_emails.go`, `event_import.go`, `event_lists.go`, `personal_lists.go`, `personal_notes.go`, `expenses.go`, `expense_receipts.go`, `comments.go`, `mentions.go`, `mention_emails.go`, `polls.go`, `chronicle.go`, `folders.go`, `health.go`, `text.go`. Route comments use Swag annotations; regenerate `docs/` with the full `swag init` command above, flags included.
+- `models/` — Mongo document structs. Core: `Event` (with `Rsvp`, `Poll`, `EventList`, `GatheringRecurrence`, `Remindee` nested in it), `User`, `Response`, `Folder`/`FolderEvent`, `CalendarAccount`, `Comment`, `Chronicle`, `Allowlist`, `Avatar`, `Otp`, `Location`, `DailyUserLog`, `Personal*` (My Lists / My Notes), `Expense`/`ExpenseSplit`/`ExpenseReceipt`, plus `Role` (`roles.go`), `EncryptedString` and the generic `Set[T]`.
+- `db/` — Mongo accessors, one file per area (`events.go`, `users.go`, `folders.go`, `comments.go`, `chronicle.go`, `allowlist.go`, `avatars.go`, `event_lists.go`, `personal_lists.go`, `personal_notes.go`, `expenses.go`, `expense_receipts.go`, `health.go`, `utils.go`) plus `init.go` and `encryption_migration.go`. Treat this as the only layer that talks to Mongo.
+- `services/` — external integrations. Notable: `calendar/` (Google, Outlook/Graph, Apple CalDAV via `jonyTF/go-webdav`, generic ICS), `auth/`, `contacts/`, `microsoftgraph/`, `reminders/` (in-process scheduler for every scheduled email). Note `services/gcloud/` and `services/listmonk/` are **deleted packages** — if either directory exists locally it holds nothing but a gitignored `logs.log`.
 - `middleware/auth.go` — session-based auth middleware applied selectively by `routes.Init*`.
-- `scripts/` — one-off Mongo migrations (dated folders like `20250417_responses_collection`). Run manually; don't import from runtime code.
-- `utils/` — generic helpers (`array_utils`, `db_utils`, `mail_utils`, `request_utils`, `response_utils`).
+- `scripts/` — one-off Mongo migrations (dated folders like `20250417_responses_collection`). Run manually; don't import from runtime code. See `server/scripts/README.md`.
+- `utils/` — generic helpers (`array_utils`, `mail_utils`, `email_layout`, `request_utils`, `response_utils`, `ratelimit`, `http`, `utils`).
 - `logger/` — wraps log file (`logs.log`) + stdout via `gin.DefaultWriter`.
 
 ### Frontend (Vue 2 SPA)
-- `src/router/index.js` — routes (`Landing`, `Home`, `Event`, `SignUp`, `Friends`, `Settings`, `SignIn`/`SignUp`/`Auth`, etc. — see `src/views/`).
-- `src/store/index.js` — single (non-modular) Vuex store holding auth user, events, folders, feature flags (`daysOnlyEnabled`, `signUpFormEnabled`, `overlayAvailabilitiesEnabled`, `enablePaywall`, etc.), and dialog/snackbar state.
-- `src/components/` — organized by feature folder (`event/`, `home/`, `landing/`, `pricing/`, `settings/`, `schedule_overlap/`, `calendar_permission_dialogs/`, `sign_up_form/`, `general/`) plus top-level shared components.
-- `src/utils/` — date math (`date_utils.js`, uses `dayjs`/`moment`/`spacetime`), `fetch_utils.js` (API client), `plugin_utils.js` (handles the postMessage plugin API — see `PLUGIN_API_README.md`), `sign_in_utils.js`, `location_utils.js`, `services/` (`EventService.js`, `FolderService.js` — thin wrappers over `fetch_utils` for event and folder API calls).
+- `src/router/index.js` — routes: `landing`, `home`, `event`, `settings`, `admin` (`MemberAdmin.vue`), `fellowship` (the member roll/directory), `chronicle`, `responded`, `sign-in`, `sign-up` (also `SignIn.vue`, with `initialIsSignUp`), `auth`, `privacy-policy`, `404`. Every route except the landing/auth surfaces is behind the guard — see `src/views/`.
+- `src/store/index.js` — single (non-modular) Vuex store holding auth user, events, folders, the two remaining feature flags (`daysOnlyEnabled`, `overlayAvailabilitiesEnabled`), and dialog/snackbar state. The paywall and sign-up-sheet flags are gone with their features; don't reintroduce a flag for a feature that no longer exists.
+- `src/components/` — organized by feature folder (`event/`, `home/`, `landing/`, `settings/`, `schedule_overlap/`, `calendar_permission_dialogs/`, `general/`) plus top-level shared components.
+- `src/utils/` — date math (`date_utils.js`, uses `dayjs`/`moment`/`spacetime`), `fetch_utils.js` (API client), `plugin_utils.js` (handles the postMessage plugin API — see `PLUGIN_API_README.md`), `sign_in_utils.js`, `location_utils.js`, `markdown.js`, `services/` (`EventService.js`, `FolderService.js`, `ExpenseService.js`, `PersonalService.js` — thin wrappers over `fetch_utils`).
 - Tailwind + Vuetify coexist; `tailwind.config.js` purges `src/**/*.{vue,js,...}`.
 - **`tailwind.config.js` sets `important: true`, which breaks `v-show`.** `tw-flex`/`tw-block`/
   `tw-grid` compile to `display: … !important` and beat the inline `display: none` that `v-show`
@@ -101,10 +101,10 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
 - **`src/utils/index.js` is an `export *` barrel imported by ~40 components.** Don't add modules with
   heavy or DOM-dependent dependencies to it (e.g. `utils/markdown.js`, which pulls in DOMPurify);
   import those directly by path.
-- There is **no service worker** — the PWA was deliberately removed (commit `f857320`), and `kill-sw.js` at the repo root unregisters any stale one still installed on a client. Do not reintroduce one casually; see TODO C8.
+- There is **no service worker** — the PWA was deliberately removed (commit `f857320`). Do not reintroduce one casually; see TODO2 G3. `kill-sw.js` at the repo root is *intended* to unregister a stale one from a client, but it sits outside `frontend/public/` and so is **never served** — it is documentation, not a live kill switch, and its header comment still names the upstream's origin.
 
 ### Frontend ↔ backend contract
-- Same-origin in production: Caddy → Go on `:3002`, Go serves `/api/*` and falls through to `index.html` for SPA routes.
+- Same-origin in production: a **Cloudflare Tunnel** (`cloudflared` dialling out from the host) → Go on `127.0.0.1:3002`; Go serves `/api/*` and falls through to `index.html` for SPA routes. There is no reverse proxy on the host — Caddy was never the real setup, and `Caddyfile.example` is deleted. See `DEPLOYMENT.md`.
 - Local dev: Vue CLI serves `:8080`, frontend calls `http://localhost:3002/api/*` (must whitelist via `CORS_ORIGINS`). Session cookie is `session` (cookie store, signed with `SESSION_SECRET`).
 - Event IDs may be either the Mongo `_id` or a short ID; `db.GetEventByEitherId` handles both — prefer it when looking up events from route params.
 

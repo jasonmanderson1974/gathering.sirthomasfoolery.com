@@ -45,11 +45,13 @@ directory.** `main.go` opens `logs.log` relative to cwd and `log.Fatal`s if it
 can't. Pointing cwd at the release would put logs inside `releases/<sha>`, where
 pruning old releases would quietly delete them.
 
-**The server does not listen until `db.Init` finishes.** It creates four indexes
-and runs the token-encryption sweep first, each blocking on a 30s
-server-selection timeout when Mongo is unreachable — so with the database down
-the app takes ~3 minutes to answer anything at all, then reports `503`. This is
-why the deploy health gate waits 90s rather than 40s.
+**The server does not listen until `db.Init` finishes.** It opens 15 collections,
+creates nine named indexes and runs the token-encryption sweep first, each
+blocking on a 30s server-selection timeout when Mongo is unreachable — so with
+the database down the app takes ~3 minutes to answer anything at all, then
+reports `503`. This is why the deploy health gate waits 90s rather than 40s. The
+count grows as features land (it was four indexes before My Lists / My Notes /
+Settle Up), so treat it as "several, each with its own timeout".
 
 **Backups are pulled, never pushed.** The Sir Tom VLAN is egress-only: this host
 reaches the internet and nothing on the LAN. `backup.sh` writes locally;
