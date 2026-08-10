@@ -32,6 +32,7 @@ Monorepo for Timeful (formerly Schej.it), a group availability/scheduling app.
 - `deploy/` — the production host's configuration, version-controlled so the host is reproducible rather than remembered: systemd units, `mongod.conf`, logrotate, and the `install.sh` / `mongo-bootstrap.sh` bootstrap scripts. See `DEPLOYMENT.md`.
 - `compose.dev.yaml` — the **local dev** stack (Mongo + a built frontend + the server). Docker is used *only* here; production runs no containers. The old Docker production stack (`compose.yaml`) was deleted on 2026-08-05 after the migration; recover it from git history if you ever need it.
 - `PLUGIN_API_README.md` — `window.postMessage` API used by browser plugins to read/write availability on the frontend.
+- `TODO3.md` — **the active backlog**, opened 2026-08-10. `TODO.md` (items `A*`–`E*`) and `TODO2.md` (`F*`–`H*`) are closed archives: still the place to read a cited item ID, never the place to add one. New items start at `J`.
 
 The Go module is `sirtom/server` (renamed from `schej.it/server`, 2026-07-23). The Mongo DB name (`schej-it`) and the `SCHEJ_EMAIL_ADDRESS` env var are intentionally left unchanged (internal/infra — see TODO D0/D2).
 

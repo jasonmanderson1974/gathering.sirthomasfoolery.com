@@ -1,5 +1,13 @@
 # Timeful / The Fellowship — Backlog 2 (feature track + carried-forward items)
 
+> **⚠️ ARCHIVED 2026-08-10 — the active backlog is now [`TODO3.md`](TODO3.md).**
+> Do not add items or status notes here. The feature track **F1–F22** all landed and deployed;
+> Part H is empty. The three items still open — **G2**'s `date_utils.js` split, **G3** (web push)
+> and **G4** (the Mongo DB rename), all `P3` and all parked by the user — are restated as
+> pointers in `TODO3.md`, which links back to the full write-ups below. **The status block and
+> "Suggested sequencing" that follow stopped being maintained after Lists v3 (2026-07-30)** and
+> never mention F19–F22 or the move off Docker; the per-item entries are the accurate record.
+
 > Compiled **2026-07-28** after the security/cleanup wave in `TODO.md` completed and deployed.
 > `TODO.md` is now the **closed archive** — everything in it is done except the four items
 > carried forward into Part G below (re-stated here with corrections found in the 2026-07-28

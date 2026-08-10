@@ -1,9 +1,11 @@
 # Timeful / The Fellowship — Improvement & Feature Backlog
 
-> **⚠️ ARCHIVED 2026-07-28 — the active backlog is now [`TODO2.md`](TODO2.md).**
+> **⚠️ ARCHIVED 2026-07-28. The active backlog is now [`TODO3.md`](TODO3.md)** — `TODO2.md`,
+> named below as the successor, was itself archived 2026-08-10.
 > Everything here is done except A22/A23/C8/D2, which were re-verified on 2026-07-28 and
 > carried into TODO2.md Part G **with corrections** (stale paths/line numbers, one bullet
 > closed by E3, D2's GCP half deleted from the codebase entirely) — read them there, not here.
+> A22 (as G1) has since closed; the other three are still open and are listed in `TODO3.md`.
 
 > Compiled 2026-07-22 from a full-codebase review. Context that shaped priorities:
 > this is a **self-hosted, invite-only fork** for a **~30–40 person club** (≈12 men + wives).
