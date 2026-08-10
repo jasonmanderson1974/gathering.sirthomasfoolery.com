@@ -220,11 +220,21 @@ export default {
         ...fields,
       }
       if (this.syncWithBackend) {
-        post(route, payload).catch(() => {
-          this.showError(
-            "There was a problem with toggling your calendar account! Please try again later."
-          )
-        })
+        post(route, payload)
+          .then(() => {
+            // The server no longer fetches events for a calendar that is
+            // toggled off (J8), so re-enabling one has nothing to re-filter —
+            // the events were never fetched. Tell whoever owns the calendar
+            // events to go and get them. Emitted on every toggle, not just on
+            // enable: turning one OFF is still cheaply re-fetched, and the
+            // parent decides whether it cares at all (Settings does not).
+            this.$emit("calendarsChanged")
+          })
+          .catch(() => {
+            this.showError(
+              "There was a problem with toggling your calendar account! Please try again later."
+            )
+          })
       } else {
         this.$emit(event, payload)
       }

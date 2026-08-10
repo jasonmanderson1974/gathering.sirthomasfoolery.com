@@ -4,8 +4,13 @@
 > of this file — nothing in either needs updating again, and the three items still open in
 > TODO2.md Part G are restated below as pointers rather than copied.
 >
-> **Status: Part J in progress (2026-08-10).** A fresh full-codebase review pass — improvements and
-> optimizations only. **J1–J7 shipped**; **J8, J9 and J10 remain**, each waiting for a go-ahead.
+> **Status: Part J complete (2026-08-10).** A fresh full-codebase review pass — improvements and
+> optimizations only. **J1–J10 all shipped.** One loose end: **J8's toggle→refetch path has not
+> been exercised in a browser** (it needs a real calendar provider and a working login, neither of
+> which exists locally) — see the check written into that entry, to be done after the next deploy.
+>
+> Still open beyond Part J: the three inherited `P3` items below (`TODO2.md` G2, G3, G4), all
+> parked by the user.
 >
 > Context unchanged: self-hosted, invite-only fork for a ~30–40 person club. Reliability and
 > small-club utility over scale. All event access requires sign-in; roles are
@@ -62,7 +67,10 @@ and leave the old entry alone.
 
 From a full review pass at `38b613f7`. The codebase has been through two prior waves (A–E, H), so
 these are what's left: mostly performance and robustness, no known user-facing breakage except J2.
-J1–J7 are done; J8–J10 wait for a go-ahead.
+All ten are done. Each entry keeps its original finding followed by what the implementation
+actually found — including the three cases where the finding was wrong or incomplete (J3's
+`getEventIds` note, J6's understated disclosure, J10's "the official client always sends a sane
+value").
 
 ### J1 — `getEvent` looks up users one at a time · **P1 · S** — DONE 2026-08-10
 
@@ -287,7 +295,7 @@ don't match the model (`userId` as an int, `description` as a sub-document). Tha
 with a type error rather than `ErrNoDocuments`, which is precisely the distinction the fix
 introduced; before it, the two were indistinguishable.
 
-### J8 — disabled calendars are still fetched from the providers · **P3 · S**
+### J8 — disabled calendars are still fetched from the providers · **P3 · S→M** — DONE 2026-08-10
 
 `services/calendar/calendar.go:142` — after the calendar list resolves, events are fetched for
 *every* sub-calendar, including those the member toggled off (`SubCalendar.Enabled` false) and
@@ -296,14 +304,58 @@ Google/Microsoft/CalDAV. Before skipping them, check what the frontend expects: 
 calendar on merely re-filters client-side (instant today), skipping the fetch changes that to a
 refetch — acceptable, but a product call to make knowingly, not a silent optimization.
 
-### J9 — CLAUDE.md still says date math uses three libraries · **P3 · S**
+**Found on implementation. The frontend check the entry demanded came back worse than "acceptable",
+and the answer was a user decision** (taken 2026-08-10: do it properly, with a refetch).
+
+The server never reads `Enabled` at all — it fetches everything and `currentAvailabilityMixin.js`
+filters client-side. And `CalendarAccount.vue` carries an explicit comment saying **"the toggle
+POSTs but never refetches"**: the write-through into `account.enabled` is what updates the UI.
+Worse, `CalendarAccounts` is mounted *inside* `ScheduleOverlap.vue` — the availability grid itself.
+So skipping the fetch on its own would mean toggling a calendar **on** while looking at the grid
+showed nothing at all until a page reload. Not a trade-off; a regression.
+
+Shipped as both halves together:
+
+- **Server** — a wholesale-disabled account is skipped entirely (its calendar-list call *and* the
+  one events call per sub-calendar it would have spawned); a disabled sub-calendar skips its events
+  call. Its map entry is still created, so the response shape doesn't depend on which accounts are
+  enabled.
+- **Client** — a successful toggle POST emits `calendarsChanged`, re-emitted up
+  `CalendarAccount` → `CalendarAccounts` → `ScheduleOverlap` → `Event.vue`, which calls
+  `fetchAuthUserCalendarEvents`. Emitted on toggle-off too: cheap, and it keeps one path.
+
+**The trap here is `nil`, and it is the reason `isDisabled` exists** rather than a bare `!*Enabled`.
+Both flags are `*bool`. Nil means "never toggled" and appears on legacy rows; every current path
+sets the flag outright (the Google provider mirrors the calendar's `Selected` state, the others
+default to true). **Nil is treated as ENABLED, deliberately fail-open** — a skip is only safe when
+the client would certainly have discarded the result, and guessing wrong the other way silently
+removes real events from someone's availability. Note the client's own filter treats `undefined` as
+*disabled*, so the two rules differ on purpose: the server's job is only to avoid fetching what is
+certainly unwanted.
+
+**Accepted trade-off:** a disabled account's stored `SubCalendars` list stops being refreshed, so a
+calendar added provider-side while the account is off won't appear until it's switched back on — at
+which point the toggle's refetch catches it up.
+
+**Not verified at runtime, and it needs to be.** Exercising this needs a real Google/Microsoft
+account and a working login, neither of which exists locally (no SMTP, no OAuth in
+`compose.dev.yaml`). Build, lint, unit tests and a hop-by-hop check of the emit chain all pass, but
+that combination has been green over a browser-only bug before. **After the next deploy: open an
+event, toggle a sub-calendar off and back on, and confirm the events return without a reload.**
+
+### J9 — CLAUDE.md still says date math uses three libraries · **P3 · S** — DONE 2026-08-10
 
 `CLAUDE.md` (frontend utils bullet) claims `date_utils.js` "uses `dayjs`/`moment`/`spacetime`".
 `moment` and `spacetime` are gone — not in `frontend/package.json`, not imported anywhere;
 `date_utils.js` is dayjs-only. One-line doc fix; flagged because the 2026-08-10 doc audit
 (`3972f71e`) missed it, and a stale claim in CLAUDE.md steers every future session.
 
-### J10 — an expense accepts any date a client sends · **P3 · S**
+**Verified before fixing, not assumed:** `frontend/package.json` lists `dayjs` and neither of the
+others, and every date import across `src/` is `dayjs` (or a dayjs plugin). The bullet now says
+"dayjs only" and names the two that are gone, so the next reader doesn't re-add the claim from
+memory.
+
+### J10 — an expense accepts any date a client sends · **P3 · S** — DONE 2026-08-10
 
 `routes/expenses.go:380–384` — `payload.Date` is trusted verbatim (unix ms, unbounded). The
 ledger sorts by date descending (`db/expenses.go:48`), so a hand-rolled client can stamp an
@@ -311,6 +363,26 @@ expense with year 9999 and pin it above every real row forever, or go negative a
 official client always sends a sane value; clamp server-side anyway (say, within a year around
 now) to the same standard the amount cap already sets — "a guard against nonsense, not a
 business rule".
+
+**Found on implementation. Rejected (400 `invalid-date`) rather than clamped**, despite the entry
+saying clamp. Two reasons: the neighbouring amount cap 400s rather than pinning the value, so
+rejecting is "the same standard" in the sense that matters; and silently rewriting a date someone
+deliberately picked is the worse failure — a clamped date looks like the ledger lost the entry,
+with nothing said.
+
+**"The official client always sends a sane value" was NOT true, and that turned a server-only
+guard into a two-sided change.** `v-date-picker` in `ExpenseDialog.vue` had no `min`/`max`, so a
+member could navigate to any year and get a save failure — and `expenseErrorMessage`'s code→message
+map (which exists precisely so a validation error says what to fix) had no arm for the new code, so
+they'd get the generic "Could not save that expense. Please try again." and retry the same date
+forever. Three parts shipped together:
+
+1. `expenseDateWindow` in `routes/expenses.go` — ±365 days, rejecting outside it.
+2. `expenseDateMin`/`expenseDateMax` bound the picker to the same window, so nobody can produce a
+   rejectable date. `EXPENSE_DATE_WINDOW_DAYS` in `expenseForm.js` mirrors the Go constant, and a
+   unit test asserts the number so the two can't drift silently.
+3. An `invalid-date` arm in `expenseErrorMessage`, for the hand-rolled-client case the guard is
+   actually aimed at.
 
 ---
 

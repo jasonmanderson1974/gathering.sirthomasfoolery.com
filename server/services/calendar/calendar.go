@@ -31,6 +31,20 @@ func recoveredError(r interface{}) error {
 	return fmt.Errorf("calendar provider panicked: %v", r)
 }
 
+// isDisabled reports whether a calendar or account was EXPLICITLY switched off
+// (J8). Both flags are *bool, and the distinction matters: nil means "never
+// toggled", which only legacy rows carry — every path that creates an account or
+// discovers a sub-calendar sets the flag outright (the Google provider mirrors
+// the calendar's `Selected` state, the others default to true).
+//
+// Nil is therefore treated as ENABLED here, deliberately fail-open. Skipping a
+// fetch is only safe when the client would certainly have discarded the result;
+// guessing wrong in the other direction silently removes real events from
+// someone's availability, which is far worse than one wasted round-trip.
+func isDisabled(flag *bool) bool {
+	return flag != nil && !*flag
+}
+
 type GetCalendarListData struct {
 	CalendarList       map[string]models.SubCalendar `json:"calendarList"`
 	CalendarAccountKey string                        `json:"calendarAccountKey"`
@@ -110,6 +124,27 @@ func GetUsersCalendarEvents(user *models.User, accounts models.Set[string], time
 				continue
 			}
 
+			// An account the member switched off wholesale is skipped entirely
+			// (J8): both its calendar-list call and the one events call per
+			// sub-calendar it would have spawned. The client already discards
+			// everything from a disabled account, so this fetched a pile of
+			// Google/Microsoft/CalDAV round-trips purely to throw them away.
+			//
+			// Its map entry is still created, so the response shape does not
+			// depend on which accounts happen to be enabled.
+			//
+			// The trade-off, accepted knowingly: a disabled account's stored
+			// SubCalendars list stops being refreshed, so a calendar added on
+			// the provider's side while the account is off won't appear until
+			// it is switched back on — at which point the toggle triggers a
+			// refetch and the list catches up.
+			if isDisabled(account.Enabled) {
+				calendarEventsMap[calendarAccountKey] = CalendarEventsWithError{
+					CalendarEvents: make([]models.CalendarEvent, 0),
+				}
+				continue
+			}
+
 			calendarProvider := GetCalendarProvider(account)
 			go GetCalendarListAsync(calendarAccountKey, &calendarProvider, calendarListChan)
 			numCalendarListRequests++
@@ -166,7 +201,14 @@ func GetUsersCalendarEvents(user *models.User, accounts models.Set[string], time
 		}
 		user.CalendarAccounts[calendarListData.CalendarAccountKey] = account
 
-		for id := range *account.SubCalendars {
+		for id, subCalendar := range *account.SubCalendars {
+			// Sub-calendars the member toggled off are not fetched (J8). Each
+			// one was a live provider round-trip whose result the client threw
+			// away — and for a Google account these are numerous (holidays,
+			// birthdays, every shared calendar someone has ever accepted).
+			if isDisabled(subCalendar.Enabled) {
+				continue
+			}
 			go GetCalendarEventsAsync(calendarListData.CalendarAccountKey, &calendarProvider, id, timeMin, timeMax, calendarEventsChan)
 			numCalendarEventsRequests++
 		}

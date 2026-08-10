@@ -630,6 +630,7 @@
                   :eventId="event._id"
                   :calendar-events-map="calendarEventsMap"
                   :initialCalendarAccountsData="authUser.calendarAccounts"
+                  @calendarsChanged="$emit('calendarsChanged')"
                 ></CalendarAccounts>
 
                 <div v-if="showOverlayAvailabilityToggle">

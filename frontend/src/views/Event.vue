@@ -182,6 +182,7 @@
             @highlightAvailabilityBtn="highlightAvailabilityBtn"
             @deleteAvailability="deleteAvailability"
             @setCurGuestId="(id) => (curGuestId = id)"
+            @calendarsChanged="fetchAuthUserCalendarEvents"
           />
 
           <!-- Who owes whom (F22), in the content column's right-hand strip

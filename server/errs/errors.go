@@ -66,6 +66,8 @@ const (
 	InvalidAmount Code = "invalid-amount"
 	// InvalidTitle: an expense title was blank after trimming
 	InvalidTitle Code = "invalid-title"
+	// InvalidDate: an expense date fell outside the sane window around now
+	InvalidDate Code = "invalid-date"
 	// SplitMismatch: the per-person shares do not sum to the expense total
 	SplitMismatch Code = "split-mismatch"
 	// NoParticipants: an expense was submitted with nobody to split it between

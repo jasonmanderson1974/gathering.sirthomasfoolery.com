@@ -41,6 +41,7 @@
             @toggleSubCalendarAccount="
               (payload) => $emit('toggleSubCalendarAccount', payload)
             "
+            @calendarsChanged="$emit('calendarsChanged')"
             @openRemoveDialog="openRemoveDialog"
           ></CalendarAccount>
           <v-dialog

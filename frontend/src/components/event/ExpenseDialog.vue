@@ -34,7 +34,18 @@
               v-on="on"
             />
           </template>
-          <v-date-picker v-model="date" no-title @input="dateMenu = false" />
+          <!--
+            min/max mirror the server's expenseDateWindow (J10). Without them
+            the picker happily navigates to a year the API rejects, and the
+            person gets a save failure with no hint that the date is the reason.
+          -->
+          <v-date-picker
+            v-model="date"
+            :min="dateMin"
+            :max="dateMax"
+            no-title
+            @input="dateMenu = false"
+          />
         </v-menu>
 
         <v-text-field
@@ -242,6 +253,8 @@ import {
   formatCents,
   validateSplits,
   todayIso,
+  expenseDateMin,
+  expenseDateMax,
   isoToMillis,
   millisToIso,
   formatExpenseDate,
@@ -323,6 +336,14 @@ export default {
 
     dateLabel() {
       return formatExpenseDate(isoToMillis(this.date))
+    },
+
+    // Bounds for the picker, matching the server's accepted window (J10).
+    dateMin() {
+      return expenseDateMin()
+    },
+    dateMax() {
+      return expenseDateMax()
     },
 
     amountCents() {

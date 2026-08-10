@@ -5,6 +5,9 @@ import {
   formatCents,
   validateSplits,
   todayIso,
+  expenseDateMin,
+  expenseDateMax,
+  EXPENSE_DATE_WINDOW_DAYS,
   isoToMillis,
   millisToIso,
   formatExpenseDate,
@@ -214,5 +217,34 @@ describe("receiptFileError", () => {
 
   it("refuses nothing at all", () => {
     expect(receiptFileError(null)).toMatch(/No file/)
+  })
+})
+
+// J10: the server rejects an expense dated outside ±expenseDateWindow with
+// `invalid-date`. These bounds are what stop a person ever meeting that error —
+// an unbounded picker let someone navigate to a year the API refuses, and the
+// resulting save failure said nothing about the date being the cause.
+describe("expense date bounds", () => {
+  const now = new Date("2026-08-10T12:00:00Z")
+
+  it("reaches a year in each direction from today", () => {
+    expect(expenseDateMin(now)).toBe("2025-08-10")
+    expect(expenseDateMax(now)).toBe("2027-08-10")
+  })
+
+  it("brackets today", () => {
+    expect(expenseDateMin(now) < todayIso(now)).toBe(true)
+    expect(expenseDateMax(now) > todayIso(now)).toBe(true)
+  })
+
+  it("stays in step with the window the server enforces", () => {
+    // If this constant moves, expenseDateWindow in server/routes/expenses.go
+    // has to move with it, or the picker offers dates the API rejects.
+    expect(EXPENSE_DATE_WINDOW_DAYS).toBe(365)
+  })
+
+  it("produces picker-shaped strings, not timestamps", () => {
+    expect(expenseDateMin(now)).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(expenseDateMax(now)).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 })

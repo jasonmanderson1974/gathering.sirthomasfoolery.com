@@ -120,6 +120,30 @@ export const validateSplits = (amountCents, splits) => {
  * negative offset is the previous day in UTC, which is how a Friday dinner ends
  * up filed under Thursday. Noon has twelve hours of slack in either direction.
  */
+/**
+ * How far from today the date field may reach, in either direction (J10).
+ *
+ * Mirrors `expenseDateWindow` in `server/routes/expenses.go`, which rejects
+ * anything outside it with `invalid-date`. The two must agree: the server bound
+ * is the guard (the ledger sorts by date, so an unbounded one is a sort-order
+ * weapon), and these bounds are what keep a person from ever meeting it — an
+ * unbounded picker would let someone navigate to a year the server refuses,
+ * with nothing on screen saying why.
+ */
+export const EXPENSE_DATE_WINDOW_DAYS = 365
+
+const shiftedIso = (days, now = new Date()) => {
+  const at = new Date(now)
+  at.setDate(at.getDate() + days)
+  return todayIso(at)
+}
+
+export const expenseDateMin = (now = new Date()) =>
+  shiftedIso(-EXPENSE_DATE_WINDOW_DAYS, now)
+
+export const expenseDateMax = (now = new Date()) =>
+  shiftedIso(EXPENSE_DATE_WINDOW_DAYS, now)
+
 export const todayIso = (now = new Date()) => {
   const pad = (n) => String(n).padStart(2, "0")
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`

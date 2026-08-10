@@ -48,6 +48,18 @@ const (
 	// this; the cap exists so a hand-rolled client cannot make one document
 	// enormous.
 	maxExpenseParticipants = 200
+
+	// expenseDateWindow bounds how far from now an expense may be dated, in
+	// either direction (J10). Same standard as the amount cap above: not a
+	// business rule, a guard against nonsense. The ledger sorts by date
+	// descending, so an unbounded date is a sort-order weapon — a hand-rolled
+	// client could stamp year 9999 and pin a row above every real one forever,
+	// or go negative and bury it below them.
+	//
+	// A year each way is far wider than the club needs (the official client
+	// sends today's date, or one picked in a date field) and still leaves the
+	// ordering meaningful.
+	expenseDateWindow = 365 * 24 * time.Hour
 )
 
 // initExpenseRoutes registers the ledger on the events group.
@@ -380,6 +392,16 @@ func resolveExpensePayload(c *gin.Context, payload expensePayload, members []mod
 	if payload.Date == nil {
 		out.Date = primitive.NewDateTimeFromTime(time.Now())
 	} else {
+		// Rejected, not silently clamped (J10). The entry said "clamp", but the
+		// neighbouring amount cap 400s rather than pinning the value, and
+		// quietly rewriting a date someone deliberately picked is a worse answer
+		// than saying it wasn't accepted — a clamped date looks like the ledger
+		// lost the entry. Nothing the official client sends can reach this.
+		now := time.Now()
+		date := time.UnixMilli(*payload.Date)
+		if date.Before(now.Add(-expenseDateWindow)) || date.After(now.Add(expenseDateWindow)) {
+			return fail(errs.InvalidDate)
+		}
 		out.Date = primitive.DateTime(*payload.Date)
 	}
 

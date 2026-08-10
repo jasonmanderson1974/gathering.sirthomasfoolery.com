@@ -155,6 +155,11 @@ export default {
           return "That amount doesn't look right."
         case "invalid-title":
           return "Please give the expense a name."
+        case "invalid-date":
+          // The picker is bounded to the same window, so reaching this means a
+          // hand-rolled client — but the generic wording would send someone
+          // round the same failing save forever.
+          return "That date is too far from today."
         case "no-participants":
           return "Choose at least one person to split this with."
         case "not-a-participant":
