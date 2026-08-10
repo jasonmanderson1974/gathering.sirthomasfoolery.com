@@ -26,20 +26,6 @@
       <div v-if="toggled">
         <div class="tw-pt-4 tw-font-body tw-text-base tw-text-parchment-dim sm:tw-pt-6">
           <div v-html="answer"></div>
-          <div class="tw-flex tw-flex-col tw-gap-2">
-            <div
-              v-for="(point, index) in points"
-              :key="index"
-              class="tw-flex tw-items-center"
-            >
-              <div
-                class="tw-mr-2 tw-flex tw-h-5 tw-w-5 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-brass tw-font-display tw-text-xs tw-text-wood-deep"
-              >
-                {{ index + 1 }}
-              </div>
-              <div>{{ point }}</div>
-            </div>
-          </div>
           <div
             v-if="authRequired"
             class="tw-mt-6 tw-text-sm tw-font-medium tw-text-parchment-dim"
@@ -63,7 +49,6 @@ export default {
   props: {
     question: { type: String, required: true },
     answer: { type: String },
-    points: { type: Array },
     authRequired: { type: Boolean, default: false },
   },
 

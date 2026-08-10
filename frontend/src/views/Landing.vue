@@ -182,11 +182,6 @@ export default {
         answer: `Three, as the occasion demands. "Dates and times" collects exact hours — one window across every date, or a different window for each. "Dates w/ time blocks" lets you set the sittings yourself, and each man may take only a whole block, never a part of one. "Dates only" asks merely which days serve, when the hour is of no consequence.`,
       },
       {
-        question: "How many men may answer a summons?",
-        answer:
-          "As many as you please — we have tested Gatherings with upwards of 500 respondents, and it holds firm.",
-      },
-      {
         question: "Which calendars may I consult?",
         answer:
           "You may draw your availability from Google Calendar, Outlook, Apple Calendar, or an ICS feed URL. Further provisions are forthcoming.",
@@ -210,14 +205,6 @@ export default {
         question: "Must I be a member to answer a summons?",
         answer:
           "You must. Every Gathering lies behind the door — none may view or answer one without entering first, and the Fellowship admits by invitation only. Should you wish to record the availability of a lady or a visitor who holds no account, any member may enter it upon their behalf.",
-      },
-      {
-        question: "What sets the Fellowship apart from lesser tools?",
-        points: [
-          "A far more handsome interface, on desk and in pocket alike",
-          "Seamless, dependable calendar integration",
-          "A great many further conveniences too numerous to set down here",
-        ],
       },
       {
         question: "May a Gathering be made a standing fixture?",
