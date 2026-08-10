@@ -7,7 +7,9 @@
 > **Status: Part J complete (2026-08-10), no loose ends.** A fresh full-codebase review pass —
 > improvements and optimizations only. **J1–J11 all shipped**, and **J8's browser check has now been
 > done against the deployed build** (2026-08-10) — the toggle→refetch path works, so nothing in Part
-> J is left pending a deploy.
+> J is left pending a deploy. **J12 (dependency vulnerabilities) was added and shipped later the
+> same day** — it came out of a `govulncheck`/`npm audit` sweep, not the review pass, because all
+> three prior waves audited *our* code and nobody had ever audited what we depend on.
 >
 > Still open beyond Part J: the three inherited `P3` items below (`TODO2.md` G2 and G4, plus what
 > remains of G3), all parked by the user. **G3's cheap loose end is now closed as J11** — the rest of
@@ -429,6 +431,87 @@ Frontend lint (`--max-warnings 0`), unit tests and the production build all pass
 removed — worth checking rather than assuming, since `serviceworker` also defines globals; `self`
 and `caches` survive because `browser: true` supplies them, and nothing in `src/` uses `clients` or
 `registration`. No Go file was touched.
+
+### J12 — six reachable vulnerabilities in Go dependencies · **P1 · S** — DONE 2026-08-10
+
+Not from the Part J review pass. Raised on 2026-08-10 by running `govulncheck` and `npm audit` for
+the first time: **A–E, H and J all reviewed the code we wrote, and nothing had ever checked the code
+we pull in.** `govulncheck` reported six vulnerabilities that our code actually *reaches* (not
+merely has in the module graph), across four modules:
+
+| Module | Was | Fixed in | Advisory |
+|---|---|---|---|
+| `github.com/gin-contrib/cors` | 1.4.0 | 1.6.0 | GO-2024-2955 — wildcard mishandled in the origin string |
+| `go.mongodb.org/mongo-driver` | 1.12.1 | 1.17.7 | GO-2026-5327 — heap OOB read in GSSAPI error handling, reached via `db.Init` |
+| `golang.org/x/net` | 0.23.0 | 0.53.0/0.55.0 | GO-2026-4918 (HTTP/2 infinite loop), GO-2026-5026 (idna), GO-2025-3595 |
+| `golang.org/x/text` | 0.14.0 | 0.39.0 | GO-2026-5970 — infinite loop on invalid input |
+
+**Result: 6 reachable → 0.** Vulnerabilities in imported packages also went 8 → 0. Backend suite,
+`go vet` and golangci-lint are all green on the new versions, and the built binary was smoke-booted
+against local Mongo (health `{"status":"ok","mongo":"ok"}`, no panic) — a driver bump is exactly the
+kind of change that compiles and tests clean and then fails at connect time.
+
+**Found on implementation.**
+
+- **The `cors` fix is a no-op for us, and it was still right to take.** `main.go` passes
+  `AllowOrigins` an explicit list (`CORS_ORIGINS`, or a two-entry default) and never a wildcard, so
+  GO-2024-2955 was not exploitable here. Bumped anyway: it costs nothing, and the next person to add
+  a wildcard origin should not be the one who discovers the version was known-vulnerable.
+- **`go get golang.org/x/net@v0.55.0 golang.org/x/text@v0.39.0` fails outright** — x/text 0.39.0
+  requires x/net **0.56.0**, so the pair must move together. The trap is that **a failed `go get`
+  applies nothing at all**, so running `go mod tidy` straight afterwards looks like tidy "reverted"
+  the upgrade when in truth it never happened. The versions hold through `tidy` once the bump
+  actually lands; if an indirect bump appears to keep reverting, check that the `go get` succeeded
+  before blaming MVS.
+- **`mongo-driver` v1 is deprecated** — `go get` prints `use go.mongodb.org/mongo-driver/v2 instead`.
+  1.17.7 is the fix on the v1 line and is what shipped. **v2 is a breaking API change and is
+  deliberately out of scope**; it wants its own item, not a drive-by during a security bump.
+- The x/net bump normalised the go directive from `go 1.25` to `go 1.25.0`. Cosmetic, left as-is.
+- `github.com/klauspost/compress` 1.16.7 → 1.19.2 was taken as well (GO-2026-5841, OOB read in
+  `s2`). **Not reachable** — it arrives under the Mongo driver and we never call it — but the bump is
+  free and it keeps future scans from carrying permanent noise someone has to re-triage.
+
+**One advisory remains and cannot be cleared by bumping: GO-2026-5932**, `golang.org/x/crypto/openpgp`
+is "unmaintained and unsafe by design" and **has no fixed version**. We do not import it; it is
+flagged at the module level only. Expect `govulncheck` to keep reporting exactly one uncalled
+advisory — that is the steady state, not a regression.
+
+**`govulncheck` needs the same `/scripts` exclusion as `go test`.** A bare `govulncheck ./...` does
+not run at all — it fails during package loading on the deliberately-uncompilable migrations
+(`unknown field AccessToken`, `undefined: models.PrintJson`, …), which reads like a broken checkout
+rather than a known exclusion. Use
+`govulncheck $(go list ./... | grep -v '/scripts')`, same derived form as everything else (E12).
+Added to `CLAUDE.md` alongside the other commands.
+
+**Frontend (`npm audit`) — assessed, deliberately not acted on.** Five findings, and the severity
+ranking is misleading:
+
+- `postcss` and `nanoid` (both "high") enter **only** through `@vue/cli-plugin-babel` and
+  `@vue/cli-service` — build-time tooling. Neither ships in the bundle, so neither is reachable by
+  any user. `npm audit --omit=dev` still lists them, which is why they look like production risk;
+  read the tree (`npm ls postcss`) rather than the severity column.
+- The `vue` ReDoS (GHSA-5j4c-8p2g-v4jx) is real and affects every Vue 2.x release. There is **no
+  fix on the 2.x line** — Vue 2 is EOL — so `npm audit fix --force` "resolves" it by installing
+  Vue 3, which breaks the entire app (Vuetify 2 and Vuex 3 both go with it). **Do not run
+  `npm audit fix --force` in `frontend/`.** A Vue 3 migration is a project of its own; if it is ever
+  wanted it needs a fresh item and a plan, not a security bump.
+
+### J13 — dead code left behind by J3 and J6 · **P3 · S** — OPEN
+
+Small, safe, and already scoped — split out of J12's sweep rather than done inside it, to keep a
+security bump free of unrelated edits. All four were found by following J6's "two dead things"
+note and re-checking it:
+
+- `EventItem.vue:230` (`userHasResponded`) and `Home.vue:85` (`userRespondedToEvent`) read
+  `event.hasResponded`, which **no server code sets** — J6 established that. What J6 did not
+  record: **neither is referenced by any template**, so this is not a permanently-false indicator,
+  it is three pieces of dead code. Verify with a template grep before deleting, not just a
+  definition grep.
+- `Event.vue:504` maps `events` from the store and never reads it (J6 noted this and left it).
+- `GET /events/:eventId/ids` (`routes/events.go`) has had **no caller anywhere in the app** since
+  J3. Keep or drop is a judgement call — it is auth-gated and covered by
+  `routes/event_auth_gate_test.go`, so it is not a liability; it is just surface. Decide
+  deliberately rather than deleting it by reflex.
 
 ---
 
