@@ -17,7 +17,6 @@ module.exports = {
     browser: true,
     node: true,
     es2021: true,
-    serviceworker: true, // kill-sw.js + registered service worker
   },
   parserOptions: {
     ecmaVersion: "latest",

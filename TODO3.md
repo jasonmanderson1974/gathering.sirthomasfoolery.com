@@ -4,13 +4,14 @@
 > of this file — nothing in either needs updating again, and the three items still open in
 > TODO2.md Part G are restated below as pointers rather than copied.
 >
-> **Status: Part J complete (2026-08-10).** A fresh full-codebase review pass — improvements and
-> optimizations only. **J1–J10 all shipped.** One loose end: **J8's toggle→refetch path has not
-> been exercised in a browser** (it needs a real calendar provider and a working login, neither of
-> which exists locally) — see the check written into that entry, to be done after the next deploy.
+> **Status: Part J complete (2026-08-10), no loose ends.** A fresh full-codebase review pass —
+> improvements and optimizations only. **J1–J11 all shipped**, and **J8's browser check has now been
+> done against the deployed build** (2026-08-10) — the toggle→refetch path works, so nothing in Part
+> J is left pending a deploy.
 >
-> Still open beyond Part J: the three inherited `P3` items below (`TODO2.md` G2, G3, G4), all
-> parked by the user.
+> Still open beyond Part J: the three inherited `P3` items below (`TODO2.md` G2 and G4, plus what
+> remains of G3), all parked by the user. **G3's cheap loose end is now closed as J11** — the rest of
+> G3 (web push itself) stays parked.
 >
 > Context unchanged: self-hosted, invite-only fork for a ~30–40 person club. Reliability and
 > small-club utility over scale. All event access requires sign-in; roles are
@@ -54,9 +55,8 @@ and leave the old entry alone.
   exercised.
 - **`TODO2.md` G3 — web push** (`M`). Deferred pending a value reassessment; reintroducing a
   service worker reverses a deliberate removal (`f857320`) and email reminders already cover iOS.
-  One cheap loose end inside it, independent of the rest: `kill-sw.js` sits at the repo root, so
-  it is **never actually served** and can't unregister anything — move it to `frontend/public/` or
-  mark it documentation-only. `frontend/.eslintrc.cjs:11`'s `serviceworker: true` env is stale too.
+  Its `kill-sw.js` / stale-eslint-env loose end is **done — see J11 below**; only web push itself is
+  still parked.
 - **`TODO2.md` G4 — rename the `schej-it` Mongo database** (`L`). A data migration (dump →
   restore under the new name → cutover in a deploy window), human-run. Zero user-facing benefit,
   which is why it's parked.
@@ -67,7 +67,8 @@ and leave the old entry alone.
 
 From a full review pass at `38b613f7`. The codebase has been through two prior waves (A–E, H), so
 these are what's left: mostly performance and robustness, no known user-facing breakage except J2.
-All ten are done. Each entry keeps its original finding followed by what the implementation
+All eleven are done (J11 was added on 2026-08-10, picked up out of the parked G3). Each entry keeps
+its original finding followed by what the implementation
 actually found — including the three cases where the finding was wrong or incomplete (J3's
 `getEventIds` note, J6's understated disclosure, J10's "the official client always sends a sane
 value").
@@ -337,11 +338,13 @@ certainly unwanted.
 calendar added provider-side while the account is off won't appear until it's switched back on — at
 which point the toggle's refetch catches it up.
 
-**Not verified at runtime, and it needs to be.** Exercising this needs a real Google/Microsoft
-account and a working login, neither of which exists locally (no SMTP, no OAuth in
-`compose.dev.yaml`). Build, lint, unit tests and a hop-by-hop check of the emit chain all pass, but
-that combination has been green over a browser-only bug before. **After the next deploy: open an
-event, toggle a sub-calendar off and back on, and confirm the events return without a reload.**
+**Runtime verification — done, 2026-08-10, against the deployed build.** This could not be
+exercised locally (a real Google/Microsoft account and a working login are both needed, and
+`compose.dev.yaml` has neither SMTP nor OAuth), so it shipped on build/lint/unit-tests plus a
+hop-by-hop check of the emit chain — a combination that has been green over a browser-only bug
+before. The check written into this entry has since been carried out on the deploy: opening an
+event, toggling a sub-calendar off and back on, and confirming the events return without a reload.
+They do. **No loose end remains.**
 
 ### J9 — CLAUDE.md still says date math uses three libraries · **P3 · S** — DONE 2026-08-10
 
@@ -383,6 +386,49 @@ forever. Three parts shipped together:
    unit test asserts the number so the two can't drift silently.
 3. An `invalid-date` arm in `expenseErrorMessage`, for the hand-rolled-client case the guard is
    actually aimed at.
+
+### J11 — the service-worker kill switch that was never ours to run · **P3 · S** — DONE 2026-08-10
+
+Picked up out of the parked `TODO2.md` G3, which is where this was raised as "one cheap loose end,
+independent of the rest": `kill-sw.js` sits at the repo root, so it is **never actually served** and
+can't unregister anything — move it to `frontend/public/` or mark it documentation-only.
+`frontend/.eslintrc.cjs`'s `serviceworker: true` env is stale too. The rest of G3 (web push itself)
+stays parked; only this is done.
+
+**Found on implementation. Both of the options the finding offered were wrong, and the file was
+deleted instead.** The finding assumed there are stale registrations out there to kill and that the
+only thing standing in the way was the file's location. Neither half holds:
+
+- **Moving it to `frontend/public/` would have produced a served file that still does nothing.** A
+  stale worker only ever re-fetches **its own registered script URL**, and the deleted
+  `registerServiceWorker.js` registered `${BASE_URL}service-worker.js` → **`/service-worker.js`**. A
+  kill switch at `/kill-sw.js` is a URL nothing ever asks for. Serving it would have looked like the
+  fix and changed nothing — the worst of the three outcomes, because the next reader would believe
+  it was handled.
+- **This origin cannot have a stale worker at all.** The PWA was removed upstream in `f857320` on
+  **2025-06-24**; the fork's own deploy tooling doesn't appear until `cd1f103b`, **2026-07-22**. No
+  build this origin has ever served contained a service worker, so no client of it holds a
+  registration. `kill-sw.js` was upstream's kill switch for **schej.it's** clients — its own header
+  comment says `// /schej.it/kill-sw.js`, and it was committed (`e8deeee4`) fifteen minutes before
+  the PWA removal it was paired with. We inherited someone else's remediation for someone else's
+  users.
+
+So it went, along with the eslint env. Nothing else referenced either: `register-service-worker`,
+`workbox` and the PWA plugin are all long gone from `frontend/package.json`, and `frontend/public/`
+has no worker or manifest. The env was doubly dead — `lint` runs `eslint .` from `frontend/`, which
+never reached a file at the repo root in the first place.
+
+**Kept, in the CLAUDE.md bullet, because it is the part worth knowing:** if a PWA is ever shipped
+here and then removed, the kill switch must be served at the **registered script URL**, and the SPA
+fallback makes getting that wrong permanent rather than merely useless. `GET /service-worker.js`
+against this server returns `index.html` as `text/html`, so a stale worker's update check fails on
+the MIME type — it does **not** 404 itself out of existence, which is the outcome people assume when
+they simply delete the file. The worker survives indefinitely, pinning that client to a cached build.
+
+Frontend lint (`--max-warnings 0`), unit tests and the production build all pass with the env
+removed — worth checking rather than assuming, since `serviceworker` also defines globals; `self`
+and `caches` survive because `browser: true` supplies them, and nothing in `src/` uses `clients` or
+`registration`. No Go file was touched.
 
 ---
 
