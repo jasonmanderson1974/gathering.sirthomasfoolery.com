@@ -19,7 +19,7 @@
                 <div class="tw-flex tw-items-center tw-justify-between">
                   <v-btn
                     :class="hasPrevPage ? 'tw-visible' : 'tw-invisible'"
-                    class="tw-border-gray"
+                    class="tw-border-brass-dim"
                     variant="outlined"
                     icon
                     @click="prevPage"
@@ -32,7 +32,7 @@
                   </div>
                   <v-btn
                     :class="hasNextPage ? 'tw-visible' : 'tw-invisible'"
-                    class="tw-border-gray"
+                    class="tw-border-brass-dim"
                     variant="outlined"
                     icon
                     @click="nextPage"
@@ -148,7 +148,7 @@
                     class="tw-sticky tw-top-14 tw-ml-0.5 tw-self-start tw-pt-1.5 sm:tw-top-16 sm:-tw-ml-2"
                   >
                     <v-btn
-                      class="tw-border-gray"
+                      class="tw-border-brass-dim"
                       variant="outlined"
                       icon
                       @click="prevPage"
@@ -520,7 +520,7 @@
                   class="tw-sticky tw-top-14 -tw-mr-2 tw-self-start tw-pt-1.5 sm:tw-top-16"
                 >
                   <v-btn
-                    class="tw-border-gray"
+                    class="tw-border-brass-dim"
                     variant="outlined"
                     icon
                     @click="nextPage"
@@ -681,7 +681,7 @@
                         <template v-slot:activator="{ props }">
                           <v-btn
                             variant="outlined"
-                            class="tw-border-gray tw-text-sm"
+                            class="tw-border-brass-dim tw-text-sm"
                             v-bind="props"
                           >
                             Calendar options...

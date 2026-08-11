@@ -1,4 +1,9 @@
-<!-- Used to indicate that a schedule overlap component has more to scroll -->
+<!-- The torn-paper edge marking a break between non-consecutive days.
+     The gradients mask the grid with the PAGE colour and draw a hairline along
+     the tear, so both are theme colours: #1c1410 is wood-deep (what the grid
+     sits on) and #8a7333 is brass-dim. They were `#1c1410` and `#8a7333`, a
+     pre-Fellowship light-theme assumption that drew a bright #1c1410 sawtooth
+     down the edge of the availability grid. -->
 <template>
   <div ref="container" class="tw-overflow-hidden">
     <div :class="left ? 'line1-left' : 'line1-right'" :style="lineStyle"></div>
@@ -10,9 +15,9 @@
 .line1-left {
   background: linear-gradient(
     45deg,
-    white,
-    white 49%,
-    black 49%,
+    #1c1410,
+    #1c1410 49%,
+    #8a7333 49%,
     transparent 51%
   );
 }
@@ -21,8 +26,8 @@
     -45deg,
     transparent,
     transparent 49%,
-    black 49%,
-    white 51%
+    #8a7333 49%,
+    #1c1410 51%
   );
 }
 
@@ -31,16 +36,16 @@
     45deg,
     transparent,
     transparent 49%,
-    black 51%,
-    white 51%
+    #8a7333 51%,
+    #1c1410 51%
   );
 }
 .line2-right {
   background: linear-gradient(
     -45deg,
-    white,
-    white 49%,
-    black 51%,
+    #1c1410,
+    #1c1410 49%,
+    #8a7333 51%,
     transparent 51%
   );
 }

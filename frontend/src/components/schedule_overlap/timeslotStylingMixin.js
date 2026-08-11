@@ -228,15 +228,15 @@ export default {
           this.state === this.states.SINGLE_AVAILABILITY ||
           totalRespondents === 1
         ) {
-          classStyle.class += "tw-border-[#999999] "
+          classStyle.class += "tw-border-brass-dim "
         } else {
-          classStyle.class += "tw-border-[#DDDDDD99] "
+          classStyle.class += "tw-border-[#8a733366] "
         }
       }
 
       // Edit fill color and border color if day is not interactable
       if (isDisabled) {
-        classStyle.class += "tw-bg-light-gray-stroke tw-border-brass-dim "
+        classStyle.class += "tw-bg-leather tw-border-brass-dim "
       }
 
       // Change default red:
@@ -271,7 +271,7 @@ export default {
           // Set style if drag range goes over the current timeslot
           if (this.dragType === this.DRAG_TYPES.ADD) {
             if (this.state === this.states.SET_SPECIFIC_TIMES) {
-              c += "tw-bg-white "
+              c += "tw-bg-brass/40 "
             } else {
               if (this.availabilityType === availabilityTypes.AVAILABLE) {
                 s.backgroundColor = "#00994C77"
@@ -283,7 +283,7 @@ export default {
             }
           } else if (this.dragType === this.DRAG_TYPES.REMOVE) {
             if (this.state === this.states.SET_SPECIFIC_TIMES) {
-              c += "tw-bg-gray "
+              c += "tw-bg-leather "
             }
           }
         } else {
@@ -291,9 +291,9 @@ export default {
           // Show current availability from availability set
           if (this.state === this.states.SET_SPECIFIC_TIMES) {
             if (this.tempTimes.has(date.getTime())) {
-              c += "tw-bg-white "
+              c += "tw-bg-brass/40 "
             } else {
-              c += "tw-bg-gray "
+              c += "tw-bg-leather "
             }
           } else {
             if (this.availability.has(date.getTime())) {
