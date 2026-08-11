@@ -26,7 +26,6 @@
       <v-form
         ref="form"
         v-model="formValid"
-        lazy-validation
         class="tw-flex tw-flex-col tw-gap-y-6"
         :disabled="loading"
       >
@@ -188,7 +187,6 @@
                 <v-btn-toggle
                   v-model="selectedDaysOfWeek"
                   multiple
-                  solo
                   color="primary"
                 >
                   <v-btn variant="flat" v-show="!startOnMonday"> Sun </v-btn>
@@ -228,7 +226,7 @@
           v-else-if="!guestEvent"
           disabled
           messages="test"
-          off-icon="mdi-checkbox-blank-off-outline"
+          false-icon="mdi-checkbox-blank-off-outline"
           class="tw-mt-2"
         >
           <template v-slot:label>
@@ -271,7 +269,7 @@
                     </div>
 
                     <v-tooltip
-                      top
+                      location="top"
                       content-class="tw-bg-very-dark-gray tw-shadow-lg tw-opacity-100 tw-py-4"
                     >
                       <template v-slot:activator="{ props }">
@@ -443,8 +441,11 @@ export default {
 
   methods: {
     ...mapActions(["setEventFolder"]),
-    submit() {
-      if (!this.$refs.form.validate()) return
+    async submit() {
+      // Vuetify 3's validate() is async: it returns Promise<{ valid, errors }>,
+      // and a Promise is always truthy, so `if (!validate())` guards nothing.
+      const { valid } = await this.$refs.form.validate()
+      if (!valid) return
 
       const { dates, duration, type } = this.buildDatesPayload()
 

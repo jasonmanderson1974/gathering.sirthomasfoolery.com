@@ -17,7 +17,6 @@
         <v-form
           ref="form"
           v-model="formValid"
-          lazy-validation
           class="tw-flex tw-flex-col tw-gap-y-4"
           onsubmit="return false;"
         >
@@ -43,12 +42,7 @@
           ></v-text-field>
           <div class="tw-flex">
             <v-spacer />
-            <v-btn
-              @click="submit"
-              class="tw-bg-brass"
-              :dark="formValid"
-              :disabled="!formValid"
-            >
+            <v-btn @click="submit" class="tw-bg-brass" :disabled="!formValid">
               Continue
             </v-btn>
           </div>
@@ -89,7 +83,7 @@ export default {
   },
 
   methods: {
-    submit() {
+    async submit() {
       // Set rules only on submit
       this.nameRules = [
         (name) => !!name || "Name is required",
@@ -105,11 +99,16 @@ export default {
         (email) => !!validateEmail(email) || "Invalid email",
       ]
 
-      this.$nextTick(() => {
-        if (!this.$refs.form.validate()) return
+      // The rules above have to reach the fields before validate() runs them —
+      // nothing re-validates on a rules change, only this explicit call does.
+      await this.$nextTick()
 
-        this.$emit("submit", { name: this.name, email: this.email })
-      })
+      // Vuetify 3's validate() is async: it returns Promise<{ valid, errors }>,
+      // and a Promise is always truthy, so `if (!validate())` guards nothing.
+      const { valid } = await this.$refs.form.validate()
+      if (!valid) return
+
+      this.$emit("submit", { name: this.name, email: this.email })
     },
   },
 
