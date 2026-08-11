@@ -737,13 +737,31 @@ Per-phase notes are in the commit messages; the ones with the longest half-life:
 - **Vue 3 removed `el.__vue__` and `$children`**, so every instance-walking probe in
   `/root/tools/browser/` is dead. Read the DOM.
 
+### K3 — the "dev-only" crash was a shipped bug · **P1 · S** — DONE 2026-08-11
+
+Traced, and the label was wrong twice over.
+
+`OverflowGradient` declares `scrollContainer` an `HTMLElement`. `NewEvent` passes a ref on a
+**`<v-card-text>`** — and Vuetify 2's `VCardText` was a *functional* component (a ref gave the DOM
+node) where Vuetify 3's is a real one (a ref gives the component proxy). In dev, prop validation
+caught the mismatch and then **threw while formatting its own error message**, because `${proxy}`
+cannot reach a primitive — so the mount aborted and the real fault never surfaced. In production,
+validation is skipped, the panel mounted, and `mounted` threw
+`TypeError: this.scrollContainer.addEventListener is not a function` **on every open of the
+dialog**.
+
+**The harness had been hiding it.** `pageErrors` read `args[0].value`, and CDP only sets `value`
+for primitives — `console.error(someError)`, which is how Vue reports a throw from a lifecycle
+hook, carries its message in `description`. Every argument is read now, with that fallback.
+
+Switching it on surfaced one more error, which is **not** a regression: `/e/:id/responded` 400s on
+a bare visit because `Responded.vue` POSTs the `email` from the query string. Recorded as a
+per-route `expectConsoleErrors` regexp with its reason; anything not matching still fails.
+
+Dev-build framework warnings are now **zero** (21 at the start of K2c).
+
 Still open before this merges:
 
-- **A dev-only crash opening the New Gathering dialog** — a prop type check fails and Vue throws
-  while formatting the message (`Cannot convert object to primitive value` inside
-  `getInvalidTypeMessage`). `validateProps` does not run in production, so nothing ships broken,
-  but it means a real type mismatch is in there.
-- **One `Extraneous non-props attributes` warning** left to trace.
 - **Nothing has been exercised against real Google/Microsoft calendar accounts**, which
   `compose.dev.yaml` cannot do — same gap J8 had, and it needs the same post-deploy check.
 - Neither `main` nor `vue3` has been pushed.
