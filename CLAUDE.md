@@ -187,6 +187,21 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
   (which *attempts* the face) plus the `@font-face` rule's own `src`. Not `document.fonts.check()`,
   which returns true when no matching face exists at all, and not resource-timing sizes, which
   report a perfectly-painting font as missing whenever it was cached or never needed on that page.
+- **The four text faces are self-hosted and pinned too, and their family names end in
+  `Variable`** — `@fontsource-variable/{dm-sans,cinzel,cormorant-garamond,eb-garamond}` at exact
+  versions, imported in `src/main.js` (L9; they were `<link>`s to fonts.googleapis.com until
+  2026-08-11, which blocked first paint on a third party and sent every member's IP and UA to
+  Google on every load of an invite-only app). The suffix is fontsource's naming for the variable
+  cut and is **load-bearing**: `"EB Garamond"` matches no face and falls through to generic `serif`
+  silently — no error, no warning, the page just renders in the wrong typeface. The names appear in
+  exactly three places — `tailwind.config.js` (`tw-font-display`/`head`/`body`), `src/index.css`
+  and `App.vue` — plus `FONT_FAMILIES` in `scripts/check-routes.js`, which asserts all four load
+  and all four are same-origin and content-hashed. **Never add a font via a `<link>` or a CSS
+  `@import`; add the package.** An `@import` is the worst of the three: it is discovered only after
+  the importing stylesheet parses, so it serialises a third-party round trip behind our own CSS,
+  and it is invisible to anything scanning `<link>` tags or top-level `document.styleSheets` (an
+  imported sheet is a `CSSImportRule` inside its parent). One hid in `App.vue`'s style block and
+  outlived L9's own write-up.
 - **Vue 3 discards an unrecognised prop on a component silently** — no warning in dev, none in the
   build. That is the general rule the next three bullets are instances of, and it is why a Vuetify 2
   leftover renders at the wrong size, variant or position with lint, the unit suite, the build and

@@ -13,10 +13,14 @@ module.exports = {
         xs: ["0.813rem", "1rem"],
       },
       fontFamily: {
-        // The Fellowship — all-serif gentleman's-club type
-        display: ['"Cinzel"', "serif"], // spaced all-caps titles
-        head: ['"Cormorant Garamond"', "serif"], // ornamental italic heads
-        body: ['"EB Garamond"', "serif"], // running text
+        // The Fellowship — all-serif gentleman's-club type.
+        // The `Variable` suffix is the family name the self-hosted variable cut
+        // actually declares (@fontsource-variable/*, imported in src/main.js) —
+        // it is not decoration, and dropping it silently falls through to the
+        // generic serif with nothing logged (L9).
+        display: ['"Cinzel Variable"', "serif"], // spaced all-caps titles
+        head: ['"Cormorant Garamond Variable"', "serif"], // ornamental italic heads
+        body: ['"EB Garamond Variable"', "serif"], // running text
       },
     },
     colors: {

@@ -1306,13 +1306,69 @@ our origin, an icon paints, and no request to jsdelivr/unpkg/cdnjs is made at al
 `/fonts/materialdesignicons-webfont.fbaef2a9.woff2` comes back `200 font/woff2`, 403,216 bytes,
 `cache-control: public, max-age=31536000, immutable`.
 
-### L9 — three Google Fonts families on the critical path · **P3 · S**
+### L9 — three Google Fonts families on the critical path · **P3 · S** — DONE 2026-08-11
 
 `frontend/public/index.html:36–44` — `preconnect` to `fonts.googleapis.com` / `fonts.gstatic.com`
 plus two stylesheet requests (DM Sans; Cormorant Garamond + EB Garamond + Cinzel). Every page load
 of an invite-only, self-hosted club app sends every member's IP and UA to Google, and blocks first
 paint on a third party. Self-hosting the woff2 files is mechanical and removes both. Lower
 priority than L8 only because the version is not floating.
+
+**DONE 2026-08-11 — and there were three requests, not two.**
+
+The item counted the two `<link rel="stylesheet">`s in `public/index.html`. It missed
+`src/App.vue:77`, a CSS `@import url("https://fonts.googleapis.com/css2?family=DM+Sans&display=swap")`
+sitting at the top of the app's global `<style>` block. It survived the whole fix and turned up
+only in a `grep` of the **built** `dist/css/app.*.css`, which is the lesson: the source greps that
+found the `<link>`s were for the family names, and this one asks for `family=DM+Sans` with no
+weights, so it read as neither a font family nor a `<link>`.
+
+It is also the worst of the three forms. A `<link>` is at least in the head and visible to the
+preload scanner; an `@import` is discovered only once the importing stylesheet has downloaded and
+parsed, so it serialises a third-party round trip *behind* our own CSS. And it hides from
+inspection: an imported sheet is a `CSSImportRule` inside its parent, **not** a top-level entry in
+`document.styleSheets`.
+
+**Implementation**, following L8's precedent exactly — a pinned npm package imported in
+`src/main.js`, emitted by webpack as a content-hashed same-origin asset, rather than woff2 files
+hand-dropped into `public/`:
+
+- `@fontsource-variable/{dm-sans,cinzel,cormorant-garamond,eb-garamond}`, all at `5.3.0`, pinned
+  exactly (`--save-exact`, no `^`) for the reason L8 established.
+- These are the **variable** cuts: one file per family per subset covers the whole weight range,
+  replacing the twelve static cuts the Google request enumerated. 32 files land in `dist/fonts/`
+  (subsets are gated by `unicode-range`, so a browser still downloads only the one or two it needs).
+- Italics imported only for Cormorant Garamond and EB Garamond, the two families whose Google
+  request actually asked for one (`ital,wght@…1,500` and `…1,400`). DM Sans and Cinzel were
+  requested upright-only and still are, so their obliques stay browser-synthesised — unchanged
+  behaviour, not an oversight.
+- **The family names now carry a `Variable` suffix** — fontsource's naming, not ours. That is the
+  one sharp edge here: `"EB Garamond"` matches no face and falls through to generic `serif`
+  silently. The names live in exactly three places (`tailwind.config.js`, `src/index.css`,
+  `App.vue`) plus `FONT_FAMILIES` in `scripts/check-routes.js`.
+
+**Two new `check:routes` assertions**, because a text face that fails to load is quieter than an
+icon font that does: no blank squares, just Times and Arial and a page that looks merely *wrong*.
+`the four text faces loaded` (via `document.fonts.load()`, per the L8 reasoning) and
+`the text faces are self-hosted`. 63 assertions → 65.
+
+The self-hosted one walks `@import` rules recursively, and that is not defensive padding: **the
+first draft of it did not, and would have passed with the App.vue `@import` still in place.** The
+assertion that exists to catch a Google font request could not see the Google font request that was
+actually there.
+
+Both were then shown able to fail before being trusted (M2), against the kept-alive check stack:
+the pre-L9 name `"EB Garamond"` is detected as missing; a re-added `<link>` is detected and its
+removal restores PASS; and a `@style`-injected `@import` is detected. 6/6. The first run of that
+harness returned `undefined` for every case — a broken extraction, not passing assertions — which
+is why the proof script treats `undefined` as a failure rather than letting it read as either
+outcome.
+
+Verified: eslint clean, `check:vuetify-props` clean, 411 unit tests, production build clean (the
+2 warnings are the pre-existing MDI asset-size ones, present before this change and unrelated),
+`scripts/browser-check.sh` **ALL PASS** at 65 assertions, `dist` free of any `fonts.googleapis.com`
+/ `fonts.gstatic.com` reference outside a source-map comment, and a screenshot confirming Cinzel,
+Cormorant italic and DM Sans all still paint.
 
 ### L10 — four build-toolchain vulnerabilities, none shipped · **P2 · S** — DONE 2026-08-11
 

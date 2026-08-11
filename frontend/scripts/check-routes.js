@@ -204,6 +204,99 @@ const iconFontSelfHosted = `(() => {
     /webfont\\.[0-9a-f]{8}\\.woff2/.test(all)
 })()`
 
+/**
+ * The four TEXT faces arrived and painted, too.
+ *
+ * Same failure mode as the icon font above, and a quieter one: a text face that
+ * fails to load does not leave blank squares, it silently falls through to the
+ * next entry in the stack. `serif` and `sans-serif` are always available, so the
+ * app renders in Times and Arial and looks merely *wrong* rather than broken —
+ * no console error, no failed build, nothing to grep for. The whole visual
+ * identity of the club is these four families.
+ *
+ * The `Variable` suffix is load-bearing (L9): these are the variable cuts from
+ * `@fontsource-variable/*`, and that is the family name they declare. A stale
+ * `"EB Garamond"` in a stylesheet matches no face and falls straight through to
+ * `serif` — which is precisely the silent failure this asserts against, so the
+ * names are spelled out here rather than derived from the CSS.
+ */
+const FONT_FAMILIES = [
+  "DM Sans Variable",
+  "Cinzel Variable",
+  "Cormorant Garamond Variable",
+  "EB Garamond Variable",
+]
+
+const textFontsLoaded = `(async () => {
+  const want = ${JSON.stringify(FONT_FAMILIES)}
+  for (const family of want) {
+    const faces = [...document.fonts].filter((f) => f.family.replace(/["']/g, '') === family)
+    if (faces.length === 0 || faces.some((f) => f.status === 'error')) return false
+    const loaded = await document.fonts.load("16px '" + family + "'")
+    if (loaded.length === 0 || !loaded.every((f) => f.status === 'loaded')) return false
+  }
+  return true
+})()`
+
+/**
+ * ...and all of them from us, not from Google.
+ *
+ * L9: these were two \`<link rel="stylesheet">\`s to fonts.googleapis.com, which
+ * blocked first paint on a third party and handed Google the IP and User-Agent
+ * of every member of an invite-only club on every page load.
+ *
+ * Asserted two ways, because they fail differently. The \`@font-face\` src check
+ * catches a face served from somewhere else; the stylesheet-origin check catches
+ * a re-added Google stylesheet *even when its rules are unreadable* — a
+ * cross-origin sheet throws on \`.cssRules\`, so a font arriving that way is
+ * invisible to the first check by construction. Origin-checking only what we
+ * can read would quietly pass the exact regression this exists to stop.
+ *
+ * The second check walks \`@import\` rules recursively, and that is not
+ * hypothetical thoroughness: the third Google request in this app was an
+ * \`@import url(...)\` in App.vue's style block, which L9 had not counted and
+ * which the first draft of this assertion missed. An imported sheet is a
+ * CSSImportRule inside its parent — it is NOT a top-level entry in
+ * \`document.styleSheets\`, so iterating that list alone cannot see it.
+ */
+const textFontsSelfHosted = `(() => {
+  const want = ${JSON.stringify(FONT_FAMILIES)}
+  const bad = /fonts\\.(googleapis|gstatic)\\.com/
+
+  for (const link of document.querySelectorAll('link[rel="stylesheet"], link[rel="preconnect"], link[rel="preload"]')) {
+    if (bad.test(link.href)) return false
+  }
+
+  const seen = new Set()
+  let clean = true
+  const walk = (sheet) => {
+    if (!clean) return
+    if (sheet.href && bad.test(sheet.href)) { clean = false; return }
+    let rules
+    try { rules = sheet.cssRules } catch { return }
+    for (const rule of rules) {
+      if (rule instanceof CSSImportRule) {
+        if (bad.test(rule.href || '')) { clean = false; return }
+        if (rule.styleSheet) walk(rule.styleSheet)
+        continue
+      }
+      if (!(rule instanceof CSSFontFaceRule)) continue
+      const family = rule.style.fontFamily.replace(/["']/g, '')
+      if (!want.includes(family)) continue
+      const urls = [...rule.style.src.matchAll(/url\\(["']?([^"')]+)["']?\\)/g)].map((m) => m[1])
+      if (urls.length === 0) { clean = false; return }
+      if (!urls.every((u) => new URL(u, location.href).origin === location.origin)) { clean = false; return }
+      // Content-hashed, same as the icon font — that is what earns it
+      // \`immutable\` from the Go server (\`contentHashedAsset\`, main.go).
+      if (!urls.every((u) => /\\.[0-9a-f]{8}\\.woff2/.test(u))) { clean = false; return }
+      seen.add(family)
+    }
+  }
+  for (const sheet of document.styleSheets) walk(sheet)
+
+  return clean && want.every((f) => seen.has(f))
+})()`
+
 /* ---------- routes ---------- */
 
 const routes = (eventId) => [
@@ -225,6 +318,8 @@ const routes = (eventId) => [
       ["offers folder creation", buttonMatching("/new folder/i")],
       ["the icon webfont loaded", iconFontLoaded],
       ["the icon webfont is self-hosted", iconFontSelfHosted],
+      ["the four text faces loaded", textFontsLoaded],
+      ["the text faces are self-hosted", textFontsSelfHosted],
     ],
   },
   {

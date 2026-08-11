@@ -16,7 +16,7 @@
   /* Vuetify's root (<v-app>) gets the walnut + damask backdrop */
   body,
   .v-application {
-    font-family: "EB Garamond", serif;
+    font-family: "EB Garamond Variable", serif;
     color: #ede4d3; /* parchment */
     background-color: #1c1410; /* wood-deep */
   }
@@ -52,7 +52,7 @@
 
   /* Default serif voice for the app's running text */
   .v-application p {
-    font-family: "EB Garamond", serif;
+    font-family: "EB Garamond Variable", serif;
   }
 }
 

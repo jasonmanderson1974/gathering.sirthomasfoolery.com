@@ -74,7 +74,18 @@
 </template>
 
 <style>
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans&display=swap");
+/*
+ * There was a third Google Fonts request here — an `@import url(...)` for DM
+ * Sans — that L9 did not know about: it only counted the two <link>s in
+ * public/index.html. It is gone with them (the face is bundled now; see
+ * src/main.js), and it is worth knowing why this form is the worst of the
+ * three. A <link> is at least visible in the document head and discoverable by
+ * the preload scanner. An @import is discovered only once THIS stylesheet has
+ * downloaded and parsed, so it serialises a third-party round trip behind our
+ * own CSS — and it hides from anything looking at <link> tags or at
+ * document.styleSheets, because an imported sheet is a CSSImportRule inside its
+ * parent, not a top-level entry. Don't reintroduce one.
+ */
 
 html {
   overflow-y: auto !important;
@@ -91,7 +102,7 @@ html {
  * one.
  */
 * {
-  font-family: "DM Sans", sans-serif;
+  font-family: "DM Sans Variable", sans-serif;
 }
 
 /*
