@@ -13,11 +13,15 @@
 > pass, because all three prior waves audited *our* code and nobody had ever audited what we depend
 > on. **Nothing in Part J is open.**
 >
-> **Part K is complete as of 2026-08-11 — every item shipped and deployed, and nothing in this file
-> is open.** Production serves the Vue 3 stack. **The one outstanding thing in the whole backlog is
-> not a code item: K5's calendar-linking check, which needs a human with a real OAuth consent flow.**
-> Nothing in the migration has ever exercised linking a Google/Microsoft/Apple calendar or importing
-> availability from one.
+> **Part K is complete as of 2026-08-11 — every item shipped and deployed.** Production serves the
+> Vue 3 stack. **K5's calendar-linking check is still outstanding and is not a code item**: it needs
+> a human with a real OAuth consent flow. Nothing in the migration has ever exercised linking a
+> Google/Microsoft/Apple calendar or importing availability from one.
+>
+> **Part L (opened 2026-08-11) is the post-migration review and IS open — L1–L15, nothing started.**
+> Start with **L1** (form validation guards are dead code under Vuetify 3) and **L2** (the phone's
+> "+" button is off-screen), then **L4**, which is the forty-line check that would have caught L2 and
+> L3 and prevents the whole class recurring.
 >
 > **The backlog was the Vue 3 migration (Part K).** The three inherited `P3` items (`TODO2.md` G2, G3, G4) were **closed
 > won't-do on 2026-08-10** by user decision — see the section below for the reasoning, which is
@@ -863,6 +867,244 @@ ever exercised calendar linking or availability import — despite `ScheduleOver
 the 56 `.sync` conversions and J8's toggle→refetch chain. Linking a calendar needs a real consent
 flow, i.e. a human. **That is the one outstanding risk from Part K**: link a calendar on the live
 site and confirm events still appear on the availability grid.
+
+---
+
+## PART L — 2026-08-11 post-migration review (opened 2026-08-11)
+
+> A full-codebase review run at `422241f`, immediately after Part K shipped. **All tooling is
+> green** and stayed green through every finding below: 395 frontend unit tests pass, eslint is
+> clean, the production build succeeds, `go vet`, `golangci-lint` (0 issues) and the Go suite all
+> pass, and `govulncheck` reports exactly the one expected module-level finding (GO-2026-5932,
+> the J12 baseline). Nothing here was caught by a check that already runs.
+>
+> **The theme is the one K5 named and did not finish.** K5's own lesson was "sweeping one event
+> name is not sweeping the class" — it enumerated `@change` and left the *prop* surface
+> unexamined. Vue 3 passes an unrecognised prop straight through as a DOM attribute and says
+> nothing, so a Vuetify 2 prop that no longer exists is invisible to lint, to the unit suite, to
+> the build, and to `check:routes` (which asks whether a route renders, not whether a button is
+> the right size or in the right place). **L1–L4 are all that one class**, and L4 is the check
+> that ends it.
+>
+> Findings are ordered by what they cost a user, not by effort.
+
+### L1 — `VForm.validate()` returns a Promise, so the submit guard never fires · **P0 · S**
+
+`if (!this.$refs.form.validate()) return` at `frontend/src/components/GuestDialog.vue:109` and
+`frontend/src/components/NewEvent.vue:447`.
+
+Vuetify 2's `validate()` returned a **boolean**. Vuetify 3's returns
+`Promise<{ valid, errors }>` — confirmed in
+`node_modules/vuetify/lib/components/VForm/VForm.d.ts:102` (`validate: () => Promise<{…}>`).
+**A Promise is always truthy, so `!promise` is always `false` and the guard is dead code.**
+
+It is currently *masked*, not harmless: both submit buttons also carry `:disabled="!formValid"`,
+and that binding is the only thing enforcing validity today. **GuestDialog is the one where the
+mask does not cover the hole.** Its design is deliberately "install the strict rules at submit
+time, then validate": `submit()` assigns `nameRules` (name required · name already taken · not
+ObjectID-shaped) and `emailRules`, then calls `validate()` on `$nextTick`. The button was already
+enabled when it was clicked, so those rules never gate anything — the `submit` event is emitted
+regardless. The ObjectID-shaped-name rule exists *because the server rejects that name* (a guest
+response keyed by an ObjectID-shaped string can collide with a member's), and its comment says it
+is "mirrored here so the guest sees why rather than a generic failure". That mirror is off.
+
+Fix in both places: `const { valid } = await this.$refs.form.validate(); if (!valid) return` —
+and make the caller `async`. While there, drop `lazy-validation` (see L3): it was Vuetify 2's way
+of saying "don't validate until I ask", which is precisely what this pattern depends on, and in
+Vuetify 3 the replacement is `validate-on="submit"`.
+
+### L2 — the phone's "+" button is a rectangle 1,300px below the fold · **P1 · S**
+
+`frontend/src/components/BottomFab.vue` — the floating create button on `/home`, phone only.
+
+It relies on two Vuetify 2 `VBtn` props that no longer exist: **`fab`** (round icon shape) and
+**`fixed`** (`position: fixed`). Both now fall through as inert DOM attributes. The Tailwind
+classes on the same element — `tw-bottom-4 tw-left-0 tw-right-0 tw-mx-auto` — were only ever
+*positioning* for the `fixed` the prop supplied; with static positioning they do nothing at all.
+There is no `tw-fixed`.
+
+**Browser-verified** against the running local build at 390×844, signed in, on `/home`:
+
+```
+position: relative · border-radius: 6px · rect.top: 2186 · viewport height: 844
+```
+
+So the button is square, statically positioned, and sits 1,300px past the bottom of the screen —
+reachable only by scrolling the entire dashboard. `check:routes` cannot see this: the element
+renders, and it renders quietly.
+
+Fix: `<v-btn icon position="fixed" class="tw-fixed …">`, then re-check at 390px.
+
+### L3 — six more Vuetify 2 props survived the K2d styling pass · **P1 · S**
+
+Same mechanism as L2, smaller blast radius — each renders at the wrong size or variant, silently.
+Found by the L4 check; all confirmed against Vuetify 3's shipped prop declarations.
+
+| Site | Prop | What it should be |
+|---|---|---|
+| `event/EventDescription.vue:59,62` | `:small="isPhone"` on `v-btn` | `:size="isPhone ? 'small' : 'default'"` — the description editor's ✓/✕ buttons never shrink on a phone |
+| `event/EventHeader.vue:52` | `:outlined="!isPhone"` on `v-btn` | `:variant="isPhone ? 'text' : 'outlined'"` — renders elevated on desktop instead |
+| `event/GatheringRsvp.vue:20` | `:outlined="myStatus !== opt.value"` on `v-btn` | `:variant="…"` — unselected RSVP buttons lose their outline (the Tailwind `:class` still carries the colour, so this one degrades rather than breaks) |
+| `LocationInput.vue:9` + `:48` | a declared `solo` prop, forwarded as `:solo` to `v-combobox` | `variant="solo"`; note the prop is **LocationInput's own** and its one caller (`NewEvent.vue:47`) still passes it, so both ends move together |
+| `NewEvent.vue:191` | `solo` on `v-btn-toggle` | not a v3 prop at all — drop it |
+| `GuestDialog.vue:17`, `NewEvent.vue:26` | `lazy-validation` on `v-form` | `validate-on="submit"` (and see L1 — this is load-bearing for GuestDialog) |
+
+Two harmless leftovers to sweep at the same time: `:dark="formValid"` on `GuestDialog.vue:49`
+(the theme is global in Vuetify 3) and a bare `dark` on a plain `<div>` at `App.vue:14`, which
+was never a Vue thing.
+
+### L4 — the check that ends this class: lint Vuetify props against Vuetify · **P1 · S**
+
+**L2 and L3 are not six mistakes, they are one missing check**, and the check is about forty
+lines. Parse every `.vue` template with `@vue/compiler-sfc`, collect the attribute names bound on
+any `v-*` tag, and diff them against the prop names declared across
+`node_modules/vuetify/lib/components/**/*.d.ts`. Skip native passthroughs (`maxlength`,
+`inputmode`, `autocomplete`, `data-*`, `aria-*`, `class`/`style`/`key`/`ref`).
+
+Run from a clean tree during this review it printed exactly six lines and nothing else — every
+finding in L2 and L3, no false positives. It is worth having as `npm run check:vuetify-props`
+in `frontend-ci.yml`, because it is the only thing in the repo that would have failed on them,
+and because it costs nothing and keeps working across the next Vuetify minor.
+
+The same shape generalises: the authority for "does this prop exist" is the library's own type
+declarations, which are already on disk. Nothing else in the pipeline consults them.
+
+### L5 — `check:routes` is the safety net and CI does not run it · **P1 · M**
+
+`frontend/scripts/check-routes.js` states the gap in its own header, and it is right: the unit
+suite is 395 pure-JS tests with `environment: "node"`, **no `.vue` file is imported anywhere and
+`@vue/test-utils` is not a dependency**, so the suite stays green through a total rendering
+failure. Lint and the build are no better. `check:routes` is the only thing that looks at a page —
+and it runs by hand, because it needs a booted stack, a session cookie from
+`server/tools/mintsession`, and an event id.
+
+Every browser-only bug this repo has paid for is in that gap: `v-show` beaten by Tailwind's
+`important: true`, a purged class name built from a template string, a fifth tab putting a phone
+into horizontal scroll, K3's shipped dialog crash, K5's silently-broken toggles, and now L2.
+
+Make CI do it: `docker compose -f compose.dev.yaml up -d --build`, mint a superAdmin cookie, seed
+one event, run `check:routes` against it. The two halves are complementary and both are needed —
+`check:routes` catches "it did not render", L4 catches "it rendered wrong".
+
+### L6 — the docs still describe a Vue 2 app · **P1 · S**
+
+Same class as J9, and it matters more than usual because `CLAUDE.md` is what the next session
+reads before touching anything.
+
+- `CLAUDE.md:30` — "`frontend/` — Vue 2 + Vuetify + Tailwind"; `CLAUDE.md:85` — "### Frontend
+  (Vue 2 SPA)". `README.md:18` links Vue 2.
+- `CLAUDE.md`'s backend section still says the `NoRoute` handler "walks … falls back to a
+  `NoRoute` handler that injects per-route OG meta tags (e.g. for `/e/:eventId` it looks up the
+  event to set the title and OG image)". **E3 deleted that** — `noRouteHandler` in
+  `server/main.go:327` now serves a static shell with no DB lookup, on purpose, because per-event
+  OG titles leaked gathering names to anyone who guessed a short id.
+- The frontend gotchas list should absorb what Part K and Part L cost: `@change` gives the DOM
+  event now (K5), `VForm.validate()` is async (L1), and **an unknown prop on a Vuetify component
+  is silently discarded** (L2/L3) — that last one is the general rule the other two are instances
+  of.
+
+### L7 — 111 emits are undeclared, which in Vue 3 also makes them DOM listeners · **P2 · S**
+
+`vue/require-explicit-emits` reports 111 sites. This is not style: in Vue 3 an event that is not
+in `emits` stays in `$attrs` and is **additionally** bound as a native listener on the
+component's root element, so a component emitting a DOM-named event without declaring it fires
+its parent's handler twice.
+
+**Nothing is live today** — the two components that emit DOM-named events (`NewEvent` emits
+`input`, `GuestDialog` emits `submit`) both declare `emits`, and every other emit uses a custom
+name that no DOM element listens for. It is a trap rather than a bug: the next `$emit("click")`
+written without a declaration double-fires, and nothing warns. Turn the rule on and clear it.
+
+### L8 — the icon font is `@latest`, from a CDN, unpinned and unverified · **P2 · S**
+
+`frontend/public/index.html:34`:
+
+```html
+href="https://cdn.jsdelivr.net/npm/@mdi/font@latest/css/materialdesignicons.min.css"
+```
+
+**`@latest`.** Every page load resolves whatever jsdelivr is serving under that tag at that
+moment — a third party can change what renders in this app with no deploy on our side, and there
+is no SRI hash to catch it. It is also load-bearing: `src/plugins/vuetify.js` selects the font
+icon set (`mdi`, not `mdi-svg`) precisely because the glyphs arrive this way, and all 69 `mdi-*`
+names in the app render as blank squares if the request fails, with nothing logged.
+
+This sits badly beside the deliberate strip-third-party-scripts work. Pin the version as the
+minimum fix; self-hosting the woff2 removes the dependency and the request.
+
+### L9 — three Google Fonts families on the critical path · **P3 · S**
+
+`frontend/public/index.html:36–44` — `preconnect` to `fonts.googleapis.com` / `fonts.gstatic.com`
+plus two stylesheet requests (DM Sans; Cormorant Garamond + EB Garamond + Cinzel). Every page load
+of an invite-only, self-hosted club app sends every member's IP and UA to Google, and blocks first
+paint on a third party. Self-hosting the woff2 files is mechanical and removes both. Lower
+priority than L8 only because the version is not floating.
+
+### L10 — four build-toolchain vulnerabilities, none shipped · **P2 · S**
+
+`npm audit`: 3 moderate, 1 high — webpack's `AutoPublicPathRuntimeModule` DOM-clobbering XSS, two
+`buildHttp` allowlist-bypass SSRF advisories, and `serialize-javascript` RCE/CPU-exhaustion
+reached via `terser-webpack-plugin`. **All are build-time only** — none of this code is in `dist`,
+and the webpack XSS gadget needs `AutoPublicPath`, which this build does not use. `npm audit fix`
+resolves all four without a major bump. Worth doing because J12's whole point was that nobody had
+audited what we depend on, and the Go side is currently clean (govulncheck: 0 called, the one
+expected module-level GO-2026-5932).
+
+While here: add `npm audit` and `govulncheck` to CI as a scheduled job, so J12 and L10 are not
+both "someone remembered to look".
+
+### L11 — two collections' indexes exist only in migration scripts · **P3 · S**
+
+`server/db/init.go` creates every other invariant-bearing index at boot through `ensureIndex`,
+with a comment explaining what each one guarantees. Missing: **`comments`** (queried by `eventId`,
+sorted by `createdAt` — `db/comments.go:26`) and **`eventResponses`**, both of which exist only
+because a dated script under `server/scripts/` created them on the live database.
+
+At 30–40 members this is not a performance problem and should not be filed as one. It is a
+reproducibility gap: a fresh install, or the restored-dump dev box, silently runs collection scans
+where production does not — so a query plan verified locally is not the query plan in production.
+Move them into `ensureIndex` alongside the rest.
+
+### L12 — Swagger UI is served publicly in production · **P3 · S**
+
+`server/main.go:228` mounts `router.GET("/swagger/*any", …)` unconditionally, outside every auth
+group. On an app where **all** event access requires sign-in (E3), the complete API surface —
+every route, every model shape, every field name — is readable by anyone who visits
+`/swagger/index.html`. Gate it on `gin.Mode() != gin.ReleaseMode`, or behind the admin role.
+
+### L13 — `vue3-recommended` is not worth adopting; three of its rules are · **P3 · S**
+
+Recorded so the follow-up noted in `.eslintrc.cjs` ("tightening to `vue3-recommended` is a
+follow-up worth doing on a quiet diff") can be closed with a decision rather than re-litigated.
+
+Measured: `vue3-recommended` produces **1,941 warnings, 0 errors, 1,712 of them auto-fixable** —
+and every one sampled is formatting that fights prettier (`html-indent`,
+`singleline-html-element-content-newline`, `attributes-order`, `max-attributes-per-line`). Zero
+correctness signal for a very large diff.
+
+The signal is in individual rules, so cherry-pick instead: `vue/require-explicit-emits` (L7, 111
+real hits) and `vue/no-unused-properties` (61 hits, worth a look). Note `vue/no-unused-refs`
+reports 4 and **all four are false positives** — `name-field`, `emailInput`, `datePicker` and
+`calendar` are read from mixins, which the rule cannot see. Don't enable it.
+
+### L14 — a transition that has never had any CSS · **P3 · S**
+
+`schedule_overlap/RespondentsList.vue:85` — `<transition-group tag="div" name="list">`. No
+`list-enter*` / `list-leave*` rule exists in any `.vue`, `.css` or `.scss` in the tree, nor in the
+compiled bundle, so the respondent list has never animated. Pre-dates the migration.
+(`CalendarEventBlock`'s `:name="transitionName"` is fine — it resolves to `fade-transition`, which
+Vuetify ships and which is present in the built CSS.) Either add the rules or drop the wrapper.
+
+### L15 — dependency drift and a Go version skew · **P3 · S**
+
+- `sass-loader` is on **10.5.2** against a latest of 17 — six majors behind, and the one dep here
+  whose age is likely to bite during a future toolchain change. `core-js` 3.42→3.50,
+  `dayjs` 1.11.10→1.11.21, `tailwindcss` 3.4.1→3.4.19, `autoprefixer`, `ws` are all routine patch
+  drift. Explicitly **not** recommended: tailwind 4, vuetify 4, vue-router 5, eslint 10 — those
+  are majors and belong in their own scoped piece of work, not a sweep.
+- `backend-ci.yml` pins Go **1.25** (matching `go.mod`'s `go 1.25.0`); the dev box runs
+  **1.26.5**. Local builds and CI builds are on different compilers, which is exactly the
+  arrangement that produces a green local run and a red CI one. Pick one and state it.
 
 ---
 
