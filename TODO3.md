@@ -18,10 +18,16 @@
 > a human with a real OAuth consent flow. Nothing in the migration has ever exercised linking a
 > Google/Microsoft/Apple calendar or importing availability from one.
 >
-> **Part L (opened 2026-08-11) is the post-migration review and IS open — L1–L15, nothing started.**
-> Start with **L1** (form validation guards are dead code under Vuetify 3) and **L2** (the phone's
-> "+" button is off-screen), then **L4**, which is the forty-line check that would have caught L2 and
-> L3 and prevents the whole class recurring.
+> **Part L (opened 2026-08-11) is the post-migration review. L1–L8 are closed; L9–L15 are open**
+> and are all P2/P3 — dependency and hardening work, nothing user-facing left in it.
+>
+> **Part M (opened 2026-08-11) is open — M1–M7, nothing started.** It is not a code review: it is
+> a review of what can be verified on a dev box without a deploy, run after everything in the repo
+> was confirmed green on the WSL box (395 unit tests, lint, `check:vuetify-props`, the Go suite,
+> and `browser-check.sh` ALL PASS in 3m19s). Start with **M1** (nothing here can take a screenshot,
+> so the "look at the page" rule has no implementation an agent can run), then **M2** (twelve
+> assertions that cannot fail, because we only ever test a production build) and **M5** (a stale
+> checkout is silent and fakes regressions — it already did, here, today).
 >
 > **The backlog was the Vue 3 migration (Part K).** The three inherited `P3` items (`TODO2.md` G2, G3, G4) were **closed
 > won't-do on 2026-08-10** by user decision — see the section below for the reasoning, which is
@@ -1360,6 +1366,168 @@ Vuetify ships and which is present in the built CSS.) Either add the rules or dr
 - `backend-ci.yml` pins Go **1.25** (matching `go.mod`'s `go 1.25.0`); the dev box runs
   **1.26.5**. Local builds and CI builds are on different compilers, which is exactly the
   arrangement that produces a green local run and a red CI one. Pick one and state it.
+  **Correction 2026-08-11:** that is one box, not both. The WSL box runs **go1.25.5**, matching
+  `go.mod` and CI exactly. The skew is on the other machine only — so "pick one" means bringing
+  the 1.26.5 box down to 1.25, not moving CI.
+
+---
+
+## PART M — local testability (opened 2026-08-11)
+
+> **Not a code review — a review of what can be verified here, without a deploy.** Run at
+> `3db21b5a`, on the WSL box, immediately after Part L. Everything in the repo is green on this
+> machine and was measured rather than assumed: **395** frontend unit tests (1.5s), eslint clean,
+> `check:vuetify-props` clean (153 components), the full Go suite green against a throwaway Mongo,
+> and `scripts/browser-check.sh` **ALL PASS in 3m19s** — 62 assertions, images built from scratch,
+> stack seeded, torn down. Toolchain present: Docker 29.7.2, Go 1.25.5, Node 20.20.2/npm 10.8.2,
+> `google-chrome`, `mongosh`. **Nothing below is blocked on a missing tool.**
+>
+> **The theme is the tier that is missing, and the two things that are silently untrue.** The repo
+> has a 1.5-second tier that cannot see a rendered page and a 200-second tier that sees everything;
+> there is nothing in between, and the top workflow rule — "look at the page" — has no
+> implementation an agent can run at all, because nothing here can take a screenshot (M1). Of the
+> assertions that *do* run, twelve are incapable of failing (M2). And both halves of this machine
+> were stale on arrival, silently, in a way that manufactures fake regressions (M5).
+>
+> Ordered by how much each one widens what can be checked before a deploy.
+
+### M1 — nothing local can take a screenshot · **P1 · S**
+
+The one workflow rule the repo puts above the others is **"look at the page"**, and there is no
+way to do it here except by being a human with a browser. `browser-check-lib.js` already has the
+page, the session cookie and viewport control; `Page.captureScreenshot` is one CDP call it does
+not make. The only screenshot code in the tree is `frontend/scripts/verify_f9_prod.js:296,326` —
+Playwright, against **production**, needing a real signed-in prod session. So the rule as written
+today reads: to look at the page, deploy it.
+
+Add `frontend/scripts/shot.js <url> [--phone] [--cookie <c>] [--out <dir>]` on the existing driver
+— a dozen lines against what `launch()` already returns. Then add `--shots <dir>` to
+`check-routes.js` so every route it visits leaves a PNG, and a failing run leaves **an image of
+the page that failed** rather than only the name of an assertion.
+
+That is the whole change and it is small, but it is the one that changes who can do the checking:
+a rendered PNG is readable by an agent, and "does this look right" stops being a question that
+only a deploy can answer.
+
+### M2 — twelve assertions that cannot fail: framework warnings are stripped from what we test · **P1 · S**
+
+`compose.dev.yaml` builds the frontend image through `frontend/Dockerfile:31` — `npm run build`, a
+**production** build — and Vue and Vuetify compile their warnings out of those entirely. Every
+`— no framework warnings` line in a `scripts/browser-check.sh` run (twelve of them, one per
+navigation) therefore reports PASS whatever the app does. `browser-check-lib.js` says so in its
+own docstring, and `DEVELOPMENT.md` repeats it; both then say "point it at `npm run serve`
+instead", and nothing in the repo does that or makes it easy.
+
+This is worth fixing *now* specifically because of what just landed. On the far side of a Vue 3 /
+Vuetify 3 migration, a removed API usually **warns** rather than throwing — that is the channel
+K5, L1, L3 and L7 were all found through, by hand — and it is the one channel the automated check
+is deaf to.
+
+Two ways, and the first is better because it also gives hot reload:
+
+- **(a)** `--dev` on `browser-check.sh`: boot the stack for the API and Mongo, run `npm run serve`
+  on :8080, point the check there.
+- **(b)** a build arg on the frontend image selecting `vue-cli-service build --mode development`.
+
+(a) needs one small unblock first: `frontend/src/constants.js:3` hardcodes
+`http://localhost:3002/api` whenever `NODE_ENV === "development"`, so a dev server cannot be aimed
+at the check stack on :3010. Make it `process.env.VUE_APP_API_URL || <current expression>`. The
+rest of that path is already in place and was verified: `fetch_utils.js:66` sends
+`credentials: "include"`, `main.go:131` sets `AllowCredentials: true`, and `compose.dev.yaml`
+already whitelists `http://localhost:8080`. A cookie minted for `localhost` covers both ports —
+ports are not part of a cookie's origin — so the same `mintsession` cookie works across the split.
+
+### M3 — nothing can sign in locally, so the real auth path is verifiable only in production · **P2 · S**
+
+`server/routes/auth.go:474–486`: when `utils.SendEmail` fails, `sendOtp` **deletes the code it just
+stored** and returns 500. Locally `SendEmail` always fails — no `GMAIL_APP_PASSWORD`, and
+`utils/mail_utils.go:27` dials `smtp.gmail.com` unconditionally — so the code is gone before
+anyone could read it out of Mongo. Local sign-in is not merely inconvenient, it is impossible, and
+`otpCodes` on the dev stack is empty for that reason rather than for want of trying.
+
+Everything consequently runs on `tools/mintsession`, which starts *after* auth: `/auth/otp/check-email`,
+`sendOtp`, `verifyOtp`, `SignIn.vue` in both its modes, and the post-sign-in redirect have **never
+been exercised anywhere but production**. That is an odd hole to have next to `check-signed-out`,
+which exists because an auth-shaped change once made the site unreachable for exactly the people
+who could not already get in.
+
+Fix: when the SMTP credentials are absent **and** `gin.Mode() != gin.ReleaseMode`, keep the code
+and log it (`logger.StdErr.Println("DEV: otp for", email, code)`) instead of mailing it. Gate on
+both conditions, so no production configuration can reach the branch even with a broken mailbox.
+Then a local browser signs in for real, and a check that walks the OTP flow becomes writable.
+
+### M4 — the fixture is trapped inside the script that throws it away · **P2 · S**
+
+The five-member club, ten Chronicle entries, three gatherings and the one cast availability live
+as a `mongosh` heredoc inside `scripts/browser-check.sh`, in a stack that is deleted at the end of
+the run. Nothing else can use it.
+
+Meanwhile the dev stack on :3002 holds, measured today: **0 users, 0 events, 0 allowlist rows**
+(94 chronicle documents and 30 folders survive from a partial dump). There is nothing to click
+through even after a rebuild, and no way to sign in if there were (M3). The consequence is that
+"bring up the app and look at it" is, in practice, a five-minute manual setup nobody does — which
+is why the checks are the only thing that ever looks.
+
+Extract the seed to `scripts/seed-club.js`, taking a Mongo URI and a base URL, and call it from
+both `browser-check.sh` and a new `scripts/dev-up.sh --seed`. One fixture with two consumers, and
+the interactive stack stops being able to drift away from the one CI asserts against.
+
+### M5 — a stale checkout is silent, and manufactures fake regressions · **P1 · S**
+
+Both halves of this machine were stale on arrival and neither said so. This is not a hypothetical;
+it is what the first twenty minutes here were spent on.
+
+- **`frontend/node_modules` held the entire Vue 2 stack** — vue 2.7.16, vuetify 2.7.2, vuex 3.6.2,
+  vue-router 3.6.5 — against a `package.json` asking for 3.x of all four. `npm run test:unit`
+  failed 2 of 23 files with `(0 , createStore) is not a function`, pointing at
+  `src/store/index.js:12`. That reads precisely like a Vuex-migration regression on `main`. It was
+  a stale install; CI was green on the same commit, and `npm ci` fixed it (23/23, 395 tests).
+- **The `timeful-dev` stack's images were built 2026-08-10 14:47** — before the first commit of
+  Part K. It had been up for 18 hours serving a Vue 2 bundle out of a Vue 3 checkout.
+
+The existing workflow rule covers the second case ("rebuild the dev containers before trusting a
+harness run") and not the first, and in both cases the failure is silent: the wrong answer arrives
+looking exactly like a real one.
+
+Add `scripts/dev-doctor.sh`: compare each installed dependency's major against `package.json`;
+compare the running images' creation time against the newest mtime under `frontend/src` and
+`server/`; print the Go, Node, Chrome and mongosh versions it found. Exit non-zero with the exact
+command that fixes each thing it complains about. Call it from the top of `browser-check.sh`, so a
+run cannot silently report on artifacts that predate the change under test.
+
+### M6 — no fast render tier: a component regression costs 3m19s · **P2 · M**
+
+Measured on this box: `scripts/browser-check.sh` is **3m19s** end to end (two image builds, boot,
+seed, ~14 navigations at a flat 6s each), and it is the **only** thing in the repo that renders a
+component. The unit suite runs 395 tests in **1.5s** and cannot render anything at all —
+`vitest.config.mjs` sets `environment: "node"`, no test imports a `.vue` file, and
+`@vue/test-utils` is not a dependency.
+
+Those are the only two tiers, and the gap between them is where this repo's bugs actually live.
+K3's dialog that threw on every open, L1's validation guard that never fired, L2's off-screen
+button, K5's toggles that would not turn off — every one of them is a *component* fault that a
+mounted component would have caught in milliseconds, and every one of them instead needed either a
+full stack or a deploy to find.
+
+The pure-node choice was a deliberate Vue 2 decision, and Vue 3 removes its premise: `@vue/test-utils`
+v2 plus `happy-dom` are small, stable and need no browser download.
+
+Scope it tightly, because the failure mode here is a 23-file backfill nobody asked for: add the two
+dependencies, one vitest project on `environment: "happy-dom"`, and **three** mount tests as the
+proof — the New Gathering dialog opening, the event band tabs switching, one form's submit guard.
+It does not replace `check:routes`: it cannot see layout, real CSS, the icon webfont or a 390px
+viewport. It is the missing middle, not a substitute for either end.
+
+### M7 — `browser-check.sh` has exactly one mode: everything, from scratch · **P3 · S**
+
+`KEEP_STACK=1` leaves a stack up and there is no way to then *use* it — no `REUSE=1`, so
+reproducing one failing assertion means another full rebuild and reseed. There is no way to run a
+single route while fixing it. And `visit()` sleeps a flat 6 seconds per navigation: roughly 90 of
+the 199 seconds are spent waiting on pages that settled in one.
+
+`REUSE=1`, `ONLY=event`, and a poll on the route's own first assertion with the 6s as a ceiling
+rather than a floor. None of it changes what is checked — it changes whether the check is
+reachable in the middle of fixing something, which is the only time it is worth the most.
 
 ---
 
