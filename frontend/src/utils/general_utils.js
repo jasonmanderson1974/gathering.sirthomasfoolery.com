@@ -91,11 +91,6 @@ export const viewportWidth = (vuetify) => {
   return vuetify.breakpoint.width
 }
 
-/** True from Vuetify's own `lg` breakpoint upward. */
-export const isLgAndUp = (vuetify) => {
-  return vuetify.breakpoint.lgAndUp
-}
-
 /** convert base64 to raw binary data held in a string */
 export const dataURItoBlob = (dataURI) => {
   // doesn't handle URLEncoded DataURIs - see SO answer #6850276 for code that does this
