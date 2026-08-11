@@ -374,7 +374,7 @@ export default {
 
   components: { UserAvatarContent, AvatarEditorDialog },
 
-  metaInfo() {
+  head() {
     return { title: "The Roll · The Fellowship" }
   },
 

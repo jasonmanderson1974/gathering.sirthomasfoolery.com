@@ -10,7 +10,7 @@
 export default {
   name: "PrivacyPolicy",
 
-  metaInfo: {
+  head: {
     title: "Privacy Policy · The Fellowship",
   },
 }

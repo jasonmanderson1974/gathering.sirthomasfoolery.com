@@ -156,7 +156,7 @@ export default {
 
   components: { UserAvatarContent },
 
-  metaInfo() {
+  head() {
     return { title: "The Fellowship · Directory" }
   },
 

@@ -152,7 +152,7 @@ import SirThomasFoolery from "@/components/general/SirThomasFoolery.vue"
 export default {
   name: "Landing",
 
-  metaInfo: {
+  head: {
     title: "The Fellowship · The Gathering",
   },
 

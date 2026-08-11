@@ -22,7 +22,7 @@ import SirThomasFoolery from "@/components/general/SirThomasFoolery.vue"
 export default {
   name: "PageNotFound",
 
-  metaInfo: {
+  head: {
     title: "Page not found · The Fellowship",
   },
 

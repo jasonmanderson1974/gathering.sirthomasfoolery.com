@@ -40,7 +40,7 @@ import { isPhone, get } from "@/utils"
 export default {
   name: "Home",
 
-  metaInfo: {
+  head: {
     title: "Home · The Fellowship",
   },
 

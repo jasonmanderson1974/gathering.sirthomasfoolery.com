@@ -166,7 +166,7 @@ import SirThomasFoolery from "@/components/general/SirThomasFoolery.vue"
 export default {
   name: "App",
 
-  metaInfo: {
+  head: {
     htmlAttrs: {
       lang: "en-US",
     },

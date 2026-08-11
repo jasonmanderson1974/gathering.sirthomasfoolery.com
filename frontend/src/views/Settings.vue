@@ -346,7 +346,7 @@ import UserAvatarContent from "@/components/UserAvatarContent.vue"
 export default {
   name: "Settings",
 
-  metaInfo: {
+  head: {
     title: "Settings · The Fellowship",
   },
 

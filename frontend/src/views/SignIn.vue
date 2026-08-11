@@ -227,7 +227,7 @@ export default {
     initialIsSignUp: { type: Boolean, default: false },
   },
 
-  metaInfo() {
+  head() {
     return {
       title: this.isSignUp ? "Join · The Fellowship" : "Enter · The Fellowship",
     }

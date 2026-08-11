@@ -99,7 +99,7 @@ import { get } from "@/utils"
 export default {
   name: "Chronicle",
 
-  metaInfo() {
+  head() {
     return { title: "The Chronicle" }
   },
 
