@@ -38,6 +38,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+INVOKED_FROM="$PWD" # for --shots, before the cd below moves the goalposts
 cd "$ROOT"
 
 DEV_BUILD=""
@@ -50,6 +51,20 @@ while [ $# -gt 0 ]; do
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+
+# A relative --shots is relative to where YOU ran this, which is the only
+# reading that isn't a surprise — and it has to be made absolute here, because
+# the check is started with `npm --prefix frontend`, and npm runs a script with
+# its cwd set to the PACKAGE directory. `--shots shots` therefore wrote to
+# frontend/shots, and CI's artifact upload looked at ./shots and found nothing:
+# both legs green, twenty screenshots taken, none of them kept.
+if [ -n "$SHOTS_DIR" ]; then
+  case "$SHOTS_DIR" in
+    /*) ;;
+    *) SHOTS_DIR="$INVOKED_FROM/$SHOTS_DIR" ;;
+  esac
+  mkdir -p "$SHOTS_DIR"
+fi
 
 # Before anything is built, because both things it checks make this run report
 # on artifacts that are not the checkout (TODO3 M5) — and in --dev mode a stale
