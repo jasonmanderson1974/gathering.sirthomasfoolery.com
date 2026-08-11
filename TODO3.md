@@ -887,8 +887,11 @@ site and confirm events still appear on the availability grid.
 > that ends it.
 >
 > Findings are ordered by what they cost a user, not by effort.
+>
+> **Status 2026-08-11: L1–L4 are closed.** The check L4 asked for exists and is in CI; running it
+> for real turned L3's six props into **75 across 25 files**, all swept. L5–L15 are untouched.
 
-### L1 — `VForm.validate()` returns a Promise, so the submit guard never fires · **P0 · S**
+### L1 — `VForm.validate()` returns a Promise, so the submit guard never fires · **P0 · S** — DONE 2026-08-11
 
 `if (!this.$refs.form.validate()) return` at `frontend/src/components/GuestDialog.vue:109` and
 `frontend/src/components/NewEvent.vue:447`.
@@ -913,7 +916,33 @@ and make the caller `async`. While there, drop `lazy-validation` (see L3): it wa
 of saying "don't validate until I ask", which is precisely what this pattern depends on, and in
 Vuetify 3 the replacement is `validate-on="submit"`.
 
-### L2 — the phone's "+" button is a rectangle 1,300px below the fold · **P1 · S**
+**Done as described, except for `validate-on="submit"` — that replacement would have broken both
+forms.** `lazy-validation` was simply deleted instead (it was inert, so deleting it changes
+nothing), leaving Vuetify 3's default `validate-on="input"`. The reason is in
+`vuetify/lib/composables/validation.js`: with `validate-on="submit"` neither the `input` nor the
+`blur` watcher is installed, so **nothing re-validates until `validate()` is called by hand**. A
+pristine field with rules reports `isValid === null`, the form's `v-model` aggregates to `null`,
+and `:disabled="!formValid"` — which both submit buttons carry — would have latched the button
+disabled forever, with no keystroke able to clear it. Keeping the default preserves today's
+behaviour exactly, and the awaited `validate()` is what makes the submit-time rules bite.
+
+That is also why the pattern works at all: **a rules change does not trigger validation** (the
+only watchers are on the field's value and its focus), so GuestDialog's "install strict rules,
+then validate on `$nextTick`" is still the right shape — it just has to await the result.
+
+**Browser-verified** on the local stack, signed in, against the real dialog
+(`/root/tools/browser/verify_L1_L4.js`):
+
+```
+PASS  Continue is enabled with an empty name (so the rules are the only gate)
+PASS  blank name refused (messages: ["Name is required"])
+PASS  no response POSTed on blank submit (0)
+PASS  ObjectID-shaped name refused (messages: ["That name isn't allowed"])
+PASS  no response POSTed for the ObjectID-shaped name (0)
+PASS  valid name submits (POSTs: 1) · dialog closed after a valid submit
+```
+
+### L2 — the phone's "+" button is a rectangle 1,300px below the fold · **P1 · S** — DONE 2026-08-11
 
 `frontend/src/components/BottomFab.vue` — the floating create button on `/home`, phone only.
 
@@ -935,7 +964,19 @@ renders, and it renders quietly.
 
 Fix: `<v-btn icon position="fixed" class="tw-fixed …">`, then re-check at 390px.
 
-### L3 — six more Vuetify 2 props survived the K2d styling pass · **P1 · S**
+Fixed as `<v-btn icon size="large" class="tw-fixed … tw-z-30 …">` — `tw-fixed` alone rather than
+also `position="fixed"`, because Tailwind's `important: true` makes the utility win outright and
+one source of truth beats two. `size="large"` restores the 56px touch target v2's `fab` gave, and
+`tw-z-30` restores the stacking `.v-btn--fixed` used to carry (under the header's `tw-z-40`).
+`OverflowGradient.vue:9` had the same dead `fab` and is now `icon` too.
+
+**Browser-verified** at 390×844, signed in, on `/home` — the same probe that found it:
+
+```
+position: fixed · border-radius: 50% · rect 772–828 · viewport height: 844
+```
+
+### L3 — six more Vuetify 2 props survived the K2d styling pass · **P1 · S** — DONE 2026-08-11
 
 Same mechanism as L2, smaller blast radius — each renders at the wrong size or variant, silently.
 Found by the L4 check; all confirmed against Vuetify 3's shipped prop declarations.
@@ -953,7 +994,50 @@ Two harmless leftovers to sweep at the same time: `:dark="formValid"` on `GuestD
 (the theme is global in Vuetify 3) and a bare `dark` on a plain `<div>` at `App.vue:14`, which
 was never a Vue thing.
 
-### L4 — the check that ends this class: lint Vuetify props against Vuetify · **P1 · S**
+**It was seventy-five, not six.** The L4 check as actually written — every `.vue` file, every
+`v-*` tag, diffed per component against that component's own declared props — printed **96 lines
+on a clean tree**, of which 21 were `title` and `required`, both genuine native attributes that
+Vuetify routes onto the DOM (`filterInputAttrs` sends everything except class/style/id/inert/data-*
+to the inner `<input>`). Those are now on the check's allowlist. **The remaining 75 were all real**,
+across 25 files, and every one of them is fixed here. The six in the table above were a sample, not
+the set — the review reported what one narrower pass had surfaced, and the entry should have said
+so.
+
+The full class, by translation:
+
+| Vuetify 2 | Vuetify 3 | Sites |
+|---|---|---|
+| `small` / `x-small` on `v-btn`, `v-chip` | `size="small"` / `size="x-small"` | 14 |
+| `dense` on fields, lists, checkboxes, switches | `density="compact"` | 15 |
+| `left` / `right` on `v-icon` | `start` / `end` | 11 |
+| `left` on `v-menu` | `location="bottom end"` | 2 |
+| `right` on `v-menu` | dropped (Vuetify 3's default placement is what they already render as); the one real submenu — `EventItem.vue`'s hover menu — became `location="end"` | 5 |
+| `top` on `v-tooltip` / `v-snackbar` | `location="top"` | 3 |
+| `outlined` on `v-btn` | `variant="outlined"` | 2 |
+| `off-icon` on `v-checkbox` | `false-icon` | 3 |
+| `row` on `v-radio-group` | `inline` | 2 |
+| `absolute` / `fixed` / `fab` on `v-btn` | `tw-absolute` / `tw-fixed` / `icon` | 5 |
+| `two-line` on `v-list-item` | `lines="two"` | 1 |
+| `background-color` on `v-text-field` | `bg-color` | 1 |
+| `solo` on `v-combobox` / `v-btn-toggle` | `variant="solo"` / dropped (never a v3 prop) | 2 |
+| `lazy-validation`, `dark`, `:menu-props` on a `v-text-field` | dropped — no v3 meaning here | 5 |
+
+`LocationInput`'s own `solo`/`dense` props kept their names — they are that component's API, not
+Vuetify's — and are translated to `variant`/`density` on the way through, so its callers did not
+have to move with it.
+
+**Verified**: the checker is green, `check:routes` passes end to end (every route, every band tab,
+both viewports, no console errors and no framework warnings), and the visibly-changed surfaces
+were looked at — desktop "Copy link" renders `v-btn--variant-outlined`, the snackbar lands at
+`top: 8px`, the new-list radios share a row, phone Settings fields are `v-input--density-compact`,
+the description editor's ✓/✕ are `v-btn--size-small`, and the location field is
+`v-field--variant-solo`.
+
+*Noticed while verifying, not fixed here:* the location combobox renders **no `placeholder`
+attribute at all** ("Where? (optional)" never appears), while the plain `v-text-field` beside it
+does. Independent of `variant` — it wants its own look, in Part L's tail or a Part M.
+
+### L4 — the check that ends this class: lint Vuetify props against Vuetify · **P1 · S** — DONE 2026-08-11
 
 **L2 and L3 are not six mistakes, they are one missing check**, and the check is about forty
 lines. Parse every `.vue` template with `@vue/compiler-sfc`, collect the attribute names bound on
@@ -968,6 +1052,25 @@ and because it costs nothing and keeps working across the next Vuetify minor.
 
 The same shape generalises: the authority for "does this prop exist" is the library's own type
 declarations, which are already on disk. Nothing else in the pipeline consults them.
+
+Shipped as `frontend/scripts/check-vuetify-props.js` → `npm run check:vuetify-props`, and wired
+into `frontend-ci.yml` between Lint and the unit tests. 150 lines rather than forty, most of it
+the native-attribute allowlist and the comment explaining why the check exists at all.
+
+How it reads Vuetify: each component's **full, flattened** prop list is the `Defaults` constraint
+of its `makeVXxxProps` factory in the shipped `.d.ts` (`makeVBtnProps: <Defaults extends { density?:
+unknown; size?: unknown; … }>`), so the check brace-matches that object and takes its depth-1 keys.
+153 components resolve this way; the handful built by `createSimpleFunctional` (`VSpacer`,
+`VCardTitle`, …) declare no props of their own and are skipped rather than guessed at. Tags are
+mapped by name (`v-btn-toggle` → `VBtnToggle`), only `:foo`/`v-bind:foo` and plain attributes are
+considered (never `v-model`, `v-if`, `v-slot`, `v-on` or `v-bind="$attrs"`), and non-Vuetify tags
+are left alone.
+
+**Its one real design decision is the native allowlist**, because that is the only place it can
+produce a false positive — and getting it wrong is how a check like this gets switched off. The
+rule it encodes: Vuetify hands unmatched attributes to the DOM, and for the input components
+`filterInputAttrs` hands them to the inner `<input>`, so `maxlength`, `required`, `inputmode`,
+`title` and friends land exactly where they are meant to and are not findings.
 
 ### L5 — `check:routes` is the safety net and CI does not run it · **P1 · M**
 
