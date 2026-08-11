@@ -50,6 +50,16 @@ The Go module is `sirtom/server` (renamed from `schej.it/server`, 2026-07-23). T
   the wrong size, variant or position with lint, the unit suite, the build and `check:routes` all
   green — this is the only check that sees them (TODO3 L2/L3/L4).
 
+### Browser check (repo root)
+- `scripts/browser-check.sh` — boots its **own** copy of the dev stack (compose
+  project `timeful-check` on `:3010`/`:27018`, so it can't touch a dev stack you
+  have on `:3002`), seeds a populated club, mints a superAdmin cookie and runs
+  `check:routes` against it, then tears it down. `KEEP_STACK=1` leaves it up.
+  **This is the only thing in the repo that looks at a rendered page** — the
+  unit suite is pure JS with `environment: "node"`, imports no `.vue` file and
+  has no `@vue/test-utils`, so it stays green through a total rendering failure
+  (TODO3 L5). Runs in CI as `browser-ci.yml`, on `frontend/**` *and* `server/**`.
+
 ### Backend (`cd server`)
 - `air` — live-reload dev (install: `go install github.com/cosmtrek/air@latest`). Runs `main.go`, listens on `:3002` (`:3003` if `NODE_ENV=staging`).
 - `go run main.go` — run without live reload. Pass `-release` to force `GIN_MODE=release`.

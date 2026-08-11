@@ -242,11 +242,30 @@ them. `go test` passing still means "compiles + these pass", not full
 correctness — and note that roughly half the backend suite skips without
 `MONGODB_URI`.
 
-### Browser checks (manual, before deploying auth/UI changes)
+### Browser checks (before deploying auth/UI changes)
 
-Two headless-Chrome checks live in `frontend/scripts/`. They are **not** in CI —
-they need a built frontend, a running server and Mongo — so run them by hand
-when a change warrants it. Both exit non-zero on failure.
+Three headless-Chrome checks live in `frontend/scripts/`. They need a built
+frontend, a running server and Mongo, so each one takes a base URL and (for two
+of them) a session cookie. All three exit non-zero on failure.
+
+**The routes check now runs in CI** — `.github/workflows/browser-ci.yml`, on
+every push and PR touching `frontend/**` or `server/**` (both halves: the
+frontend renders what the API returns). It gets its stack from
+`scripts/browser-check.sh`, which is also how you run it here:
+
+```bash
+scripts/browser-check.sh                 # build, seed, check, tear down
+KEEP_STACK=1 scripts/browser-check.sh    # leave it up on :3010 to poke at
+```
+
+That script brings up its **own** compose project (`timeful-check`) on **:3010**
+and **:27018**, so it never touches a dev stack you have running on :3002 — nor
+its Mongo volume, which on these machines usually holds a restored production
+dump. It seeds a five-member club, ten Chronicle entries, three gatherings and
+one cast availability, mints a superAdmin cookie, runs the check and tears the
+whole thing down. On failure it prints the stack logs before it does.
+
+The other two still run by hand.
 
 **Run the signed-out check after ANY change to** the router guard
 (`router/index.js`), `fetch_utils`' error path, or auth-dependent rendering:
@@ -320,8 +339,22 @@ present, and that the console stayed clean.
 npm run check:routes -- http://localhost:3002 "$COOKIE" <eventId>
 ```
 
-Use a **superAdmin** session: `/members` is gated on `canInvite`, so a lesser
-role silently redirects to `/home` and the route is never exercised.
+Prefer `scripts/browser-check.sh` (above), which supplies all three arguments.
+Run it this way only against a stack you already have. **What the fixture needs
+is not obvious**, and each of these was a failing assertion before it was a
+known requirement:
+>
+> - A **superAdmin** session. `/members` is gated on `canInvite`, so a lesser
+>   role silently redirects to `/home` and the route is never exercised.
+> - A gathering with **`hasSpecificTimes: false`** (or with `times` filled in).
+>   With it true and `times` empty, `ScheduleOverlap`'s `mounted()` opens
+>   `SET_SPECIFIC_TIMES` — the creator's click-and-drag screen — so the page has
+>   no band tabs, no "Mark availability" and no "Schedule event" at all.
+> - **At least one response, by somebody else.** "Schedule event" needs
+>   `numResponses > 0`, and the action button reads "Edit availability" rather
+>   than "Mark availability" once the signed-in user has responded.
+> - **Members and Chronicle entries.** An empty club renders its empty states
+>   perfectly and asserts nothing about the list rendering that actually breaks.
 
 > **Why it exists.** Nothing else in the repo can fail on a rendering bug. All 23
 > unit-test files are pure JS deliberately extracted *out of* components —

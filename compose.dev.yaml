@@ -15,7 +15,11 @@ services:
     image: mongo:7
     restart: unless-stopped
     ports:
-      - "27017:27017" # exposed so `go test ./db/ ./routes/` on the host can reach it
+      # Exposed so `go test ./db/ ./routes/` on the host can reach it. The port
+      # is a variable only so a second copy of this stack can run beside your
+      # dev one without a collision — see scripts/browser-check.sh, which brings
+      # up its own throwaway project. Leave it alone and you get 27017.
+      - "${DEV_MONGO_PORT:-27017}:27017"
     volumes:
       - mongo_dev_data:/data/db
     healthcheck:
@@ -50,7 +54,7 @@ services:
       context: ./server
     restart: unless-stopped
     ports:
-      - "3002:3002"
+      - "${DEV_HTTP_PORT:-3002}:3002" # see the note on the mongo port above
     environment:
       MONGODB_URI: mongodb://mongo:27017
       GIN_MODE: debug

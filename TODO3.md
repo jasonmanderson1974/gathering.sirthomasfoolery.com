@@ -1072,7 +1072,7 @@ rule it encodes: Vuetify hands unmatched attributes to the DOM, and for the inpu
 `filterInputAttrs` hands them to the inner `<input>`, so `maxlength`, `required`, `inputmode`,
 `title` and friends land exactly where they are meant to and are not findings.
 
-### L5 — `check:routes` is the safety net and CI does not run it · **P1 · M**
+### L5 — `check:routes` is the safety net and CI does not run it · **P1 · M** — DONE 2026-08-11
 
 `frontend/scripts/check-routes.js` states the gap in its own header, and it is right: the unit
 suite is 395 pure-JS tests with `environment: "node"`, **no `.vue` file is imported anywhere and
@@ -1088,6 +1088,55 @@ into horizontal scroll, K3's shipped dialog crash, K5's silently-broken toggles,
 Make CI do it: `docker compose -f compose.dev.yaml up -d --build`, mint a superAdmin cookie, seed
 one event, run `check:routes` against it. The two halves are complementary and both are needed —
 `check:routes` catches "it did not render", L4 catches "it rendered wrong".
+
+Shipped as `scripts/browser-check.sh` (boot → seed → mint → check → tear down) and
+`.github/workflows/browser-ci.yml`. **61 assertions, ALL PASS**, ~1m45s locally on a warm layer
+cache. Triggered by `frontend/**` **and** `server/**`: the frontend renders what the API returns,
+so a handler change breaks pages as easily as a component change does.
+
+**Validated by breaking the app on purpose**, which is the only evidence worth having for a check
+like this: adding `class="tw-block"` to the `v-show`-toggled Lists panel in `Event.vue` — the exact
+Tailwind-`important` interaction that this repo has already shipped once — turned five assertions
+red with `saw 2`, and exit 1. Reverting turned them green again.
+
+**"Seed one event" was the wrong instinct, and the failures said so.** A minimal fixture fails the
+check for reasons that have nothing to do with the app:
+
+- `hasSpecificTimes: true` with `times` empty puts `ScheduleOverlap`'s `mounted()` into
+  `SET_SPECIFIC_TIMES` — the creator's click-and-drag screen. Correct behaviour, and the event page
+  then has no band tabs, no "Mark availability" and no "Schedule event" for the check to find.
+- "Schedule event" needs `numResponses > 0`, so the fixture casts one availability — as a *second*
+  member, because the action button reads "Edit availability" once the signed-in user has responded.
+- An empty Fellowship and an empty Chronicle render their empty states perfectly, and assert nothing
+  about the list rendering that actually breaks. The fixture is a populated club: five members, ten
+  Chronicle entries, three gatherings. The alternative was tuning the thresholds down to whatever an
+  empty database happens to produce, which would have quietly weakened the check for everyone.
+
+The gathering is created **over the API**, not inserted into Mongo, so the fixture cannot drift away
+from what the app writes; its dates are relative to today, because a hardcoded date eventually falls
+into the past and changes what renders. The Chronicle entries are the one hand-built fixture — the
+alternative is waiting on the reminder scheduler's tick, which is not something a CI run should do.
+
+Two bugs in the script itself, both found by running it rather than reading it, both recorded in the
+comments where they happened:
+
+- The teardown used a **relative** `-f compose.dev.yaml` and ran from the EXIT trap, by which point
+  the script had `cd`'d into `frontend/`. It failed, its own `|| true` swallowed the failure, the
+  stack stayed up, and the *next* run seeded on top of the old database and died on a duplicate-key
+  error on the allowlist's unique email index — a message that points nowhere near the cause. Now an
+  absolute path, `npm --prefix` instead of `cd`, and a `down -v` on the way *in* as well as out.
+- **`mongosh` prints a failed insert on stdout and still exits 0**, so a broken seed produced empty
+  ids, every request 401'd, and the first thing to complain was a JSON parse error three steps
+  later. The ids are now checked against `^[0-9a-f]{24}$` before anything uses them.
+
+`compose.dev.yaml`'s two published ports became `${DEV_HTTP_PORT:-3002}` / `${DEV_MONGO_PORT:-27017}`
+so the check can run its own project on `:3010`/`:27018`. Defaults unchanged, so nothing else moves —
+and on these machines the dev stack on `:3002` usually holds a restored production dump, which this
+must never seed into, and certainly never `down -v`.
+
+Docs updated with it: `DEVELOPMENT.md` no longer says these checks are "**not** in CI" (it said
+"two" checks where there are three), and now records what the fixture needs and why, each line of it
+an assertion that failed first.
 
 ### L6 — the docs still describe a Vue 2 app · **P1 · S** — DONE 2026-08-11
 

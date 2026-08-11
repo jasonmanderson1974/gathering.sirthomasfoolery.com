@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+#
+# Boots a throwaway copy of the dev stack, seeds a superAdmin and a gathering,
+# mints a session cookie, and runs the routes check against it.
+#
+# WHY THIS EXISTS (TODO3 L5): `frontend/scripts/check-routes.js` is the only
+# thing in this repo that looks at a rendered page. The unit suite is pure JS
+# with `environment: "node"` — no `.vue` file is imported anywhere and
+# `@vue/test-utils` is not a dependency — so it stays green through a total
+# rendering failure, and lint and the build are no better. Every browser-only
+# bug this repo has paid for lived in that gap: `v-show` beaten by Tailwind's
+# `important: true`, a purged class name built from a template string, a fifth
+# band tab pushing a phone into horizontal scroll, K3's shipped dialog crash,
+# K5's silently-broken toggles, L2's off-screen button. The check only ever ran
+# by hand because it needs a booted stack, a session cookie and an event id.
+# This script produces all three, so CI can run it.
+#
+# It is not CI-only: run it here to reproduce a CI failure exactly, or just to
+# get the check run without wiring up a stack by hand.
+#
+#   scripts/browser-check.sh                 # build, seed, check, tear down
+#   KEEP_STACK=1 scripts/browser-check.sh    # leave it up to poke at
+#
+# Needs: docker compose, Go (for tools/mintsession), node + `npm ci` already run
+# in frontend/, and a Chrome or Chromium on PATH (or CHROME_PATH set).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+# Its OWN compose project and its OWN ports. A dev stack on :3002 with a
+# restored production dump in it is a normal thing to have running on these
+# machines, and seeding test documents into that — or worse, `down -v`ing it on
+# the way out — would be an unpleasant surprise. Separate project name means
+# separate containers and separate volumes.
+PROJECT="${PROJECT:-timeful-check}"
+export DEV_HTTP_PORT="${DEV_HTTP_PORT:-3010}"
+export DEV_MONGO_PORT="${DEV_MONGO_PORT:-27018}"
+BASE="http://localhost:${DEV_HTTP_PORT}"
+
+# Must be >=32 chars, and mintsession must be given the SAME one the server is
+# running with or the cookie it produces is silently rejected — which surfaces
+# as every route landing on /sign-in. Exported so compose interpolates it into
+# the server too, rather than the two sides each picking their own default.
+export SESSION_SECRET="${SESSION_SECRET:-browser-check-session-secret-not-for-prod!!}"
+
+# An ABSOLUTE path to the compose file, because this runs from the EXIT trap as
+# well as from the body. An earlier version used a relative one and the teardown
+# silently did nothing — the failure was swallowed by its own `|| true`, the
+# stack stayed up, and the NEXT run seeded on top of the old database and died
+# on a duplicate-key error that looked like anything but a missing teardown.
+compose() { docker compose -f "$ROOT/compose.dev.yaml" -p "$PROJECT" "$@"; }
+
+cleanup() {
+  local status=$?
+  # On any failure, the stack logs before it goes away. The check prints
+  # PASS/FAIL per assertion, which says WHICH page broke but not why — and when
+  # it is the stack that failed rather than a page, nothing else says anything
+  # at all. Printing here rather than in the CI job means a local run is just as
+  # informative, and means the teardown can't race the diagnosis.
+  if [ "$status" -ne 0 ]; then
+    echo "--- FAILED (exit $status) — last 60 lines of the stack:"
+    compose logs --tail=60 2>&1 || true
+  fi
+  if [ -n "${KEEP_STACK:-}" ]; then
+    echo "--- KEEP_STACK set: leaving $PROJECT up on $BASE"
+    return
+  fi
+  echo "--- tearing down $PROJECT"
+  compose down -v --remove-orphans >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+# Start from nothing, every time. A stack left behind by an interrupted run (or
+# by KEEP_STACK) keeps its Mongo volume, and seeding a second club into it fails
+# on the allowlist's unique email index — which reports as a duplicate-key error
+# rather than as "you have a stale stack".
+echo "--- clearing any previous $PROJECT stack"
+compose down -v --remove-orphans >/dev/null 2>&1 || true
+
+echo "--- building and starting the stack ($PROJECT on $DEV_HTTP_PORT)"
+# --build is not optional: the frontend bundle is baked into the frontend image
+# and the Go binary into the server image, so without it the whole run reports
+# on artifacts that predate the change under test.
+compose up -d --build
+
+echo "--- waiting for the server"
+for i in $(seq 1 90); do
+  if curl -fsS "$BASE/api/health" >/dev/null 2>&1; then break; fi
+  if [ "$i" = 90 ]; then
+    echo "server never became healthy; last 50 lines:" >&2
+    compose logs --tail=50 server >&2
+    exit 1
+  fi
+  sleep 2
+done
+
+echo "--- seeding a club"
+# The fixture is a POPULATED club, not a minimal one, and that is the whole
+# point of the shape below. An empty Fellowship renders its one row and an empty
+# Chronicle renders its "nothing recorded yet" line — both perfectly, and
+# neither exercises the entry rendering, which is the code most likely to break.
+# The check's thresholds were written against a real database; seeding to match
+# keeps them meaningful instead of tuning them down to whatever an empty
+# database happens to produce.
+#
+# The signed-in user is a superAdmin because /members is gated on `canInvite`,
+# and a lesser role is redirected to /home — which surfaces as the route failing
+# rather than as a seeding mistake. The allowlist rows matter too: AuthRequired
+# enforces the roll on every request, not just at sign-in.
+SEED_JS=$(
+  cat <<'JS'
+const members = [
+  ["harness@example.test", "Harness", "Check", "superAdmin"],
+  ["ambrose@example.test", "Ambrose", "Fenwick", "admin"],
+  ["cornelius@example.test", "Cornelius", "Blackwood", "member"],
+  ["percival@example.test", "Percival", "Thorne", "member"],
+  ["reginald@example.test", "Reginald", "Ashcombe", "member"],
+]
+
+const ids = []
+for (const [email, firstName, lastName, role] of members) {
+  const uid = new ObjectId()
+  ids.push(uid)
+  db.users.insertOne({
+    _id: uid, email, firstName, lastName, role,
+    phone: "+15550100", timezoneOffset: 0,
+  })
+  db.allowlist.insertOne({
+    email, addedBy: "browser-check", role, addedAt: new Date(),
+  })
+}
+
+// Chronicle entries are inserted directly rather than produced by letting the
+// reminder scheduler archive a past gathering: that path ticks on its own
+// timer, which is not something a CI run should be waiting on. The cost is a
+// hand-built fixture — if ChronicleEntry's shape ever moves, this renders wrong
+// and reads like a regression, so check the seed before the app.
+const day = 24 * 60 * 60 * 1000
+for (let i = 1; i <= 10; i++) {
+  const start = new Date(Date.now() - i * 30 * day)
+  db.chronicle.insertOne({
+    eventId: new ObjectId(),
+    name: "Gathering the " + i,
+    location: "The Club Room",
+    startDate: start,
+    endDate: new Date(start.getTime() + 3 * 60 * 60 * 1000),
+    attendees: [
+      { name: "Ambrose Fenwick", status: "going", guestCount: 1 },
+      { name: "Cornelius Blackwood", status: "going", guestCount: 0 },
+      { name: "Percival Thorne", status: "maybe", guestCount: 0 },
+    ],
+    headCount: 4,
+    capturedAt: new Date(),
+  })
+}
+
+// The first id is who the check signs in as; the second is a fellow member, who
+// exists so the gathering can have a response by somebody OTHER than the
+// signed-in user. Both halves matter: "Schedule event" needs numResponses > 0,
+// and the "Mark availability" assertion needs the signed-in user to be the one
+// who has NOT responded (it reads "Edit availability" once they have).
+print(ids[0].toString() + " " + ids[1].toString())
+JS
+)
+SEED_OUT=$(compose exec -T mongo mongosh --quiet "mongodb://localhost:27017/schej-it" --eval "$SEED_JS" | tr -d '\r')
+read -r USER_ID RESPONDER_ID <<<"$SEED_OUT"
+
+# Checked, because mongosh reports a failed insert on stdout and still exits 0.
+# Without this the ids come through empty, every request 401s, and the first
+# thing that actually complains is a JSON parse error three steps downstream.
+if ! [[ "$USER_ID" =~ ^[0-9a-f]{24}$ && "$RESPONDER_ID" =~ ^[0-9a-f]{24}$ ]]; then
+  echo "seeding did not produce two user ids. mongosh said:" >&2
+  echo "$SEED_OUT" >&2
+  exit 1
+fi
+
+echo "    signed in as $USER_ID, responder $RESPONDER_ID"
+
+echo "--- minting a session cookie"
+COOKIE=$(cd server && go run ./tools/mintsession "$USER_ID")
+
+echo "--- creating gatherings"
+# Created over the API rather than inserted into Mongo, so the fixture cannot
+# drift away from what the app actually writes — a hand-built document that no
+# longer matches the model would fail the render assertions and read exactly
+# like a real regression. The dates are relative to today for the same reason:
+# a hardcoded date eventually falls into the past and changes what renders.
+#
+# `hasSpecificTimes` is false on purpose. With it true and `times` empty,
+# ScheduleOverlap's mounted() opens SET_SPECIFIC_TIMES — the creator's
+# click-and-drag screen — instead of the normal heatmap, and the event page then
+# has no band tabs, no "Mark availability" and no "Schedule event" for the check
+# to find. That is correct app behaviour and a wrong fixture.
+DATES=$(node -e '
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + 14);
+  d.setUTCHours(18, 0, 0, 0);
+  const out = [];
+  for (let i = 0; i < 3; i++) {
+    const day = new Date(d);
+    day.setUTCDate(d.getUTCDate() + i);
+    out.push(day.toISOString());
+  }
+  process.stdout.write(JSON.stringify(out));')
+
+jsonField() { # jsonField <field> — reads a JSON object on stdin
+  node -e '
+    let s = ""; process.stdin.on("data", (c) => (s += c)).on("end", () => {
+      const v = JSON.parse(s)[process.argv[1]];
+      if (!v) { console.error("no " + process.argv[1] + " in: " + s); process.exit(1); }
+      process.stdout.write(String(v));
+    });' "$1"
+}
+
+createEvent() { # createEvent <name>
+  curl -fsS -X POST "$BASE/api/events" \
+    -H 'Content-Type: application/json' \
+    -H "Cookie: session=$COOKIE" \
+    -d "{\"name\":\"$1\",\"duration\":4,\"type\":\"specific_dates\",
+         \"dates\":$DATES,\"hasSpecificTimes\":false,\"notificationsEnabled\":false,
+         \"blindAvailabilityEnabled\":false,\"daysOnly\":false,
+         \"sendEmailAfterXResponses\":-1,\"timeIncrement\":15}" | jsonField eventId
+}
+
+# Three, because the dashboard assertion is about a populated dashboard — one
+# lonely row does not exercise the list.
+EVENT_ID=$(createEvent "Harness Gathering")
+createEvent "Michaelmas Dinner" >/dev/null
+createEvent "The Quarterly Smoker" >/dev/null
+
+echo "    event $EVENT_ID"
+
+echo "--- casting one availability, as a fellow member"
+# As the responder, never as the signed-in user: numResponses > 0 is what puts
+# "Schedule event" on the page, while the signed-in user staying unresponded is
+# what keeps the action button reading "Mark availability".
+RESPONDER_COOKIE=$(cd server && go run ./tools/mintsession "$RESPONDER_ID")
+SLOTS=$(printf '%s' "$DATES" | node -e '
+  let s = ""; process.stdin.on("data", (c) => (s += c)).on("end", () => {
+    // Four 30-minute slots from the start of the first day, which is inside the
+    // 4-hour window the gathering was created with.
+    const start = new Date(JSON.parse(s)[0]).getTime();
+    const out = [];
+    for (let i = 0; i < 4; i++) out.push(new Date(start + i * 30 * 60 * 1000).toISOString());
+    process.stdout.write(JSON.stringify(out));
+  });')
+curl -fsS -X POST "$BASE/api/events/$EVENT_ID/response" \
+  -H 'Content-Type: application/json' \
+  -H "Cookie: session=$RESPONDER_COOKIE" \
+  -d "{\"guest\":false,\"availability\":$SLOTS,\"ifNeeded\":[]}" >/dev/null
+
+echo "--- running the routes check"
+# `--prefix` rather than `cd frontend`: the EXIT trap runs wherever the script
+# left the shell, and it needs to still be somewhere compose and the repo make
+# sense.
+npm --prefix "$ROOT/frontend" run --silent check:routes -- "$BASE" "$COOKIE" "$EVENT_ID"

@@ -1,0 +1,94 @@
+name: Browser CI
+
+# The only job in this repo that looks at a rendered page (TODO3 L5).
+#
+# Frontend CI runs lint, the Vuetify-prop check, the unit suite and the build,
+# and NONE of them can fail on a rendering bug: the unit tests are pure JS with
+# `environment: "node"`, no `.vue` file is imported anywhere, and
+# `@vue/test-utils` is not a dependency, so the suite stays green through a
+# total rendering failure. Everything browser-only this repo has shipped went
+# through that gap — `v-show` defeated by Tailwind's `important: true`, a purged
+# class name built from a template string, a fifth band tab putting a phone into
+# horizontal scroll, a dialog that threw on every open for the whole Vue 3
+# migration, calendar toggles that could be turned on but never off, and a "+"
+# button rendered 1,300px below the fold.
+#
+# It boots the real stack because that is the only way to get the three things
+# check-routes needs: a served build, a session cookie and an event id. See
+# scripts/browser-check.sh — the same script runs locally, so a failure here
+# reproduces with one command.
+#
+# Triggered by BOTH halves of the repo on purpose: the frontend renders what the
+# API returns, so a server change breaks pages just as easily as a component one.
+
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "server/**"
+      - "compose.dev.yaml"
+      - "scripts/browser-check.sh"
+      - ".github/workflows/browser-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - "server/**"
+      - "compose.dev.yaml"
+      - "scripts/browser-check.sh"
+      - ".github/workflows/browser-ci.yml"
+
+jobs:
+  browser-check:
+    runs-on: ubuntu-latest
+    # Building both images and driving ~12 page loads at 6s each. Generous
+    # rather than tight: a timeout that trips on a slow runner teaches people to
+    # ignore this job.
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # For frontend/scripts/check-routes.js and its CDP driver — which needs
+      # `ws` from frontend/node_modules. The stack itself builds its own copy
+      # inside the frontend image; this one is for the harness on the runner.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install harness dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # For server/tools/mintsession, which mints the session cookie. It lives
+      # inside the server module so its gorilla/sessions version cannot drift
+      # from the server's and mint cookies that look right but are rejected.
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: server/go.sum
+
+      # Preinstalled on the GitHub-hosted Ubuntu images, but assert it rather
+      # than discover it: browser-check-lib falls through google-chrome →
+      # chromium → chromium-browser and reports "could not launch Chrome",
+      # which reads like a harness bug rather than a missing runner package.
+      - name: Verify Chrome is available
+        run: |
+          command -v google-chrome >/dev/null || {
+            echo "google-chrome not on PATH on this runner image." >&2
+            echo "Install it in this job, or set CHROME_PATH." >&2
+            exit 1
+          }
+          google-chrome --version
+
+      # The script dumps the stack's logs itself if anything fails, before it
+      # tears down — so there is no separate `if: failure()` step here to race
+      # the teardown, and a local run gets the same diagnosis.
+      - name: Boot the stack, seed it, and check every route
+        run: scripts/browser-check.sh
