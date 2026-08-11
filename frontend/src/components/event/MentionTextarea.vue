@@ -12,10 +12,10 @@
       :rows="1"
       class="tw-text-sm"
       @input="onInput"
-      @click.native="syncTrigger"
-      @keyup.native="syncTrigger"
+      @click="syncTrigger"
+      @keyup="syncTrigger"
       @keydown="onKeydown"
-      @blur.native="close"
+      @blur="close"
     ></v-textarea>
 
     <div
@@ -29,7 +29,9 @@
         v-for="(candidate, i) in filtered"
         :key="candidate._id"
         class="tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-px-2 tw-py-1.5 tw-text-sm"
-        :class="i === highlight ? 'tw-bg-brass/20 tw-text-brass' : 'tw-text-parchment'"
+        :class="
+          i === highlight ? 'tw-bg-brass/20 tw-text-brass' : 'tw-text-parchment'
+        "
         @mousedown.prevent="select(candidate)"
         @mouseenter="highlight = i"
       >
@@ -43,7 +45,11 @@
 <script>
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
 import { displayName } from "@/utils"
-import { applyMention, filterMentionables, mentionTrigger } from "@/components/event/mentionText"
+import {
+  applyMention,
+  filterMentionables,
+  mentionTrigger,
+} from "@/components/event/mentionText"
 
 /**
  * A comment composer that can @mention people (F9) — used by both the main
@@ -135,7 +141,9 @@ export default {
       const field = this.field()
       if (!field) return
 
-      const trigger = mentionTrigger(field.value.slice(0, field.selectionStart ?? 0))
+      const trigger = mentionTrigger(
+        field.value.slice(0, field.selectionStart ?? 0)
+      )
       if (!trigger) {
         // The caret has left the mention entirely, so there is nothing left to
         // keep dismissed.
@@ -162,12 +170,19 @@ export default {
      * Enter especially, which would otherwise break the line mid-name. Every
      * other key falls through to the textarea untouched.
      *
-     * Bound to VTextarea's own `keydown` event, NOT `keydown.native`: Vuetify
-     * calls `e.stopPropagation()` on Enter while the field is focused (so that
-     * Enter can't close a surrounding dialog), which means a native listener on
-     * this component's root sees every key except the one that matters most.
-     * It re-emits the same event afterwards, so preventDefault here still
-     * suppresses the newline.
+     * Bound to VTextarea's own `keydown` event, never to a listener on this
+     * component's root: Vuetify calls `e.stopPropagation()` on Enter while the
+     * field is focused (so Enter can't close a surrounding dialog), so anything
+     * listening further up sees every key except the one that matters most. It
+     * re-emits the same event afterwards, which is why preventDefault here
+     * still suppresses the newline.
+     *
+     * The other three listeners on the textarea are plain (`click`, `keyup`,
+     * `blur`) rather than `.native`, which is removed in Vue 3. Nothing is lost:
+     * VTextField spreads `$listeners` straight onto the inner element, so these
+     * now bind to the `<textarea>` itself rather than to the wrapper — closer to
+     * the event, not further from it. `blur` is the one exception, arriving via
+     * Vuetify's own `onBlur` re-emit on the next tick.
      */
     onKeydown(e) {
       if (!this.open) return
@@ -179,7 +194,8 @@ export default {
           break
         case "ArrowUp":
           e.preventDefault()
-          this.highlight = (this.highlight - 1 + this.filtered.length) % this.filtered.length
+          this.highlight =
+            (this.highlight - 1 + this.filtered.length) % this.filtered.length
           break
         case "Enter":
         case "Tab":

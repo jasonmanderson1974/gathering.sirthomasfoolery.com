@@ -353,6 +353,7 @@ import {
   getStartEndDateString,
   isDstObserved,
   doesDstExist,
+  viewportWidth,
 } from "@/utils"
 import { mapActions, mapState, mapMutations, mapGetters } from "vuex"
 import dayjs from "dayjs"
@@ -617,7 +618,7 @@ export default {
      * summary above the gathering's own title.
      */
     showGatheringSidebar() {
-      return this.calendarCollapsed && this.$vuetify.breakpoint.width >= 1024
+      return this.calendarCollapsed && viewportWidth(this.$vuetify) >= 1024
     },
     /**
      * Whether the balances get their own right-hand strip in the content
@@ -636,7 +637,7 @@ export default {
       return (
         !!this.authUser &&
         this.expenses.length > 0 &&
-        this.$vuetify.breakpoint.width >= 1024
+        viewportWidth(this.$vuetify) >= 1024
       )
     },
     isEditing() {

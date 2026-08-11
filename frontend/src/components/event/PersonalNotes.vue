@@ -70,7 +70,7 @@
         :maxlength="maxLength"
         class="tw-text-sm"
         @input="onInput"
-        @blur.native="flush"
+        @blur="flush"
       />
 
       <div
@@ -112,7 +112,10 @@ import {
   isNoteDirty,
   describeSaveState,
 } from "@/components/event/markdownEditor"
-import { getPersonalNote, savePersonalNote } from "@/utils/services/PersonalService"
+import {
+  getPersonalNote,
+  savePersonalNote,
+} from "@/utils/services/PersonalService"
 
 const AUTOSAVE_DELAY_MS = 1500
 

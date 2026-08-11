@@ -78,6 +78,7 @@
 import EventItem from "@/components/EventItem.vue"
 import FeatureNotReadyDialog from "@/components/FeatureNotReadyDialog.vue"
 import { mapState } from "vuex"
+import { isLgAndUp } from "@/utils"
 
 export default {
   name: "EventType",
@@ -102,7 +103,7 @@ export default {
   computed: {
     ...mapState(["authUser"]),
     defaultNumEventsToShow() {
-      return this.$vuetify.breakpoint.lgAndUp ? 6 : 4
+      return isLgAndUp(this.$vuetify) ? 6 : 4
     },
     numEventsToShow() {
       return this.showAll

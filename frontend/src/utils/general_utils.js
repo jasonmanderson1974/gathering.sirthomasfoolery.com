@@ -62,6 +62,15 @@ export const clamp = (value, lower, upper) => {
   return value
 }
 
+/*
+ * Viewport helpers. Every one of them takes `$vuetify` rather than reaching for
+ * it, and every read of `vuetify.breakpoint` in the app goes through this
+ * block — deliberately, because Vuetify 3 renames `$vuetify.breakpoint` to
+ * `$vuetify.display` (with `thresholds` becoming lower bounds rather than
+ * upper). Keeping the reads here makes that rename one file instead of a sweep
+ * through views and components.
+ */
+
 export const isPhone = (vuetify) => {
   return vuetify.breakpoint.name === "xs"
 }
@@ -72,6 +81,19 @@ export const isIOS = () => {
 
 export const br = (vuetify, breakpoint) => {
   return vuetify.breakpoint.name === breakpoint
+}
+
+/**
+ * Viewport width in px, for the handful of places that compare against a
+ * Tailwind breakpoint rather than a Vuetify one — the two scales don't line up.
+ */
+export const viewportWidth = (vuetify) => {
+  return vuetify.breakpoint.width
+}
+
+/** True from Vuetify's own `lg` breakpoint upward. */
+export const isLgAndUp = (vuetify) => {
+  return vuetify.breakpoint.lgAndUp
 }
 
 /** convert base64 to raw binary data held in a string */
@@ -213,7 +235,6 @@ export const lightOrDark = (color) => {
   }
 }
 
-
 /**
  * The name to show for a user: their nickname when they have one, otherwise
  * "First Last".
@@ -230,7 +251,9 @@ export const displayName = (user) => {
   if (!user) return ""
   const nickname = (user.nickname ?? "").trim()
   if (nickname) return nickname
-  return `${(user.firstName ?? "").trim()} ${(user.lastName ?? "").trim()}`.trim()
+  return `${(user.firstName ?? "").trim()} ${(
+    user.lastName ?? ""
+  ).trim()}`.trim()
 }
 
 /**
