@@ -250,13 +250,19 @@ of them) a session cookie. All three exit non-zero on failure.
 
 **The routes check now runs in CI** — `.github/workflows/browser-ci.yml`, on
 every push and PR touching `frontend/**` or `server/**` (both halves: the
-frontend renders what the API returns). It gets its stack from
-`scripts/browser-check.sh`, which is also how you run it here:
+frontend renders what the API returns), in **two legs**, `prod` and `dev` (see
+"Framework warnings" below for why the second one exists). It gets its stack
+from `scripts/browser-check.sh`, which is also how you run it here:
 
 ```bash
-scripts/browser-check.sh                 # build, seed, check, tear down
+scripts/browser-check.sh                 # build, seed, check, tear down (~3m)
+scripts/browser-check.sh --dev           # ...served by `npm run serve` (~2m)
+scripts/browser-check.sh --shots out/    # leave a PNG of every page it visits
 KEEP_STACK=1 scripts/browser-check.sh    # leave it up on :3010 to poke at
 ```
+
+It refuses to start on a stale checkout: the first thing it runs is
+`scripts/dev-doctor.sh --deps` (below).
 
 That script brings up its **own** compose project (`timeful-check`) on **:3010**
 and **:27018**, so it never touches a dev stack you have running on :3002 — nor
@@ -375,11 +381,48 @@ known requirement:
 > on the band panels, a synthetic `console.error`, a `[Vue warn]` on both
 > `console.warn` and `console.error`, and an overflowing element.
 
-**Framework warnings only appear in a dev build.** `npm run build` strips them,
-and that is what `compose.dev.yaml` serves — so the "no framework warnings" line
-passes against `localhost:3002` no matter what. When the warnings are the point
-(a Vue or Vuetify upgrade, where removed APIs warn rather than throw), run the
-check against `npm run serve` on `:8080` instead, with `CORS_ORIGINS` set.
+**Framework warnings only appear in a dev build**, which is what `--dev` is for
+(TODO3 M2). `npm run build` compiles every `[Vue warn]` and `[Vuetify]` out, and
+that is what the frontend image serves — so in a normal run the twelve
+"— no framework warnings" lines report PASS *whatever the app does*. Measured,
+with a deliberate `<v-deliberately-not-a-component />` in `Landing.vue`: the dev
+build reports one `[Vue warn]` and fails; the production build of the same
+source reports zero warnings and zero errors, and the check says ALL PASS.
+
+```bash
+scripts/browser-check.sh --dev
+```
+
+That boots the same throwaway stack for its API and Mongo (`:3010`), skips the
+frontend image entirely, and serves the app from `npm run serve` on `:8080`
+pointed at it — which is also why it is the *faster* loop, 2m rather than 3m.
+Two things make the split work, and both are load-bearing:
+
+- `VUE_APP_API_URL` in `src/constants.js`. It used to hardcode
+  `http://localhost:3002/api` whenever `NODE_ENV === "development"`, so a dev
+  server could only ever talk to a stack on `:3002`.
+- Ports are **not** part of a cookie's origin, so the one minted `session`
+  cookie is accepted across `:8080` → `:3010`. The dev server's origin does have
+  to be in `CORS_ORIGINS`, which the script exports for compose.
+
+Use `SERVE_PORT=8081 scripts/browser-check.sh --dev` if you already have
+something on 8080.
+
+**Screenshots** (TODO3 M1). `--shots <dir>` leaves a full-page PNG of every page
+the check visits, numbered in visit order — so a failing run hands over a picture
+of the page that failed and not just the name of an assertion. CI uploads them as
+`browser-check-shots-{prod,dev}`. For one page on a stack you already have:
+
+```bash
+cd frontend
+npm run shot -- http://localhost:3002/                       # → frontend/shots/
+npm run shot -- http://localhost:3002/home --cookie "$COOKIE" --phone --full
+npm run shot -- http://localhost:3002/home --cookie "$COOKIE" \
+  --click "call a gathering" --out /tmp/dialog.png           # open a dialog first
+```
+
+`frontend/shots/` and `/shots` are gitignored: these are pictures of a seeded
+club or of real member data.
 
 All three use a small CDP driver (`scripts/browser-check-lib.js`) over `ws`
 rather than Puppeteer — these run occasionally before a deploy, and a ~100MB
@@ -404,6 +447,40 @@ Remember to delete the seeded documents afterwards.
 > change in them, and the give-away was an API response missing a newly added field while the
 > code beside it behaved as expected. When a check passes but a hand-inspection of the response
 > disagrees, suspect the image before the code.
+
+### `scripts/dev-doctor.sh` — is this machine actually the checkout?
+
+The rule above is one of two stale-artifact traps on these boxes, and both are
+silent: the wrong answer arrives looking exactly like a real one. `dev-doctor`
+turns each into a message with the fixing command attached.
+
+```bash
+scripts/dev-doctor.sh          # installs + the dev stack's images + toolchain
+scripts/dev-doctor.sh --deps   # just the install check (what browser-check runs)
+PROJECT=timeful-check scripts/dev-doctor.sh   # some other compose project
+```
+
+It checks three things and exits non-zero on the first two:
+
+1. **`frontend/node_modules` against `frontend/package.json`**, by major version.
+   On 2026-08-11 this box's install held the entire Vue 2 stack — vue 2.7.16,
+   vuetify 2.7.2, vuex 3.6.2 — against a `package.json` asking for 3.x, and
+   `npm run test:unit` failed two files with `(0 , createStore) is not a
+   function` pointing at `src/store/index.js`. That reads *precisely* like a
+   Vuex-migration regression on `main`. It was a stale install: CI was green on
+   the same commit and `npm ci` fixed it.
+2. **Each running image's build time against the sources baked into it**, so the
+   trap in the blockquote above announces itself. Frontend sources make the
+   frontend image stale and server sources the server image — not both, because
+   a check that cries wolf gets ignored.
+3. **The toolchain versions it found** (docker, Go, node, npm, mongosh, Chrome),
+   printed, never failed on — so a version lands in the log next to whatever the
+   run produced, and "it worked on the other box" has somewhere to start.
+
+`scripts/browser-check.sh` calls `--deps` before it builds anything. Only the
+deps half: that script rebuilds its own images every run, so it can't be caught
+by (2) — but it *does* run `npm run serve` from `node_modules` in `--dev` mode,
+where a stale install is not a subtle wrongness, it is what executes.
 
 ### Post-deploy checks against the live site (`e2e/`)
 

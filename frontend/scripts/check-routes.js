@@ -23,20 +23,44 @@
  * exercised if the session has the role.
  *
  * Usage: node scripts/check-routes.js <baseUrl> <sessionCookie> <eventId>
+ *                                     [--shots <dir>]
+ *
+ * `--shots` leaves a PNG of every page it visits in <dir> (TODO3 M1). A failing
+ * run then hands over an image of the page that failed rather than only the name
+ * of the assertion — which is the difference between "band tab Lists — exactly
+ * one panel visible: FAIL" and seeing that two panels are stacked. For one page
+ * in isolation use `scripts/shot.js`, which drives the same code.
  */
+const path = require("path")
 const {
   launch,
   evaluate,
   pageErrors,
   frameworkWarnings,
+  screenshot,
   sleep,
 } = require("./browser-check-lib")
 
-const [rawBase, COOKIE, EVENT_ID] = process.argv.slice(2)
+const args = process.argv.slice(2)
+
+// Pulled out before the positionals are read, so `--shots <dir>` can go
+// anywhere on the line and the three required arguments keep their order.
+let SHOTS = null
+const shotsAt = args.indexOf("--shots")
+if (shotsAt !== -1) {
+  SHOTS = args[shotsAt + 1]
+  if (!SHOTS) {
+    console.error("--shots needs a directory")
+    process.exit(2)
+  }
+  args.splice(shotsAt, 2)
+}
+
+const [rawBase, COOKIE, EVENT_ID] = args
 
 if (!rawBase || !COOKIE || !EVENT_ID) {
   console.error(
-    "usage: node scripts/check-routes.js <baseUrl> <sessionCookie> <eventId>"
+    "usage: node scripts/check-routes.js <baseUrl> <sessionCookie> <eventId> [--shots <dir>]"
   )
   process.exit(2)
 }
@@ -97,22 +121,26 @@ const noHorizontalScroll =
  * matching `@font-face` at all it reports *true* (system fonts are assumed
  * available), so it passes in exactly the case worth catching.
  *
- * So: the face is declared and did not error, and the woff2 arrived whole.
- * Asserting `status === 'loaded'` instead looks tighter and is flaky — on the
- * second navigation of a session the font comes from cache and the face was
- * observed still reporting `unloaded` while the glyphs painted. The response
- * size is the signal that survives caching: a hit reports `transferSize` 0 but
- * still reports `decodedBodySize`, and the SPA fallback serving `index.html` in
- * place of a missing font decodes to a couple of KB, not 400.
+ * `document.fonts.load()` is the one that works, because it ATTEMPTS the face
+ * and reports the outcome: an empty array when nothing declares the family, a
+ * rejection when the bytes are not a font — which is what the SPA fallback
+ * serving `index.html` in place of a missing woff2 produces.
+ *
+ * It reads the state rather than inferring it, and that is the point (TODO3
+ * M2). This assertion used to require a `resource` timing entry over 100KB, and
+ * that inference has two ways of being wrong that have nothing to do with the
+ * font: a webfont is only fetched when a glyph on the page needs it, and a
+ * cached response that is revalidated (a 304, which is what a dev server sends
+ * — the Go server sends `immutable` and is never asked) reports a zero body.
+ * Both report a perfectly-painting font as missing, and the second one is
+ * exactly what `--dev` walked into on its first run.
  */
-const iconFontLoaded = `(() => {
+const iconFontLoaded = `(async () => {
   const faces = [...document.fonts]
     .filter((f) => /Material Design Icons/.test(f.family))
   if (faces.length === 0 || faces.some((f) => f.status === 'error')) return false
-  return performance.getEntriesByType('resource').some(
-    (r) => /materialdesignicons-webfont\\.[0-9a-f]{8}\\.woff2$/.test(r.name) &&
-      r.decodedBodySize > 100000
-  )
+  const loaded = await document.fonts.load("24px 'Material Design Icons'")
+  return loaded.length > 0 && loaded.every((f) => f.status === 'loaded')
 })()`
 
 /**
@@ -123,13 +151,30 @@ const iconFontLoaded = `(() => {
  * The hash in the filename is also what earns the font `immutable` caching from
  * the Go server (`contentHashedAsset`, main.go), so asserting on it keeps both
  * properties honest.
+ *
+ * Read off the `@font-face` rule rather than off resource timing, for the same
+ * reason as above: the declaration is there on every page whether or not that
+ * page happened to fetch anything. A cross-origin stylesheet throws on
+ * `.cssRules`, and skipping it is right — it cannot be ours.
  */
 const iconFontSelfHosted = `(() => {
-  const mdi = performance.getEntriesByType('resource')
-    .filter((r) => /materialdesignicons/.test(r.name))
-  return mdi.length > 0 &&
-    mdi.every((r) => new URL(r.name).origin === location.origin) &&
-    mdi.some((r) => /webfont\\.[0-9a-f]{8}\\.woff2$/.test(r.name))
+  const srcs = []
+  for (const sheet of document.styleSheets) {
+    let rules
+    try { rules = sheet.cssRules } catch { continue }
+    for (const rule of rules) {
+      if (rule instanceof CSSFontFaceRule &&
+          /Material Design Icons/.test(rule.style.fontFamily)) {
+        srcs.push(rule.style.src)
+      }
+    }
+  }
+  if (srcs.length === 0) return false
+  const all = srcs.join(' ')
+  const urls = [...all.matchAll(/url\\(["']?([^"')]+)["']?\\)/g)].map((m) => m[1])
+  return urls.length > 0 &&
+    urls.every((u) => new URL(u, location.href).origin === location.origin) &&
+    /webfont\\.[0-9a-f]{8}\\.woff2/.test(all)
 })()`
 
 /* ---------- routes ---------- */
@@ -262,6 +307,26 @@ function report(ok, label, detail) {
   if (!ok && detail !== undefined) console.log(`      ${detail}`)
 }
 
+// Numbered in visit order so the directory reads as the run did, and slugged
+// from the label so a FAIL line names its own picture.
+let shotSeq = 0
+async function shoot(cdp, label) {
+  if (!SHOTS) return
+  const name = `${String(++shotSeq).padStart(2, "0")}-${label
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase()}.png`
+  try {
+    // Full-page, because the bug class this is aimed at is exactly the one that
+    // lives below the fold — L2's "+" button was 1,300px down.
+    await screenshot(cdp, path.join(SHOTS, name), { fullPage: true })
+  } catch (e) {
+    // A missing picture must never turn a passing run red: this is diagnosis,
+    // not an assertion.
+    console.log(`      (screenshot ${name} failed: ${e.message})`)
+  }
+}
+
 async function setViewport(cdp, vp) {
   await cdp("Emulation.setDeviceMetricsOverride", {
     width: vp.width,
@@ -293,6 +358,8 @@ async function visit(cdp, events, url, label, expected = null) {
     `${label} — no framework warnings`,
     warnings.slice(0, 3)
   )
+
+  await shoot(cdp, label)
 }
 
 async function main() {
@@ -350,6 +417,7 @@ async function main() {
         `band tab "${tab}" — exactly one panel visible`,
         `saw ${visible}`
       )
+      await shoot(cdp, `band-${tab}`)
     }
 
     console.log("\n--- dialogs ---")
@@ -374,6 +442,7 @@ async function main() {
       (await evaluate(cdp, hasText("/Dates and times/i"))) === true,
       "New Gathering — form renders"
     )
+    await shoot(cdp, "new-gathering-dialog")
 
     console.log("\n--- phone (390x844) ---")
     await setViewport(cdp, PHONE)
@@ -391,6 +460,7 @@ async function main() {
     close()
   }
 
+  if (SHOTS) console.log(`\n${shotSeq} screenshot(s) in ${path.resolve(SHOTS)}`)
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`)
   process.exit(failures === 0 ? 0 : 1)
 }

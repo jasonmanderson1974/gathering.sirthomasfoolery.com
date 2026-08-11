@@ -1,6 +1,16 @@
 // Urls
+//
+// `VUE_APP_API_URL` is the escape hatch, and it exists for one reason (TODO3
+// M2): a dev server has to be aimable at an API that is not on :3002. Framework
+// warnings are compiled out of a production build, so the only way to run the
+// browser checks against a build that still emits them is `npm run serve` — and
+// `scripts/browser-check.sh --dev` points that dev server at its own throwaway
+// stack on :3010, which the hardcoded default below can never reach. Unset
+// (which is every normal `npm run serve` and every production build) it behaves
+// exactly as before.
 export const serverURL =
-  process.env.NODE_ENV === "development" ? "http://localhost:3002/api" : "/api"
+  process.env.VUE_APP_API_URL ||
+  (process.env.NODE_ENV === "development" ? "http://localhost:3002/api" : "/api")
 
 // Errors enum
 export const errors = Object.freeze({

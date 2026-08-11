@@ -21,13 +21,15 @@
 > **Part L (opened 2026-08-11) is the post-migration review. L1–L8 are closed; L9–L15 are open**
 > and are all P2/P3 — dependency and hardening work, nothing user-facing left in it.
 >
-> **Part M (opened 2026-08-11) is open — M1–M7, nothing started.** It is not a code review: it is
-> a review of what can be verified on a dev box without a deploy, run after everything in the repo
-> was confirmed green on the WSL box (395 unit tests, lint, `check:vuetify-props`, the Go suite,
-> and `browser-check.sh` ALL PASS in 3m19s). Start with **M1** (nothing here can take a screenshot,
-> so the "look at the page" rule has no implementation an agent can run), then **M2** (twelve
-> assertions that cannot fail, because we only ever test a production build) and **M5** (a stale
-> checkout is silent and fakes regressions — it already did, here, today).
+> **Part M (opened 2026-08-11): M1, M2 and M5 are DONE (2026-08-11). M3, M4, M6, M7 are open.**
+> It is not a code review: it is a review of what can be verified on a dev box without a deploy,
+> run after everything in the repo was confirmed green on the WSL box (395 unit tests, lint,
+> `check:vuetify-props`, the Go suite, and `browser-check.sh` ALL PASS in 3m19s). The three that
+> are closed were the ones that changed *who* can check and *whether the check means anything*:
+> the repo can now take a screenshot (M1), the twelve framework-warning assertions can now fail
+> (M2), and a stale checkout says so instead of manufacturing a regression (M5). What is left is
+> the local sign-in hole (M3), the fixture nobody else can use (M4), the missing mount-test tier
+> (M6) and the check's one-mode-only ergonomics (M7).
 >
 > **The backlog was the Vue 3 migration (Part K).** The three inherited `P3` items (`TODO2.md` G2, G3, G4) were **closed
 > won't-do on 2026-08-10** by user decision — see the section below for the reasoning, which is
@@ -1391,7 +1393,7 @@ Vuetify ships and which is present in the built CSS.) Either add the rules or dr
 >
 > Ordered by how much each one widens what can be checked before a deploy.
 
-### M1 — nothing local can take a screenshot · **P1 · S**
+### M1 — nothing local can take a screenshot · **P1 · S** — DONE 2026-08-11
 
 The one workflow rule the repo puts above the others is **"look at the page"**, and there is no
 way to do it here except by being a human with a browser. `browser-check-lib.js` already has the
@@ -1409,7 +1411,30 @@ That is the whole change and it is small, but it is the one that changes who can
 a rendered PNG is readable by an agent, and "does this look right" stops being a question that
 only a deploy can answer.
 
-### M2 — twelve assertions that cannot fail: framework warnings are stripped from what we test · **P1 · S**
+**DONE 2026-08-11.** `screenshot()` in `browser-check-lib.js` (one `Page.captureScreenshot`, full
+page via `captureBeyondViewport`), `frontend/scripts/shot.js` on top of it, and `--shots <dir>` in
+`check-routes.js`.
+
+- `npm run shot -- <url> [--cookie c] [--phone] [--viewport WxH] [--full] [--click <text>]
+  [--out p] [--wait ms]`. `--click` was not in the plan and earns its place: the New Gathering
+  dialog is a page state no URL reaches, and it is where K3's crash lived.
+- `--shots` writes a full-page PNG per navigation, numbered in visit order and slugged from the
+  assertion label — `07-event.png`, `16-band-settle-up.png`, `18-new-gathering-dialog.png`. Full
+  page rather than the fold on purpose: L2's off-screen "+" was 1,300px down. A screenshot failure
+  is caught and logged, never turned into a red run — this is diagnosis, not an assertion.
+- CI runs `--shots shots` on both legs and uploads `browser-check-shots-{prod,dev}`, 7-day
+  retention. `frontend/shots/` and `/shots` are gitignored (pictures of seeded or real members).
+- Verified: 20 PNGs from a full local run, and the event page and the open dialog were read back
+  and are legible — icons painted, band tabs and below-the-fold content in frame.
+
+**It found something on its first use, and it is not fixed here:** the New Gathering dialog shows
+**"Please fix form errors before continuing"** in red the moment it opens, before anything has been
+typed, with the submit button disabled. `check:routes` asserts "the dialog opens" and "the form
+renders" and passes — the picture is the only thing that saw it. Wants its own item: the L1/K5
+family (`VForm.validate()`, `validate-on`, `:disabled="!formValid"` on a pristine form) is the
+first place to look, and CLAUDE.md already warns that a pristine field reports `isValid === null`.
+
+### M2 — twelve assertions that cannot fail: framework warnings are stripped from what we test · **P1 · S** — DONE 2026-08-11
 
 `compose.dev.yaml` builds the frontend image through `frontend/Dockerfile:31` — `npm run build`, a
 **production** build — and Vue and Vuetify compile their warnings out of those entirely. Every
@@ -1436,6 +1461,44 @@ rest of that path is already in place and was verified: `fetch_utils.js:66` send
 `credentials: "include"`, `main.go:131` sets `AllowCredentials: true`, and `compose.dev.yaml`
 already whitelists `http://localhost:8080`. A cookie minted for `localhost` covers both ports —
 ports are not part of a cookie's origin — so the same `mintsession` cookie works across the split.
+
+**DONE 2026-08-11, option (a).** `scripts/browser-check.sh --dev`. `src/constants.js` now reads
+`process.env.VUE_APP_API_URL || <the old expression>`; `CORS_ORIGINS` became a variable in
+`compose.dev.yaml`; the script exports it, brings up **only** Mongo and the API (`--no-deps`, so
+the frontend image is not built at all), and serves the app from `npm run serve` on `:8080`
+(`SERVE_PORT` to move it) pointed at `:3010`. The dev server is launched under `set -m` so the
+teardown can kill the whole process group — killing `$!` alone leaves webpack holding the port,
+and the *next* run then fails on a port nothing visible owns.
+
+**The premise was measured, not assumed.** With a deliberate `<v-deliberately-not-a-component />`
+in `Landing.vue`:
+
+| build | framework warnings seen | console errors | check says |
+|---|---|---|---|
+| production (`npm run build`, the frontend image) | **0** | 0 | ALL PASS |
+| dev (`npm run serve`, `--dev`) | **1** `[Vue warn]: Failed to resolve component` | 0 | FAIL |
+
+So the twelve lines were reporting on nothing, exactly as the item said, and now they report on
+something. Both modes are green on the real app: `--dev` **ALL PASS in 1m59s**, the production mode
+**ALL PASS in 3m07s** — the new mode is the *faster* one, because it builds no frontend image.
+
+**CI runs both**, as a two-leg matrix (`prod`, `dev`) in `browser-ci.yml` with `fail-fast: false`.
+Manual-only would have left the twelve assertions still unable to fail where it counts. The path
+filter widened from `scripts/browser-check.sh` to `scripts/**`.
+
+**One assertion had to be fixed to make `--dev` usable, and it was wrong rather than
+mode-specific.** `iconFontLoaded` (L8) required a `resource` timing entry over 100KB, which infers
+"the font painted" from network shape — and that inference breaks two ways that have nothing to do
+with the font: a webfont is only fetched when a glyph on the page needs it, and a revalidated
+cache hit (a 304, which is what a dev server sends; the Go server sends `immutable` and is never
+asked) reports a zero-length body. It now calls `document.fonts.load()`, which *attempts* the face
+and reports the outcome, and `iconFontSelfHosted` now reads the `@font-face` rule's own `src` out
+of the CSSOM instead of resource timing. Both were re-validated in the repo's usual way — blocking
+`*materialdesignicons*` makes the first FAIL, injecting a jsdelivr-hosted face makes the second
+FAIL — and both now pass on the first navigation, on a repeat navigation, and on a page with no
+icons on it, in both modes. `evaluate()` in `browser-check-lib.js` now always passes
+`awaitPromise: true`; without it an async assertion returns `"[object Promise]"` and silently
+fails its `=== true`.
 
 ### M3 — nothing can sign in locally, so the real auth path is verifiable only in production · **P2 · S**
 
@@ -1472,7 +1535,7 @@ Extract the seed to `scripts/seed-club.js`, taking a Mongo URI and a base URL, a
 both `browser-check.sh` and a new `scripts/dev-up.sh --seed`. One fixture with two consumers, and
 the interactive stack stops being able to drift away from the one CI asserts against.
 
-### M5 — a stale checkout is silent, and manufactures fake regressions · **P1 · S**
+### M5 — a stale checkout is silent, and manufactures fake regressions · **P1 · S** — DONE 2026-08-11
 
 Both halves of this machine were stale on arrival and neither said so. This is not a hypothetical;
 it is what the first twenty minutes here were spent on.
@@ -1494,6 +1557,29 @@ compare the running images' creation time against the newest mtime under `fronte
 `server/`; print the Go, Node, Chrome and mongosh versions it found. Exit non-zero with the exact
 command that fixes each thing it complains about. Call it from the top of `browser-check.sh`, so a
 run cannot silently report on artifacts that predate the change under test.
+
+**DONE 2026-08-11.** `scripts/dev-doctor.sh`, as specified, plus `--deps` (the install check
+alone) and `PROJECT=` to point it at another compose project.
+
+- Per-image sources rather than one tree-wide mtime: frontend sources make the frontend image
+  stale and `server/` makes the server image stale, never both. A check that cries wolf is a check
+  people learn to skip.
+- It reaches the image through the **container** (`ps -aq` → `docker inspect`), not through
+  `docker compose images` — that subcommand fails outright with "No such image" when *any one* of
+  the project's images has been pruned from under a running container, taking every other service's
+  answer down with it. That is not hypothetical: it is the state this box was in, and the first
+  version of the script reported "frontend: not running" because of it.
+- `browser-check.sh` calls `--deps` before it builds anything. Only the deps half, because that
+  script rebuilds its own images every run and so cannot be caught by the image check — but it
+  *does* run `npm run serve` out of `node_modules` in `--dev` mode.
+
+**Verified in both directions.** With `vue` and `vuex` majors bumped in `package.json` and a
+nonexistent package added, it named all three and exited 1; unmodified, it exits 0. And on its
+first real run it caught this machine: the `timeful-dev` server image was built
+**2026-08-10T14:47** — before the first commit of Part K — with `server/routes/events.go` and four
+other files newer than it, and the frontend container was running an image that no longer exists
+at all. That is the 18-hours-of-Vue-2-out-of-a-Vue-3-checkout state, reported in one line instead
+of being discovered by debugging a fake regression.
 
 ### M6 — no fast render tier: a component regression costs 3m19s · **P2 · M**
 
@@ -1547,8 +1633,13 @@ them exists because ignoring it cost a debugging session:
   frontend bundle and the Go binary into their images, so `docker compose restart` re-runs the
   *old* artifacts: `docker compose -f compose.dev.yaml up -d --build frontend server`. The server
   registers its static routes only at boot, so a `dist` swap needs the restart to see new hashed
-  filenames.
-- **Look at the page.** Lint, unit tests and the build have all been green over a bug that only
-  appears in a browser — `v-show` beaten by Tailwind's `important: true`, a purged class name
-  built from a template string, a fifth tab putting a phone into horizontal scroll. The
-  `CLAUDE.md` frontend section lists the ones already paid for.
+  filenames. **`scripts/dev-doctor.sh` now says so out loud** (M5) — that and a stale
+  `node_modules` are the two ways this box lies to you, and both are silent otherwise.
+- **Look at the page — and since M1 that is an instruction anyone here can follow.**
+  `scripts/browser-check.sh --shots <dir>` leaves a full-page PNG of every page it visits;
+  `npm run shot -- <url> [--cookie] [--phone] [--click]` shoots one. Lint, unit tests and the
+  build have all been green over a bug that only appears in a browser — `v-show` beaten by
+  Tailwind's `important: true`, a purged class name built from a template string, a fifth tab
+  putting a phone into horizontal scroll. The `CLAUDE.md` frontend section lists the ones already
+  paid for. **Run `--dev` when the change is framework-shaped** (M2): a production build has no
+  warnings in it to find, so the twelve warning assertions only mean something there.

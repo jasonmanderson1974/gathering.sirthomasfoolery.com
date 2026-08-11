@@ -6,7 +6,9 @@
  * is a poor trade. Chrome is already installed on the machines that run them.
  */
 const { spawn } = require("child_process")
+const fs = require("fs")
 const http = require("http")
+const path = require("path")
 const WebSocket = require("ws")
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -142,9 +144,20 @@ async function launch({ port = 9222 } = {}) {
   }
 }
 
-/** Evaluates an expression in the page and returns its value. */
+/**
+ * Evaluates an expression in the page and returns its value.
+ *
+ * `awaitPromise` is always on: a non-promise result comes back unchanged, and
+ * an assertion that needs to *do* something before it can answer — the icon
+ * font one calls `document.fonts.load()` — would otherwise come back as the
+ * string "[object Promise]" and quietly fail its `=== true`.
+ */
 async function evaluate(cdp, expression) {
-  const res = await cdp("Runtime.evaluate", { expression, returnByValue: true })
+  const res = await cdp("Runtime.evaluate", {
+    expression,
+    returnByValue: true,
+    awaitPromise: true,
+  })
   return res?.result?.value
 }
 
@@ -211,4 +224,42 @@ function frameworkWarnings(events) {
     )
 }
 
-module.exports = { launch, evaluate, pageErrors, frameworkWarnings, sleep }
+/**
+ * Writes a PNG of the current page to `filePath` and returns the path.
+ *
+ * WHY THIS EXISTS (TODO3 M1): the workflow rule this repo puts above the others
+ * is "look at the page", and until this call there was no way to do it here
+ * except by being a human with a browser — the only screenshot code in the tree
+ * was `verify_f9_prod.js`, Playwright, against production, needing a real
+ * signed-in prod session. So the rule read: to look at the page, deploy it. One
+ * CDP call the driver already had the socket for changes who can do the
+ * checking, because a PNG is readable by an agent.
+ *
+ * `captureBeyondViewport` is how the full page is taken rather than the fold.
+ * It cooperates with `Emulation.setDeviceMetricsOverride` — the width stays
+ * whatever the viewport was set to, so a phone-width full-page shot is one
+ * 390px-wide column and not a desktop page squeezed.
+ */
+async function screenshot(cdp, filePath, { fullPage = false } = {}) {
+  const res = await cdp("Page.captureScreenshot", {
+    format: "png",
+    captureBeyondViewport: fullPage,
+  })
+  if (!res || !res.data) {
+    throw new Error(
+      `Page.captureScreenshot returned no data: ${JSON.stringify(res)}`
+    )
+  }
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+  fs.writeFileSync(filePath, Buffer.from(res.data, "base64"))
+  return filePath
+}
+
+module.exports = {
+  launch,
+  evaluate,
+  pageErrors,
+  frameworkWarnings,
+  screenshot,
+  sleep,
+}

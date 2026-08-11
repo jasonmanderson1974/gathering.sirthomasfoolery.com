@@ -79,7 +79,12 @@ services:
       # CLIENT_SECRET has to come from the sourced file above.
       CLIENT_ID: "${CLIENT_ID:-}"
       CLIENT_SECRET: "${CLIENT_SECRET:-}"
-      CORS_ORIGINS: "http://localhost:8080"
+      # The Vue CLI dev server's origin. A variable because
+      # `scripts/browser-check.sh --dev` runs that dev server against THIS stack
+      # on a port of its own choosing (TODO3 M2), and a cross-origin request the
+      # server does not whitelist fails with no error the check can see — the
+      # page renders, every API call 403s, and it reads as an empty database.
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:8080}"
       # Invite-only gate off locally so an empty allowlist fails open for testing.
       INVITE_ONLY_ENFORCED: "false"
     volumes:

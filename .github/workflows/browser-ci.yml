@@ -27,7 +27,7 @@ on:
       - "frontend/**"
       - "server/**"
       - "compose.dev.yaml"
-      - "scripts/browser-check.sh"
+      - "scripts/**"
       - ".github/workflows/browser-ci.yml"
   push:
     branches:
@@ -36,7 +36,7 @@ on:
       - "frontend/**"
       - "server/**"
       - "compose.dev.yaml"
-      - "scripts/browser-check.sh"
+      - "scripts/**"
       - ".github/workflows/browser-ci.yml"
 
 jobs:
@@ -46,6 +46,25 @@ jobs:
     # rather than tight: a timeout that trips on a slow runner teaches people to
     # ignore this job.
     timeout-minutes: 25
+
+    strategy:
+      # Both legs always report. A failure in one is a real failure and the
+      # other leg's answer is still worth having — they check different things.
+      fail-fast: false
+      matrix:
+        include:
+          # The served production bundle: the real Go static routes, the real
+          # immutable-cached hashed assets, the bundle a deploy would ship.
+          - mode: prod
+            flags: ""
+          # The same assertions against `npm run serve` (TODO3 M2). Vue and
+          # Vuetify compile their warnings out of a production build, so the
+          # twelve "— no framework warnings" lines in the prod leg above report
+          # PASS whatever the app does. This leg is the only place they can
+          # fail — and a removed framework API usually warns rather than
+          # throwing, which is how K5, L1, L3 and L7 were each found by hand.
+          - mode: dev
+            flags: "--dev"
 
     steps:
       - name: Check out repository
@@ -87,8 +106,22 @@ jobs:
           }
           google-chrome --version
 
-      # The script dumps the stack's logs itself if anything fails, before it
-      # tears down — so there is no separate `if: failure()` step here to race
-      # the teardown, and a local run gets the same diagnosis.
-      - name: Boot the stack, seed it, and check every route
-        run: scripts/browser-check.sh
+      # The script dumps the stack's (and, on the dev leg, the dev server's)
+      # logs itself if anything fails, before it tears down — so there is no
+      # separate `if: failure()` step here to race the teardown, and a local run
+      # gets the same diagnosis.
+      #
+      # `--shots` costs nothing on a passing run and is the difference between
+      # "band tab Lists — exactly one panel visible: FAIL" and being able to see
+      # that two panels are stacked (TODO3 M1). Uploaded below.
+      - name: Boot the stack, seed it, and check every route (${{ matrix.mode }})
+        run: scripts/browser-check.sh ${{ matrix.flags }} --shots shots
+
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-check-shots-${{ matrix.mode }}
+          path: shots
+          if-no-files-found: warn
+          retention-days: 7

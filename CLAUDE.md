@@ -59,6 +59,27 @@ The Go module is `sirtom/server` (renamed from `schej.it/server`, 2026-07-23). T
   unit suite is pure JS with `environment: "node"`, imports no `.vue` file and
   has no `@vue/test-utils`, so it stays green through a total rendering failure
   (TODO3 L5). Runs in CI as `browser-ci.yml`, on `frontend/**` *and* `server/**`.
+- **`--dev` is not an optional extra: without it twelve of the assertions cannot
+  fail.** The frontend image runs `npm run build`, and Vue and Vuetify compile
+  every warning out of a production build, so each "— no framework warnings"
+  line reports PASS whatever the app does. `--dev` serves the app from
+  `npm run serve` against the same stack's API, where the warnings are real —
+  and it is *faster* (2m vs 3m), because no frontend image is built. CI runs
+  both legs. A framework upgrade speaks mostly through warnings, not throws:
+  that is the channel K5, L1, L3 and L7 were all found through, by hand (M2).
+  The split works because `src/constants.js` honours `VUE_APP_API_URL` and
+  because ports are not part of a cookie's origin — don't undo either.
+- **To look at a page, use `--shots <dir>` or `npm run shot`** (M1), not a
+  deploy. `--shots` leaves a numbered full-page PNG of every page the check
+  visits (CI uploads them); `frontend/scripts/shot.js <url> [--cookie] [--phone]
+  [--full] [--click <text>] [--out]` shoots one page on a stack you already
+  have. Both drive `browser-check-lib.js`, so they see exactly what the check
+  sees. `frontend/shots/` and `/shots` are gitignored.
+- `scripts/dev-doctor.sh` — the two stale-artifact traps on these boxes
+  (`node_modules` a whole framework generation behind `package.json`; a running
+  image built before the change under test), both of which fail *silently* and
+  manufacture regressions that look real. `browser-check.sh` runs `--deps`
+  before it builds anything (M5).
 
 ### Backend (`cd server`)
 - `air` — live-reload dev (install: `go install github.com/cosmtrek/air@latest`). Runs `main.go`, listens on `:3002` (`:3003` if `NODE_ENV=staging`).
@@ -108,7 +129,10 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
   unpinned `@latest` CDN `<link>` until 2026-08-11). Keep the version exact, don't put it back on a
   CDN, and note `plugins/vuetify.js` selects the `mdi` icon set for this reason — `mdi-svg` wants
   SVG paths from `@mdi/js` instead. If the font ever fails to load, all 69 `mdi-*` names render as
-  blank squares with nothing logged; `check:routes` asserts on `document.fonts` to catch that.
+  blank squares with nothing logged; `check:routes` catches that with `document.fonts.load()`
+  (which *attempts* the face) plus the `@font-face` rule's own `src`. Not `document.fonts.check()`,
+  which returns true when no matching face exists at all, and not resource-timing sizes, which
+  report a perfectly-painting font as missing whenever it was cached or never needed on that page.
 - **Vue 3 discards an unrecognised prop on a component silently** — no warning in dev, none in the
   build. That is the general rule the next three bullets are instances of, and it is why a Vuetify 2
   leftover renders at the wrong size, variant or position with lint, the unit suite, the build and

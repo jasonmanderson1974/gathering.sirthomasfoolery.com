@@ -2,6 +2,10 @@
 node_modules
 /dist
 
+# Screenshots from scripts/shot.js and `check:routes --shots` (TODO3 M1).
+# Pictures of a seeded club or of real member data — neither belongs in a commit.
+/shots
+
 # local env files
 .env
 .env.local

@@ -18,3 +18,6 @@ deploy_scripts/reboot_log.txt
 e2e/node_modules
 e2e/*state*.json
 e2e/*.png
+# `scripts/browser-check.sh --shots shots` (TODO3 M1), which is how CI runs it.
+# Pictures of a seeded club; frontend/shots is covered by frontend/.gitignore.
+/shots
