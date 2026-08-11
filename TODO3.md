@@ -1216,6 +1216,13 @@ which is the only check that would have caught the dialog. Note it needs a Chrom
 there is none on `PATH`, so it wants
 `CHROME_PATH=/root/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome`.
 
+Shipped and verified live on `8149dcb` (`tools/browser/verify_L7_prod.js`, off-repo): the New
+Gathering dialog opens, renders and **closes** again, an event page renders clean, and the
+timezone selector still opens its menu — the `update:modelValue` paths, end to end, on
+production. One thing that surfaced while writing it, worth knowing before someone asserts on it:
+`NewDialog`'s root is `persistent`, so **Escape does not close it** and is not meant to — it
+closes on a click outside, through `handleDialogInput`, so the unsaved-changes dialog gets a say.
+
 ### L8 — the icon font is `@latest`, from a CDN, unpinned and unverified · **P2 · S**
 
 `frontend/public/index.html:34`:
