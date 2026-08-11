@@ -218,7 +218,7 @@
               class="tw-mb-1 tw-text-xs tw-text-parchment-dim"
               @click="calendarExpanded = !calendarExpanded"
             >
-              <v-icon size="small" left>{{
+              <v-icon size="small" start>{{
                 calendarExpanded ? "mdi-chevron-up" : "mdi-chevron-down"
               }}</v-icon>
               {{ calendarExpanded ? "Hide availability" : "View availability" }}

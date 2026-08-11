@@ -120,8 +120,8 @@
             <div class="tw-mb-2 tw-flex tw-items-center tw-gap-4">
               <v-radio-group
                 v-model="splitMode"
-                row
-                dense
+                inline
+                density="compact"
                 hide-details
                 class="tw-mt-0 tw-pt-0"
               >
@@ -145,7 +145,7 @@
               <v-checkbox
                 :model-value="isSelected(person.id)"
                 :label="person.name"
-                dense
+                density="compact"
                 hide-details
                 class="tw-mt-0 tw-flex-grow tw-pt-0"
                 @update:model-value="setSelected(person.id, $event)"
@@ -199,7 +199,7 @@
               :loading="processingPhoto"
               @click="pickFile"
             >
-              <v-icon size="small" left>mdi-camera-plus-outline</v-icon>
+              <v-icon size="small" start>mdi-camera-plus-outline</v-icon>
               Add photo
             </v-btn>
           </div>

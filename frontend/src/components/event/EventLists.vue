@@ -84,8 +84,7 @@
             >
               <v-btn
                 icon
-                :x-small="!phone"
-                :small="phone"
+                :size="phone ? 'small' : 'x-small'"
                 class="tw-text-parchment-dim"
                 title="Rename list"
                 @click.stop="startRename(list)"
@@ -94,8 +93,7 @@
               </v-btn>
               <v-btn
                 icon
-                :x-small="!phone"
-                :small="phone"
+                :size="phone ? 'small' : 'x-small'"
                 class="tw-text-red"
                 title="Delete list"
                 @click.stop="askDeleteList(list)"
@@ -265,8 +263,7 @@
                   <v-btn
                     v-if="canNest(row)"
                     icon
-                    :x-small="!phone"
-                    :small="phone"
+                    :size="phone ? 'small' : 'x-small'"
                     class="tw-text-parchment-dim"
                     title="Add sub-entry"
                     @click="startChild(row.item)"
@@ -276,8 +273,7 @@
                   <v-btn
                     v-if="isMine(row.item)"
                     icon
-                    :x-small="!phone"
-                    :small="phone"
+                    :size="phone ? 'small' : 'x-small'"
                     class="tw-text-parchment-dim"
                     title="Edit entry"
                     @click="startEdit(row.item)"
@@ -287,8 +283,7 @@
                   <v-btn
                     v-if="canDelete(row.item)"
                     icon
-                    :x-small="!phone"
-                    :small="phone"
+                    :size="phone ? 'small' : 'x-small'"
                     class="tw-text-parchment-dim"
                     :title="
                       row.hasChildren
@@ -381,7 +376,7 @@
               :disabled="!(newItemText[list._id] || '').trim()"
               @click="submitItem(list)"
             >
-              <v-icon size="small" left>mdi-plus</v-icon>
+              <v-icon size="small" start>mdi-plus</v-icon>
               Add
             </v-btn>
           </div>
@@ -407,7 +402,13 @@
           class="tw-mb-2"
           @keyup.enter="createList"
         />
-        <v-radio-group v-model="newKind" row dense hide-details class="tw-mt-1">
+        <v-radio-group
+          v-model="newKind"
+          inline
+          density="compact"
+          hide-details
+          class="tw-mt-1"
+        >
           <v-radio label="Anything" value="text" />
           <v-radio label="Places" value="location" />
           <v-radio label="Checklist" value="checklist" />
@@ -435,7 +436,7 @@
         class="tw-mt-3 tw-text-brass"
         @click="showNewList = true"
       >
-        <v-icon size="small" left>mdi-plus</v-icon>
+        <v-icon size="small" start>mdi-plus</v-icon>
         Add list
       </v-btn>
     </template>

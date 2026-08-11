@@ -39,7 +39,7 @@
           size="small"
           class="tw-m-0.5 tw-bg-leather tw-text-parchment-dim"
         >
-          <v-icon left size="small"> mdi-account-multiple </v-icon>
+          <v-icon start size="small"> mdi-account-multiple </v-icon>
           {{ event.numResponses }}
         </v-chip>
         <v-menu
@@ -48,7 +48,6 @@
           ref="menu"
           :close-on-content-click="false"
           transition="slide-x-transition"
-          right
         >
           <template v-slot:activator="{ props }">
             <v-btn variant="plain" icon v-bind="props" @click.prevent>
@@ -106,7 +105,7 @@
             </v-dialog>
             <v-menu
               v-if="isOwner"
-              right
+              location="end"
               :close-on-content-click="false"
               open-on-hover
             >

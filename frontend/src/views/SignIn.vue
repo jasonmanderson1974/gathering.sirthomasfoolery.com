@@ -112,7 +112,7 @@
               variant="solo"
               hide-details="auto"
               disabled
-              background-color="#2e2117"
+              bg-color="#2e2117"
               class="tw-mb-3"
             />
             <v-btn

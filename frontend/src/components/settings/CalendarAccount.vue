@@ -49,7 +49,7 @@
         >
           {{ account.email }}
         </div>
-        <v-tooltip top v-if="accountHasError">
+        <v-tooltip location="top" v-if="accountHasError">
           <template v-slot:activator="{ props }">
             <v-btn icon v-bind="props" @click="reauthenticateCalendarAccount">
               <v-icon>mdi-alert-circle</v-icon>

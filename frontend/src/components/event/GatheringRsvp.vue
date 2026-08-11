@@ -17,7 +17,7 @@
         v-for="opt in options"
         :key="opt.value"
         size="small"
-        :outlined="myStatus !== opt.value"
+        :variant="myStatus === opt.value ? 'flat' : 'outlined'"
         :class="
           myStatus === opt.value
             ? 'tw-bg-brass tw-text-wood-deep'
@@ -25,7 +25,7 @@
         "
         @click="choose(opt.value)"
       >
-        <v-icon size="small" left>{{ opt.icon }}</v-icon>
+        <v-icon size="small" start>{{ opt.icon }}</v-icon>
         {{ opt.label }}
       </v-btn>
     </div>

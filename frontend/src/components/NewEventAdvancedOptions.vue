@@ -32,7 +32,7 @@
       v-else-if="!guestEvent"
       disabled
       messages="test"
-      off-icon="mdi-checkbox-blank-off-outline"
+      false-icon="mdi-checkbox-blank-off-outline"
     >
       <template v-slot:label>
         <span class="tw-text-sm">Collect respondents' email addresses</span>
@@ -68,7 +68,7 @@
       v-else-if="!guestEvent"
       disabled
       messages="Only show responses to event creator. "
-      off-icon="mdi-checkbox-blank-off-outline"
+      false-icon="mdi-checkbox-blank-off-outline"
     >
       <template v-slot:label>
         <span class="tw-text-sm">Hide responses from respondents</span>
@@ -107,7 +107,6 @@
             :disabled="!sendEmailAfterXResponsesEnabled"
             density="compact"
             class="email-me-after-text-field -tw-mt-[2px] tw-w-10"
-            :menu-props="{ auto: true }"
             hide-details
             type="number"
             min="1"

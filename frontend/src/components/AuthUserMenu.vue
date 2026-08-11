@@ -1,7 +1,7 @@
 <!-- Displays auth user's avatar, which displays a menu when clicked -->
 <template>
   <span>
-    <v-menu v-if="authUser" left>
+    <v-menu v-if="authUser" location="bottom end">
       <template v-slot:activator="{ props }">
         <v-btn
           id="user-menu-btn"
@@ -15,7 +15,7 @@
           </v-avatar>
         </v-btn>
       </template>
-      <v-list class="py-0" :dense="isPhone">
+      <v-list class="py-0" :density="isPhone ? 'compact' : 'default'">
         <v-list-item>
           <v-list-item-title>
             <strong>{{ displayName(authUser) }}</strong>

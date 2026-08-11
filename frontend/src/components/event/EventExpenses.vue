@@ -26,7 +26,7 @@
             class="tw-text-brass"
             @click="openNew"
           >
-            <v-icon size="small" left>mdi-plus</v-icon>
+            <v-icon size="small" start>mdi-plus</v-icon>
             Add expense
           </v-btn>
         </div>

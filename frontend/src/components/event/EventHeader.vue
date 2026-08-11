@@ -17,7 +17,7 @@
         <v-chip
           v-if="event.when2meetHref?.length > 0"
           :href="`https://when2meet.com${event.when2meetHref}`"
-          :small="isPhone"
+          :size="isPhone ? 'small' : 'default'"
           class="tw-cursor-pointer tw-select-none tw-rounded tw-bg-leather tw-px-2 tw-font-medium sm:tw-px-3"
           >Imported from when2meet</v-chip
         >
@@ -49,7 +49,7 @@
       <div>
         <v-btn
           :icon="isPhone"
-          :outlined="!isPhone"
+          :variant="isPhone ? 'text' : 'outlined'"
           class="tw-text-brass"
           @click="$emit('copy-link')"
         >

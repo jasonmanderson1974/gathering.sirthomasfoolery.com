@@ -1,5 +1,5 @@
 <template>
-  <v-snackbar v-model="show" top :color="color">
+  <v-snackbar v-model="show" location="top" :color="color">
     <span class="tw-mr-2 tw-text-sm">{{ text }}</span>
 
     <!-- Vuetify 3 renamed this slot from `action` to `actions` and no longer

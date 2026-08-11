@@ -21,7 +21,7 @@
 
       <!-- Changing or calling off the gathering is the organiser's business,
            so the menu only exists for them. Everyone else still sees the card. -->
-      <v-menu v-if="canEdit" left>
+      <v-menu v-if="canEdit" location="bottom end">
         <template v-slot:activator="{ props }">
           <v-btn
             icon
@@ -51,7 +51,7 @@
       variant="outlined"
       class="tw-mt-3 tw-w-full tw-text-brass"
     >
-      <v-icon size="small" left>mdi-calendar-plus</v-icon>
+      <v-icon size="small" start>mdi-calendar-plus</v-icon>
       Add to calendar
     </v-btn>
   </div>

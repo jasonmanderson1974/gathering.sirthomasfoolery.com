@@ -1,5 +1,5 @@
 <template>
-  <v-menu right>
+  <v-menu>
     <template v-slot:activator="{ props }">
       <v-btn icon v-bind="props"><v-icon>mdi-dots-vertical</v-icon></v-btn>
     </template>

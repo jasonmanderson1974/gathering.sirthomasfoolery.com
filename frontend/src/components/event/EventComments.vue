@@ -183,7 +183,7 @@
           </div>
           <v-checkbox
             v-model="tagMembersOnly"
-            dense
+            density="compact"
             hide-details
             label="Members only"
             class="tw-mt-0"

@@ -6,7 +6,7 @@
   >
     <v-btn
       v-if="showArrow"
-      fab
+      icon
       size="x-small"
       class="tw-pointer-events-auto tw-transform"
       @click="scrollToBottom"

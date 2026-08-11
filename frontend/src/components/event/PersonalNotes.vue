@@ -46,8 +46,7 @@
           v-for="action in actions"
           :key="action.id"
           icon
-          :x-small="!phone"
-          :small="phone"
+          :size="phone ? 'small' : 'x-small'"
           class="tw-text-parchment-dim"
           :title="action.title"
           @click="format(action.id)"

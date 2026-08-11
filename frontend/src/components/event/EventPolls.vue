@@ -125,7 +125,7 @@
           <v-checkbox
             v-model="newAllowMultiple"
             label="Allow multiple choices"
-            dense
+            density="compact"
             hide-details
             class="tw-mt-0 tw-pt-0"
           />
@@ -150,7 +150,7 @@
         class="tw-mt-3 tw-text-brass"
         @click="showNewPoll = true"
       >
-        <v-icon size="small" left>mdi-plus</v-icon>
+        <v-icon size="small" start>mdi-plus</v-icon>
         Add poll
       </v-btn>
     </template>

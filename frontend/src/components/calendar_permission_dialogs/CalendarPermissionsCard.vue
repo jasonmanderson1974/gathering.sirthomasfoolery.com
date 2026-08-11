@@ -46,7 +46,7 @@
       >
         {{ cancelLabel }}
       </v-btn>
-      <v-btn @click="$emit('allow')" class="tw-flex-1 tw-bg-brass" dark>
+      <v-btn @click="$emit('allow')" class="tw-flex-1 tw-bg-brass">
         {{ allowLabel }}
       </v-btn>
     </div>

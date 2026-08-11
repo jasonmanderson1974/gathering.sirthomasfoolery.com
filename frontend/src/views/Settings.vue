@@ -50,14 +50,14 @@
               hide-details
               variant="outlined"
               placeholder="First name"
-              :dense="isPhone"
+              :density="isPhone ? 'compact' : 'default'"
             />
             <v-text-field
               v-model="lastName"
               hide-details
               variant="outlined"
               placeholder="Last name"
-              :dense="isPhone"
+              :density="isPhone ? 'compact' : 'default'"
             />
           </div>
           <v-expand-transition>
@@ -90,7 +90,7 @@
               hide-details
               placeholder="Nickname"
               :maxlength="nicknameMaxLength"
-              :dense="isPhone"
+              :density="isPhone ? 'compact' : 'default'"
             />
           </div>
           <v-expand-transition>
@@ -126,7 +126,7 @@
               hide-details
               disabled
               class="tw-mb-2"
-              :dense="isPhone"
+              :density="isPhone ? 'compact' : 'default'"
             />
             <div class="tw-flex tw-items-start tw-gap-2">
               <v-text-field
@@ -136,7 +136,7 @@
                 placeholder="New email address"
                 type="email"
                 :error-messages="newEmailError"
-                :dense="isPhone"
+                :density="isPhone ? 'compact' : 'default'"
                 @keydown.enter="sendEmailCode"
               />
               <v-btn
@@ -163,7 +163,7 @@
                 maxlength="6"
                 autocomplete="one-time-code"
                 :error-messages="emailCodeError"
-                :dense="isPhone"
+                :density="isPhone ? 'compact' : 'default'"
                 @keydown.enter="verifyEmailCode"
               />
               <v-btn
@@ -188,7 +188,7 @@
               hide-details
               placeholder="Phone number"
               type="tel"
-              :dense="isPhone"
+              :density="isPhone ? 'compact' : 'default'"
               @blur="beautifyPhone"
             />
           </div>

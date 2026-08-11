@@ -145,7 +145,7 @@
                 :class="isPhone ? 'tw-opacity-100' : 'tw-opacity-0'"
               >
                 <template v-if="isPhone && (isGuest(user) || isOwner)">
-                  <v-menu right>
+                  <v-menu>
                     <template v-slot:activator="{ props }">
                       <v-btn icon v-bind="props">
                         <v-icon size="small" color="#b8ad97"

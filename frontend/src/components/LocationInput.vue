@@ -6,8 +6,8 @@
     :loading="loading"
     :label="label"
     :placeholder="placeholder"
-    :solo="solo"
-    :dense="dense"
+    :variant="solo ? 'solo' : undefined"
+    :density="dense ? 'compact' : undefined"
     :hide-details="hideDetails"
     :autofocus="autofocus"
     :prepend-inner-icon="hideIcon ? undefined : 'mdi-map-marker'"
@@ -45,6 +45,9 @@ export default {
     modelValue: { type: String, default: "" },
     label: { type: String, default: undefined },
     placeholder: { type: String, default: "Venue or address…" },
+    // Kept as booleans because that is this component's own API and its callers
+    // read better for it; Vuetify 3 spells them `variant`/`density`, so they are
+    // translated on the way through rather than forwarded (TODO3 L3).
     solo: { type: Boolean, default: false },
     dense: { type: Boolean, default: false },
     hideDetails: { type: [Boolean, String], default: "auto" },

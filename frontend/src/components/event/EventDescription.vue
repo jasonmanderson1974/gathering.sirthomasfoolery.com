@@ -56,10 +56,14 @@
           auto-grow
           hide-details
         ></v-textarea>
-        <v-btn icon :small="isPhone" @click="cancelEditing">
+        <v-btn icon :size="isPhone ? 'small' : 'default'" @click="cancelEditing">
           <v-icon>mdi-close</v-icon>
         </v-btn>
-        <v-btn icon :small="isPhone" color="primary" @click="saveDescription"
+        <v-btn
+          icon
+          :size="isPhone ? 'small' : 'default'"
+          color="primary"
+          @click="saveDescription"
           ><v-icon>mdi-check</v-icon></v-btn
         >
       </div>

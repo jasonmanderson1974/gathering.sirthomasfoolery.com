@@ -99,11 +99,11 @@
               >
                 <v-icon size="small">mdi-calendar-check</v-icon>
                 <span class="tw-ml-2 tw-truncate">Gathering set</span>
-                <v-icon size="small" right>mdi-chevron-down</v-icon>
+                <v-icon size="small" end>mdi-chevron-down</v-icon>
               </v-btn>
             </template>
             <v-list density="compact">
-              <v-list-item two-line class="tw-pointer-events-none">
+              <v-list-item lines="two" class="tw-pointer-events-none">
                 <v-list-item-title>{{
                   scheduledGatheringText
                 }}</v-list-item-title>
@@ -160,7 +160,7 @@
                 <v-checkbox
                   v-model="reminderEnabledLocal"
                   label="Email reminder to respondents"
-                  dense
+                  density="compact"
                   hide-details
                   class="tw-mt-0 tw-pt-0"
                 />

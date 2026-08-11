@@ -11,7 +11,6 @@
     <div
       v-if="showHeader"
       class="tw-fixed tw-z-40 tw-h-14 tw-w-screen tw-border-b tw-border-brass-dim tw-bg-wood-deep sm:tw-h-16"
-      dark
     >
       <div
         class="tw-relative tw-m-auto tw-flex tw-h-full tw-max-w-6xl tw-items-center tw-justify-center tw-px-4"

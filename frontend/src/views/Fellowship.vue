@@ -24,14 +24,14 @@
           hide-details
           clearable
           prepend-inner-icon="mdi-magnify"
-          :dense="isPhone"
+          :density="isPhone ? 'compact' : 'default'"
         />
         <div class="tw-flex tw-shrink-0 tw-items-center tw-gap-3">
           <v-switch
             v-model="showGuests"
             color="brass"
             hide-details
-            dense
+            density="compact"
             class="tw-mt-0 tw-shrink-0 tw-pt-0"
             label="Show guests"
           />
@@ -45,7 +45,7 @@
                 :disabled="filteredMembers.length === 0"
                 v-bind="props"
               >
-                <v-icon size="small" left>mdi-download</v-icon>
+                <v-icon size="small" start>mdi-download</v-icon>
                 Export
               </v-btn>
             </template>

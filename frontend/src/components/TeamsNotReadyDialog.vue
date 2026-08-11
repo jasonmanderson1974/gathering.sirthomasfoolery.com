@@ -5,10 +5,9 @@
         <span class="tw-text-xl tw-font-medium">Upgrade Required</span>
         <v-spacer />
         <v-btn
-          absolute
           @click="dialog = false"
           icon
-          class="tw-right-0 tw-mr-2 tw-self-center"
+          class="tw-absolute tw-right-0 tw-mr-2 tw-self-center"
         >
           <v-icon>mdi-close</v-icon>
         </v-btn>
