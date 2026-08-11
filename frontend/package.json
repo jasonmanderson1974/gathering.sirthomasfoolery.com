@@ -24,7 +24,6 @@
     "vue": "^2.7.16",
     "vue-meta": "^2.4.0",
     "vue-router": "^3.6.5",
-    "vue-worker": "^1.2.1",
     "vuedraggable": "^2.24.3",
     "vuetify": "^2.7.1",
     "vuex": "^3.6.2"

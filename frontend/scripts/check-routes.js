@@ -48,8 +48,7 @@ const PHONE = { width: 390, height: 844, mobile: true }
 
 /* ---------- page-side expressions ---------- */
 
-const hasText = (re) =>
-  `${re}.test(document.body.innerText)`
+const hasText = (re) => `${re}.test(document.body.innerText)`
 
 const buttonMatching = (re) =>
   `[...document.querySelectorAll('button')].some(b => ${re}.test(b.textContent.trim()))`
@@ -165,7 +164,9 @@ const routes = (eventId) => [
       // route mounting and its conditional rendering working is the signal.
       [
         "reaches a confirmation state",
-        hasText("/confirming response|has been confirmed|something went wrong/i"),
+        hasText(
+          "/confirming response|has been confirmed|something went wrong/i"
+        ),
       ],
     ],
   },
@@ -184,7 +185,9 @@ const routes = (eventId) => [
   {
     name: "404",
     path: "/definitely-not-a-route",
-    assertions: [["shows the not-found page", hasText("/404 - Page not found/")]],
+    assertions: [
+      ["shows the not-found page", hasText("/404 - Page not found/")],
+    ],
   },
 ]
 
@@ -221,7 +224,11 @@ async function visit(cdp, events, url, label) {
   await sleep(6000)
 
   const errors = pageErrors(events)
-  report(errors.length === 0, `${label} — no console errors`, errors.slice(0, 3))
+  report(
+    errors.length === 0,
+    `${label} — no console errors`,
+    errors.slice(0, 3)
+  )
   const warnings = frameworkWarnings(events)
   report(
     warnings.length === 0,
@@ -274,7 +281,11 @@ async function main() {
       }
       await sleep(1200)
       const visible = await evaluate(cdp, visibleBandPanels)
-      report(visible === 1, `band tab "${tab}" — exactly one panel visible`, `saw ${visible}`)
+      report(
+        visible === 1,
+        `band tab "${tab}" — exactly one panel visible`,
+        `saw ${visible}`
+      )
     }
 
     console.log("\n--- dialogs ---")

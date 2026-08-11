@@ -152,7 +152,8 @@ async function evaluate(cdp, expression) {
 function pageErrors(events) {
   const consoleErrors = events
     .filter(
-      (e) => e.method === "Runtime.consoleAPICalled" && e.params.type === "error"
+      (e) =>
+        e.method === "Runtime.consoleAPICalled" && e.params.type === "error"
     )
     .map((e) => (e.params.args[0] || {}).value)
     .filter(Boolean)
@@ -190,7 +191,9 @@ function frameworkWarnings(events) {
         .join(" ")
         .trim()
     )
-    .filter((text) => /\[Vue warn\]|\[Vuetify\]|\[vue-router\]|\[vuex\]/i.test(text))
+    .filter((text) =>
+      /\[Vue warn\]|\[Vuetify\]|\[vue-router\]|\[vuex\]/i.test(text)
+    )
 }
 
 module.exports = { launch, evaluate, pageErrors, frameworkWarnings, sleep }

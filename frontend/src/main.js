@@ -1,5 +1,4 @@
 import Vue from "vue"
-import VueWorker from "vue-worker"
 import App from "./App.vue"
 import router from "./router"
 import store from "./store"
@@ -9,9 +8,6 @@ import "./index.css"
 
 // Site Metadata
 Vue.use(VueMeta)
-
-// Workers
-Vue.use(VueWorker)
 
 Vue.config.productionTip = false
 

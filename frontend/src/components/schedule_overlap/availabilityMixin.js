@@ -1,4 +1,7 @@
 import { getDateHoursOffset, get } from "@/utils"
+// Imported by path rather than through the `@/utils` barrel: that barrel is
+// `export *` and pulled in by ~40 components, and this one touches Worker/Blob.
+import { runInWorker } from "@/utils/worker"
 
 /**
  * Aggregate-availability fetch/format methods for ScheduleOverlap.
@@ -129,69 +132,68 @@ export default {
       this.loadingResponses.loading = true
       this.loadingResponses.lastFetched = lastFetched
 
-      this.$worker
-        .run(
-          (days, times, parsedResponses, daysOnly, hideIfNeeded) => {
-            // Define functions locally because we can't import functions
-            const splitTimeNum = (timeNum) => {
-              const hours = Math.floor(timeNum)
-              const minutes = Math.floor((timeNum - hours) * 60)
-              return { hours, minutes }
-            }
-            const getDateHoursOffset = (date, hoursOffset) => {
-              const { hours, minutes } = splitTimeNum(hoursOffset)
-              const newDate = new Date(date)
-              newDate.setHours(newDate.getHours() + hours)
-              newDate.setMinutes(newDate.getMinutes() + minutes)
-              return newDate
-            }
+      runInWorker(
+        (days, times, parsedResponses, daysOnly, hideIfNeeded) => {
+          // Define functions locally because we can't import functions
+          const splitTimeNum = (timeNum) => {
+            const hours = Math.floor(timeNum)
+            const minutes = Math.floor((timeNum - hours) * 60)
+            return { hours, minutes }
+          }
+          const getDateHoursOffset = (date, hoursOffset) => {
+            const { hours, minutes } = splitTimeNum(hoursOffset)
+            const newDate = new Date(date)
+            newDate.setHours(newDate.getHours() + hours)
+            newDate.setMinutes(newDate.getMinutes() + minutes)
+            return newDate
+          }
 
-            // Create array of all dates in the event
-            const dates = []
-            if (daysOnly) {
-              for (const day of days) {
-                dates.push(day.dateObject)
-              }
-            } else {
-              for (const day of days) {
-                for (const time of times) {
-                  // Iterate through all the times
-                  const date = getDateHoursOffset(
-                    day.dateObject,
-                    time.hoursOffset
-                  )
-                  dates.push(date)
-                }
+          // Create array of all dates in the event
+          const dates = []
+          if (daysOnly) {
+            for (const day of days) {
+              dates.push(day.dateObject)
+            }
+          } else {
+            for (const day of days) {
+              for (const time of times) {
+                // Iterate through all the times
+                const date = getDateHoursOffset(
+                  day.dateObject,
+                  time.hoursOffset
+                )
+                dates.push(date)
               }
             }
+          }
 
-            // Create a map mapping time to the respondents available during that time
-            const formatted = new Map()
-            for (const date of dates) {
-              formatted.set(date.getTime(), new Set())
+          // Create a map mapping time to the respondents available during that time
+          const formatted = new Map()
+          for (const date of dates) {
+            formatted.set(date.getTime(), new Set())
 
-              // Check every response and see if they are available for the given time
-              for (const response of Object.values(parsedResponses)) {
-                // Check availability array
-                if (
-                  response.availability?.has(date.getTime()) ||
-                  (response.ifNeeded?.has(date.getTime()) && !hideIfNeeded)
-                ) {
-                  formatted.get(date.getTime()).add(response.user._id)
-                  continue
-                }
+            // Check every response and see if they are available for the given time
+            for (const response of Object.values(parsedResponses)) {
+              // Check availability array
+              if (
+                response.availability?.has(date.getTime()) ||
+                (response.ifNeeded?.has(date.getTime()) && !hideIfNeeded)
+              ) {
+                formatted.get(date.getTime()).add(response.user._id)
+                continue
               }
             }
-            return formatted
-          },
-          [
-            this.allDays,
-            this.times,
-            this.parsedResponses,
-            this.event.daysOnly,
-            this.hideIfNeeded,
-          ]
-        )
+          }
+          return formatted
+        },
+        [
+          this.allDays,
+          this.times,
+          this.parsedResponses,
+          this.event.daysOnly,
+          this.hideIfNeeded,
+        ]
+      )
         .then((formatted) => {
           // Only set responses formatted for the latest request
           if (lastFetched >= this.loadingResponses.lastFetched) {
