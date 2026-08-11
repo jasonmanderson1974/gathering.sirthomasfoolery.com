@@ -271,10 +271,48 @@ as rejected.
 > lazy-validation `formValid` never became true, permanently disabling the
 > "Join slot" button.
 
-Both use a small CDP driver (`scripts/browser-check-lib.js`) over `ws` rather
-than Puppeteer — these run occasionally before a deploy, and a ~100MB browser
-download in devDependencies is a poor trade when Chrome is already installed.
-Set `CHROME_PATH` if yours is not on `PATH`.
+**The routes check** (`npm run check:routes`) is the broad one: every route in
+`src/router/index.js`, all five event band tabs, the New Gathering dialog, and a
+390px pass — asserting for each that it rendered, that an identifying control is
+present, and that the console stayed clean.
+
+```bash
+npm run check:routes -- http://localhost:3002 "$COOKIE" <eventId>
+```
+
+Use a **superAdmin** session: `/members` is gated on `canInvite`, so a lesser
+role silently redirects to `/home` and the route is never exercised.
+
+> **Why it exists.** Nothing else in the repo can fail on a rendering bug. All 23
+> unit-test files are pure JS deliberately extracted *out of* components —
+> `vitest.config.mjs` sets `environment: "node"`, no test imports a `.vue` file,
+> and `@vue/test-utils` is not a dependency — so the suite stays green through a
+> total rendering failure. It is written against the DOM rather than against Vue
+> so that it keeps its value across a framework upgrade.
+>
+> Two assertions are worth knowing about. **"exactly one band panel visible"**
+> is aimed at `v-show` being defeated by Tailwind's `important: true`, which
+> beats the inline `display: none` and shows every panel at once with no error
+> anywhere; asserting *exactly one* catches that as well as nothing rendering.
+> **The 390px pass** asserts no horizontal scroll, which is how a sixth band tab
+> would announce itself.
+>
+> It was validated by breaking each assertion on purpose and confirming it
+> flipped to FAIL — a rejected cookie, an injected `display: block !important`
+> on the band panels, a synthetic `console.error`, a `[Vue warn]` on both
+> `console.warn` and `console.error`, and an overflowing element.
+
+**Framework warnings only appear in a dev build.** `npm run build` strips them,
+and that is what `compose.dev.yaml` serves — so the "no framework warnings" line
+passes against `localhost:3002` no matter what. When the warnings are the point
+(a Vue or Vuetify upgrade, where removed APIs warn rather than throw), run the
+check against `npm run serve` on `:8080` instead, with `CORS_ORIGINS` set.
+
+All three use a small CDP driver (`scripts/browser-check-lib.js`) over `ws`
+rather than Puppeteer — these run occasionally before a deploy, and a ~100MB
+browser download in devDependencies is a poor trade when Chrome is already
+installed. Set `CHROME_PATH` if yours is not on `PATH`; the driver tries
+`google-chrome`, `chromium` and `chromium-browser` in turn.
 
 Remember to delete the seeded documents afterwards.
 

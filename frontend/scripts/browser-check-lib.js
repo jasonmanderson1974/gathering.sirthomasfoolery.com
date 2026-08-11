@@ -46,25 +46,37 @@ function getJSON(port, path) {
  */
 async function launch({ port = 9222 } = {}) {
   const profile = `/tmp/browser-check-${process.pid}-${Date.now()}`
+  const args = [
+    "--headless=new",
+    `--remote-debugging-port=${port}`,
+    `--user-data-dir=${profile}`,
+    "--no-sandbox",
+    "--disable-gpu",
+    "about:blank",
+  ]
 
+  // A missing binary makes `spawn` emit an asynchronous 'error' event rather
+  // than throw, so a plain try/catch around it never fires and the fallback
+  // list below it is decorative — the first name always "succeeds" and the
+  // process dies later with an unhandled ENOENT. Wait a beat for that event
+  // instead, so the list actually falls through to chromium.
   let chrome, lastErr
   for (const bin of CHROME_BINARIES) {
-    try {
-      chrome = spawn(
-        bin,
-        [
-          "--headless=new",
-          `--remote-debugging-port=${port}`,
-          `--user-data-dir=${profile}`,
-          "--no-sandbox",
-          "--disable-gpu",
-          "about:blank",
-        ],
-        { stdio: "ignore" }
-      )
+    const child = spawn(bin, args, { stdio: "ignore" })
+    const launched = await new Promise((resolve) => {
+      const onError = (e) => {
+        lastErr = e
+        resolve(false)
+      }
+      child.once("error", onError)
+      setTimeout(() => {
+        child.removeListener("error", onError)
+        resolve(true)
+      }, 300)
+    })
+    if (launched) {
+      chrome = child
       break
-    } catch (e) {
-      lastErr = e
     }
   }
   if (!chrome) {
@@ -155,4 +167,30 @@ function pageErrors(events) {
   return [...consoleErrors, ...exceptions]
 }
 
-module.exports = { launch, evaluate, pageErrors, sleep }
+/**
+ * Framework warnings recorded since `events` was cleared — `[Vue warn]`,
+ * `[Vuetify]` and friends, across every console level.
+ *
+ * Vue 2 emits its warnings through `console.error` and Vue 3 through
+ * `console.warn`, so both levels are scanned rather than one; and every
+ * argument is joined, because the component trace that says *where* the
+ * warning came from is never the first one.
+ *
+ * IMPORTANT: production builds strip these warnings entirely. A run against a
+ * `npm run build` bundle (which is what compose.dev.yaml serves) will report
+ * zero no matter what. Point the check at `npm run serve` when the warnings are
+ * the thing you care about.
+ */
+function frameworkWarnings(events) {
+  return events
+    .filter((e) => e.method === "Runtime.consoleAPICalled")
+    .map((e) =>
+      (e.params.args || [])
+        .map((a) => a.value ?? a.description ?? "")
+        .join(" ")
+        .trim()
+    )
+    .filter((text) => /\[Vue warn\]|\[Vuetify\]|\[vue-router\]|\[vuex\]/i.test(text))
+}
+
+module.exports = { launch, evaluate, pageErrors, frameworkWarnings, sleep }
