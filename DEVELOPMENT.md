@@ -61,10 +61,50 @@ open http://localhost:3002
 ```
 
 It boots mongo + frontend + server with dummy secrets and exposes Mongo on
-`:27017`. **Caveat:** external-service auth does NOT work locally — Gmail SMTP
-(email OTP codes) and Google OAuth (calendar) aren't configured. Use it for
-build/boot/UI smoke tests and for running the backend integration tests, not for
-full login.
+`:27017`. Out of the box that is enough for build/boot/UI smoke tests and the
+backend integration tests, but not for anything touching Gmail SMTP or Google.
+
+### Testing the real calendar path locally
+
+The calendar code was the one area nothing could exercise — no OAuth locally —
+which is how two Vue 3 regressions reached production before anyone saw them
+(K5, K6). It *can* be exercised, and without a browser OAuth round trip:
+
+**A stored refresh token is enough.** `services/auth` sends `client_id`,
+`client_secret`, `refresh_token` and `grant_type=refresh_token` — **no
+`redirect_uri`** (that appears only on the initial code exchange). So a token
+already in a restored production dump can be replayed locally, and **no Google
+Cloud Console change is needed**. Only the initial *linking* flow would need
+`http://localhost:3002/auth` added to the OAuth client's redirect URIs.
+
+Put the three values in `server/.env.dev.local` (untracked, chmod 600 — it
+already holds `ENCRYPTION_KEY` for decrypting a restored dump), then **source it
+before bringing the stack up**:
+
+```bash
+set -a; . server/.env.dev.local; set +a
+docker compose -f compose.dev.yaml -f compose.dev.secrets.yaml up -d
+```
+
+`ENCRYPTION_KEY` must match the production key or the stored token will not
+decrypt; `CLIENT_ID` and `CLIENT_SECRET` are what exchange it.
+
+> **Sourcing it is not optional, and forgetting is silent-ish.** Compose gives
+> `environment:` precedence over `env_file:`, so for a long time the secrets
+> overlay could not override the dummy `ENCRYPTION_KEY` hardcoded in
+> `compose.dev.yaml` — it just ran on the dummy. The symptom is
+> `GET /api/user/profile` returning **500** with
+> `decrypt: cipher: message authentication failed` in the server log, and a
+> completely blank-looking app. `compose.dev.yaml` now writes these as
+> `${VAR:-dummy}` so a sourced value actually wins.
+
+Two things to know once it works. The **CalendarAccounts panel only renders
+while editing availability** — it is not on the read-only grid, so "I see no
+calendars" there is expected. And calendar events only draw when the
+"Show my calendar events" switch is on (or while editing).
+
+**Caveat:** email OTP still needs Gmail SMTP credentials in the same file; see
+the browser-checks section for minting a session directly instead.
 
 ### Event location address lookup (optional)
 

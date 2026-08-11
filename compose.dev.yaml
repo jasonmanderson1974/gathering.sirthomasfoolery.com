@@ -56,8 +56,25 @@ services:
       GIN_MODE: debug
       # Dummy dev secrets — NOT for production. SESSION_SECRET must be >=32 chars;
       # ENCRYPTION_KEY is used raw as an AES key (32 chars => AES-256).
-      SESSION_SECRET: "dev-session-secret-not-for-prod-change-me!!"
-      ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef"
+      #
+      # Written as `${VAR:-dummy}` rather than a bare literal so a real value can
+      # actually win. An `environment:` entry beats every `env_file:`, so the
+      # secrets overlay pointing at server/.env.dev.local could never override a
+      # hardcoded value here — it silently ran on the dummy key instead, which
+      # meant no encrypted field from a restored production dump would decrypt
+      # (calendar tokens are the ones you notice: /api/user/profile 500s with
+      # "cipher: message authentication failed").
+      #
+      # To use the real ones, source the file first — see compose.dev.secrets.yaml:
+      #   set -a; . server/.env.dev.local; set +a
+      SESSION_SECRET: "${SESSION_SECRET:-dev-session-secret-not-for-prod-change-me!!}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}"
+      # Google OAuth. Empty by default, which disables calendar linking; set them
+      # to exercise the calendar path against a real account. CLIENT_ID is picked
+      # up from the root .env automatically (Compose loads it for interpolation);
+      # CLIENT_SECRET has to come from the sourced file above.
+      CLIENT_ID: "${CLIENT_ID:-}"
+      CLIENT_SECRET: "${CLIENT_SECRET:-}"
       CORS_ORIGINS: "http://localhost:8080"
       # Invite-only gate off locally so an empty allowlist fails open for testing.
       INVITE_ONLY_ENFORCED: "false"
