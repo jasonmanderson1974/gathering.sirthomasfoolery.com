@@ -242,17 +242,22 @@ export default {
           get(`/user/searchContacts?query=${query}`)
             .then(({ contacts, hasContactsAccess }) => {
               this.hasContactsAccess = hasContactsAccess
-              this.$set(this.emailSuggestions, emailsIndex, contacts)
+              // An ARRAY, not a keyed object — `splice` is the reactive
+              // index write, and unlike a spread it keeps the same array
+              // identity that `respondents.map` set up in `created`.
+              this.emailSuggestions.splice(emailsIndex, 1, contacts)
             })
             .catch(() => {
-              this.$set(this.emailSuggestions, emailsIndex, [])
+              this.emailSuggestions.splice(emailsIndex, 1, [])
             })
         }, 300)
       }
     },
     emailFilter(item, queryText) {
       // Custom email filter (unused)
-      const searchText = `${displayName(item)} ${item.firstName} ${item.lastName} ${item.email}`
+      const searchText = `${displayName(item)} ${item.firstName} ${
+        item.lastName
+      } ${item.email}`
       return searchText.toLowerCase().includes(queryText.toLowerCase())
     },
   },

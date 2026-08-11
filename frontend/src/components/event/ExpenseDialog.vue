@@ -103,7 +103,10 @@
         </div>
 
         <template v-else>
-          <div v-if="!participants.length" class="tw-text-sm tw-text-parchment-dim">
+          <div
+            v-if="!participants.length"
+            class="tw-text-sm tw-text-parchment-dim"
+          >
             Nobody has taken part in this gathering yet.
           </div>
 
@@ -113,7 +116,13 @@
                  the inline display:none v-show sets, so a hidden row would still
                  render. Same trap noted in CLAUDE.md. -->
             <div class="tw-mb-2 tw-flex tw-items-center tw-gap-4">
-              <v-radio-group v-model="splitMode" row dense hide-details class="tw-mt-0 tw-pt-0">
+              <v-radio-group
+                v-model="splitMode"
+                row
+                dense
+                hide-details
+                class="tw-mt-0 tw-pt-0"
+              >
                 <v-radio label="Evenly" value="even" />
                 <v-radio label="By amount" value="amount" />
               </v-radio-group>
@@ -146,7 +155,11 @@
                 v-if="splitMode === 'even'"
                 class="tw-w-20 tw-flex-none tw-text-right tw-text-sm tw-text-parchment-dim"
               >
-                {{ isSelected(person.id) ? formatCents(evenShare(person.id)) : "—" }}
+                {{
+                  isSelected(person.id)
+                    ? formatCents(evenShare(person.id))
+                    : "—"
+                }}
               </div>
               <v-text-field
                 v-else
@@ -165,7 +178,9 @@
               class="tw-mt-2 tw-flex tw-items-center tw-justify-between tw-border-t tw-border-brass-dim tw-pt-2 tw-text-sm"
             >
               <span class="tw-text-parchment-dim">{{ splitSummary }}</span>
-              <span :class="splitTotalClass">{{ formatCents(splitTotal) }}</span>
+              <span :class="splitTotalClass">{{
+                formatCents(splitTotal)
+              }}</span>
             </div>
           </template>
         </template>
@@ -200,13 +215,19 @@
             {{ photoError }}
           </div>
 
-          <div v-if="pendingPhotos.length" class="tw-flex tw-flex-wrap tw-gap-2">
+          <div
+            v-if="pendingPhotos.length"
+            class="tw-flex tw-flex-wrap tw-gap-2"
+          >
             <div
               v-for="(photo, i) in pendingPhotos"
               :key="i"
               class="tw-relative tw-h-16 tw-w-16 tw-overflow-hidden tw-rounded tw-border tw-border-brass-dim"
             >
-              <img :src="photo.dataUrl" class="tw-h-full tw-w-full tw-object-cover" />
+              <img
+                :src="photo.dataUrl"
+                class="tw-h-full tw-w-full tw-object-cover"
+              />
               <v-btn
                 icon
                 x-small
@@ -367,7 +388,10 @@ export default {
     /** The even split as the server would compute it, keyed by user id. */
     evenShares() {
       const map = {}
-      for (const split of splitEvenlyPreview(this.amountCents ?? 0, this.selected)) {
+      for (const split of splitEvenlyPreview(
+        this.amountCents ?? 0,
+        this.selected
+      )) {
         map[split.userId] = split.amountCents
       }
       return map
@@ -560,9 +584,7 @@ export default {
     },
 
     setTypedAmount(id, value) {
-      // Vue 2 cannot see a new key added to a plain object, hence $set — the
-      // same trap EventLists.vue documents for its keyed text fields.
-      this.$set(this.typedAmounts, id, value)
+      this.typedAmounts = { ...this.typedAmounts, [id]: value }
     },
 
     pickFile() {

@@ -74,7 +74,9 @@
         >
           <div class="tw-flex tw-items-start tw-justify-between tw-gap-2">
             <div class="tw-min-w-0">
-              <div class="tw-break-words tw-font-medium">{{ expense.title }}</div>
+              <div class="tw-break-words tw-font-medium">
+                {{ expense.title }}
+              </div>
               <div class="tw-text-xs tw-text-parchment-dim">
                 {{ formatExpenseDate(expense.date) }} ·
                 {{ expense.paidByName }} paid ·
@@ -82,7 +84,9 @@
               </div>
             </div>
             <div class="tw-flex tw-flex-none tw-items-center tw-gap-1">
-              <span class="tw-text-brass">{{ formatCents(expense.amountCents) }}</span>
+              <span class="tw-text-brass">{{
+                formatCents(expense.amountCents)
+              }}</span>
               <v-btn
                 v-if="expense.canEdit"
                 icon
@@ -110,7 +114,10 @@
                `npm run serve`, where the SPA is on :8080 and the API on :3002:
                the serving route needs the session cookie, and a plain <img>
                sends none. Same reasoning as isOwnAvatarUrl. -->
-          <div v-if="expense.receipts?.length" class="tw-mt-2 tw-flex tw-flex-wrap tw-gap-2">
+          <div
+            v-if="expense.receipts?.length"
+            class="tw-mt-2 tw-flex tw-flex-wrap tw-gap-2"
+          >
             <div
               v-for="receipt in expense.receipts"
               :key="receipt._id"
@@ -141,7 +148,10 @@
             </div>
           </div>
 
-          <div v-if="expense.description" class="tw-mt-2 tw-break-words tw-text-sm">
+          <div
+            v-if="expense.description"
+            class="tw-mt-2 tw-break-words tw-text-sm"
+          >
             {{ expense.description }}
           </div>
 
@@ -149,7 +159,10 @@
                Both behind a disclosure: the ledger is scanned far more often
                than it is interrogated. -->
           <div class="tw-mt-2 tw-flex tw-flex-wrap tw-gap-3">
-            <a class="tw-text-xs tw-text-brass" @click="toggle(expense._id, 'split')">
+            <a
+              class="tw-text-xs tw-text-brass"
+              @click="toggle(expense._id, 'split')"
+            >
               {{ isOpen(expense._id, "split") ? "Hide split" : "Show split" }}
             </a>
             <a
@@ -328,7 +341,7 @@ export default {
 
     toggle(expenseId, section) {
       const key = `${expenseId}:${section}`
-      this.$set(this.open, key, !this.open[key])
+      this.open = { ...this.open, [key]: !this.open[key] }
     },
 
     openNew() {

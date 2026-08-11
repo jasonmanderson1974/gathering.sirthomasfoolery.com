@@ -459,7 +459,10 @@ export default {
       this.createFolderDialog = true
     },
     toggleFolder(folderId) {
-      this.$set(this.folderOpenState, folderId, !this.folderOpenState[folderId])
+      this.folderOpenState = {
+        ...this.folderOpenState,
+        [folderId]: !this.folderOpenState[folderId],
+      }
     },
     createEventInFolder(folderId) {
       const actualFolderId = folderId === "no-folder" ? null : folderId
@@ -499,13 +502,17 @@ export default {
     },
     folders: {
       handler(newFolders) {
-        if (newFolders) {
-          newFolders.forEach((folder) => {
-            if (this.folderOpenState[folder._id] === undefined) {
-              this.$set(this.folderOpenState, folder._id, true) // default to open
-            }
-          })
-        }
+        if (!newFolders) return
+        const unseen = newFolders.filter(
+          (folder) => this.folderOpenState[folder._id] === undefined
+        )
+        if (unseen.length === 0) return
+        // One reassignment for the whole batch rather than one per folder:
+        // replacing the object is what makes the new keys reactive, and doing
+        // it inside the loop would rebuild it once per folder.
+        const next = { ...this.folderOpenState }
+        for (const folder of unseen) next[folder._id] = true // default to open
+        this.folderOpenState = next
       },
       immediate: true,
     },

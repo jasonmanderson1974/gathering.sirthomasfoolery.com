@@ -6,8 +6,8 @@
 
     <!-- Signed-out: the discussion is members-and-guests-only, no anonymous access -->
     <div v-if="!authUser" class="tw-text-sm tw-text-parchment-dim">
-      <a class="tw-text-brass" @click="goToSignIn">Sign in</a> to read and join the
-      discussion.
+      <a class="tw-text-brass" @click="goToSignIn">Sign in</a> to read and join
+      the discussion.
     </div>
 
     <template v-else>
@@ -23,7 +23,11 @@
               @click="toggleThread(comment._id)"
             >
               <v-icon small class="tw-mt-0.5 tw-flex-none">
-                {{ isExpanded(comment._id) ? "mdi-chevron-down" : "mdi-chevron-right" }}
+                {{
+                  isExpanded(comment._id)
+                    ? "mdi-chevron-down"
+                    : "mdi-chevron-right"
+                }}
               </v-icon>
               <div class="tw-min-w-0 tw-flex-grow">
                 <div class="tw-flex tw-items-center tw-gap-2">
@@ -46,7 +50,10 @@
             </div>
 
             <!-- Expanded thread body -->
-            <div v-if="isExpanded(comment._id)" class="tw-border-t tw-border-brass-dim/60 tw-p-2">
+            <div
+              v-if="isExpanded(comment._id)"
+              class="tw-border-t tw-border-brass-dim/60 tw-p-2"
+            >
               <!-- The root comment in full -->
               <CommentRow
                 :comment="comment"
@@ -62,7 +69,9 @@
               />
 
               <!-- Replies -->
-              <div class="tw-mt-2 tw-space-y-2 tw-border-l tw-border-brass-dim/60 tw-pl-3">
+              <div
+                class="tw-mt-2 tw-space-y-2 tw-border-l tw-border-brass-dim/60 tw-pl-3"
+              >
                 <CommentRow
                   v-for="reply in repliesFor(comment._id)"
                   :key="reply._id"
@@ -96,9 +105,19 @@
               </div>
 
               <!-- Thread management -->
-              <div v-if="comment.canManageThread" class="tw-mt-2 tw-flex tw-gap-3">
-                <a class="tw-text-xs tw-text-brass" @click="toggleMembersOnly(comment)">
-                  {{ comment.membersOnly ? "Make visible to guests" : "Make members only" }}
+              <div
+                v-if="comment.canManageThread"
+                class="tw-mt-2 tw-flex tw-gap-3"
+              >
+                <a
+                  class="tw-text-xs tw-text-brass"
+                  @click="toggleMembersOnly(comment)"
+                >
+                  {{
+                    comment.membersOnly
+                      ? "Make visible to guests"
+                      : "Make members only"
+                  }}
                 </a>
                 <a
                   v-if="replyCountFor(comment._id) === 0"
@@ -306,10 +325,11 @@ export default {
     toggleThread(threadId) {
       const i = this.expandedThreads.indexOf(threadId)
       if (i === -1) {
-        // Seed the draft key before the composer renders. Vue 2 can't observe a
-        // property added later by v-model, so without this the Reply button
-        // would never notice the textarea filling up.
-        if (!(threadId in this.replyText)) this.$set(this.replyText, threadId, "")
+        // Seed the draft key before the composer renders, so the Reply button
+        // notices the textarea filling up.
+        if (!(threadId in this.replyText)) {
+          this.replyText = { ...this.replyText, [threadId]: "" }
+        }
         this.expandedThreads.push(threadId)
       } else {
         this.expandedThreads.splice(i, 1)
@@ -318,7 +338,11 @@ export default {
     // Legacy guest-authored rows have no signed-in author, so nobody can claim
     // them; they stay readable and remain deletable by the event owner.
     isMine(comment) {
-      return !comment.isGuest && !!this.authUser && comment.userId === this.authUser._id
+      return (
+        !comment.isGuest &&
+        !!this.authUser &&
+        comment.userId === this.authUser._id
+      )
     },
     canEditComment(comment) {
       return this.isMine(comment)
@@ -343,8 +367,7 @@ export default {
       const text = (this.replyText[root._id] ?? "").trim()
       if (!text) return
       this.$emit("add-comment", { text, threadId: root._id })
-      // Vue 2 reactivity: replyText keys are added dynamically.
-      this.$set(this.replyText, root._id, "")
+      this.replyText = { ...this.replyText, [root._id]: "" }
     },
     startEdit(comment) {
       this.editingId = comment._id
@@ -364,7 +387,10 @@ export default {
     // names what is going rather than asking about "this comment".
     remove(comment) {
       this.pendingDelete = {
-        ...describeCommentDeletion(comment, this.repliesFor(comment._id).length),
+        ...describeCommentDeletion(
+          comment,
+          this.repliesFor(comment._id).length
+        ),
         commentId: comment._id,
       }
     },

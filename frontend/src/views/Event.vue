@@ -992,7 +992,7 @@ export default {
       this.refreshingLists = true
       const id = this.event.shortId ?? this.event._id
       try {
-        this.$set(this.event, "lists", await getLists(id))
+        this.event = { ...this.event, lists: await getLists(id) }
       } catch (err) {
         this.showError("Could not refresh the lists. Please try again.")
       } finally {
@@ -1388,7 +1388,10 @@ export default {
       // Signing out, or a session expiring, while a signed-in-only tab is
       // selected must not leave the band pointing at a panel that no longer
       // exists.
-      if (!now && ["my-lists", "my-notes", "settle-up"].includes(this.bandTab)) {
+      if (
+        !now &&
+        ["my-lists", "my-notes", "settle-up"].includes(this.bandTab)
+      ) {
         this.bandTab = "discussion"
         this.personalListCount = 0
       }

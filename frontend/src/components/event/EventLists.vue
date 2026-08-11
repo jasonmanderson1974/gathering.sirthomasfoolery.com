@@ -59,7 +59,11 @@
               @click="toggleList(list._id)"
             >
               <v-icon small class="tw-mt-0.5 tw-flex-none">
-                {{ isExpanded(list._id) ? "mdi-chevron-down" : "mdi-chevron-right" }}
+                {{
+                  isExpanded(list._id)
+                    ? "mdi-chevron-down"
+                    : "mdi-chevron-right"
+                }}
               </v-icon>
               <div class="tw-min-w-0">
                 <div class="tw-break-words tw-font-medium">{{ list.name }}</div>
@@ -130,9 +134,9 @@
             v-for="row in rowsOf(list)"
             :key="row.item._id"
             :data-item-id="row.item._id"
-            :class="`list-row tw-rounded tw-px-2 tw-py-1 hover:tw-bg-brass/10 ${
-              indentClass(row.depth)
-            }`"
+            :class="`list-row tw-rounded tw-px-2 tw-py-1 hover:tw-bg-brass/10 ${indentClass(
+              row.depth
+            )}`"
           >
             <!-- Inline edit of one's own entry -->
             <template v-if="editingItemId === row.item._id">
@@ -175,7 +179,9 @@
                   v-if="row.hasChildren"
                   small
                   class="tw-cursor-pointer tw-text-parchment-dim"
-                  :title="row.collapsed ? 'Show sub-entries' : 'Hide sub-entries'"
+                  :title="
+                    row.collapsed ? 'Show sub-entries' : 'Hide sub-entries'
+                  "
                   @click="toggleItem(row.item._id)"
                 >
                   {{ row.collapsed ? "mdi-chevron-right" : "mdi-chevron-down" }}
@@ -202,7 +208,9 @@
                 small
                 class="tw-mt-0.5 tw-flex-none tw-text-parchment-dim"
               >
-                {{ isLocationList(list) ? "mdi-map-marker" : "mdi-circle-small" }}
+                {{
+                  isLocationList(list) ? "mdi-map-marker" : "mdi-circle-small"
+                }}
               </v-icon>
 
               <div class="tw-min-w-0 tw-flex-grow">
@@ -217,7 +225,9 @@
                 <span
                   v-else
                   :class="`tw-break-words tw-text-sm ${
-                    row.item.checked ? 'tw-text-parchment-dim tw-line-through' : ''
+                    row.item.checked
+                      ? 'tw-text-parchment-dim tw-line-through'
+                      : ''
                   }`"
                 >
                   {{ row.item.text }}
@@ -279,10 +289,7 @@
             </div>
 
             <!-- Sub-entry composer, one at a time, directly under its parent -->
-            <div
-              v-if="addingChildOf === row.item._id"
-              class="tw-mt-1 tw-pl-6"
-            >
+            <div v-if="addingChildOf === row.item._id" class="tw-mt-1 tw-pl-6">
               <LocationInput
                 v-if="isLocationList(list)"
                 ref="childInput"
@@ -717,10 +724,10 @@ export default {
       return this.isMine(item) || this.canInvite
     },
 
-    // v-text-field can't v-model into a keyed object and stay reactive in Vue 2,
-    // so drafts are written through $set.
+    // v-text-field can't v-model straight into a keyed object, so the drafts
+    // go through here and the object is replaced rather than mutated.
     setNewItemText(listId, value) {
-      this.$set(this.newItemText, listId, value)
+      this.newItemText = { ...this.newItemText, [listId]: value }
     },
 
     /**
@@ -751,7 +758,7 @@ export default {
       const text = (this.newItemText[list._id] || "").trim()
       if (!text) return
       this.$emit("add-item", { listId: list._id, payload: { text } })
-      this.$set(this.newItemText, list._id, "")
+      this.newItemText = { ...this.newItemText, [list._id]: "" }
       this.pendingFocus = { type: "add", listId: list._id }
     },
 
@@ -848,9 +855,7 @@ export default {
       const targetList = this.lists.find((l) => l._id === targetListId)
       if (!sourceList || !targetList) return
 
-      const draggedItem = this.itemsOf(sourceList).find(
-        (i) => i._id === itemId
-      )
+      const draggedItem = this.itemsOf(sourceList).find((i) => i._id === itemId)
       if (!draggedItem) return
 
       const sameList = sourceListId === targetListId

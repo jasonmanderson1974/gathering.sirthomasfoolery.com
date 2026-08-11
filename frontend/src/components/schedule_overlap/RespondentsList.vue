@@ -223,9 +223,7 @@
           class="-tw-ml-2 tw-mb-4 tw-w-min tw-px-2"
           @click="$emit('addAvailabilityAsGuest')"
         >
-          {{
-            "+ Add guest availability"
-          }}</v-btn
+          {{ "+ Add guest availability" }}</v-btn
         >
         <v-switch
           v-if="respondents.length > 1"
@@ -297,7 +295,9 @@
     </v-dialog>
 
     <v-btn
-      v-if="!maxHeight && isPhone && (!event.blindAvailabilityEnabled || isOwner)"
+      v-if="
+        !maxHeight && isPhone && (!event.blindAvailabilityEnabled || isOwner)
+      "
       text
       color="primary"
       class="-tw-ml-2 tw-mt-4 tw-w-min tw-px-2"
@@ -580,12 +580,18 @@ export default {
           (id) => !newSet.has(id)
         )
 
-        // Update curRespondentsAddedTime
-        for (const id of addedRespondents) {
-          this.$set(this.curRespondentsAddedTime, id, new Date().getTime())
-        }
-        for (const id of removedRespondents) {
-          this.$delete(this.curRespondentsAddedTime, id)
+        // Update curRespondentsAddedTime. Rebuilt and reassigned once rather
+        // than mutated per id — replacing the object is what publishes the
+        // added keys and the removed ones in a single update.
+        if (addedRespondents.length > 0 || removedRespondents.length > 0) {
+          const next = { ...this.curRespondentsAddedTime }
+          for (const id of addedRespondents) {
+            next[id] = new Date().getTime()
+          }
+          for (const id of removedRespondents) {
+            delete next[id]
+          }
+          this.curRespondentsAddedTime = next
         }
 
         this.oldCurRespondents = [...this.curRespondents]
