@@ -737,6 +737,32 @@ Per-phase notes are in the commit messages; the ones with the longest half-life:
 - **Vue 3 removed `el.__vue__` and `$children`**, so every instance-walking probe in
   `/root/tools/browser/` is dead. Read the DOM.
 
+### K9 — light-theme leftovers, swept · **P2 · M** — DONE 2026-08-11
+
+Three separate reports (K7's unreadable sub-calendar list, K8's white-veiled responses list) all
+traced to the same source: colours the Fellowship redesign never converted. This is the deliberate
+pass rather than one bug report at a time.
+
+Method: inventory every hardcoded light value plus every use of the legacy Schej palette
+(`off-white`, `light-gray`, `light-gray-stroke`, `gray` #BDBDBD, `very-dark-gray`), then judge each
+against the surface it sits on. Fixed: the specific-times grid (white/grey blocks → translucent
+brass / leather, legend updated to match), disabled cells, grid cell borders, eight grey button
+outlines, and **ZigZag** — the torn-paper day-break edge, which drew its mask in `white` and was
+the bright sawtooth running down the availability grid.
+
+**Deliberately left**, each checked: the Google/Apple/Outlook/ICS brand buttons (white is the brand
+requirement and index.css already darkens their labels), `SignInGoogleBtn`'s border, ExpenseDialog's
+`ctx.fillStyle = "#ffffff"` (flattens receipt images before upload — a data concern, not a theme
+one), and every `tw-text-white`, which is correct on green/brass.
+
+**Evidence the sweep is complete for these:** `#BDBDBD`, `#dfdfdf` and `#DDDDDD99` no longer appear
+anywhere in the compiled CSS. Compiled values were read rather than assumed, because Tailwind
+purges on literal source text and these classes are built by string concatenation in
+`timeslotStylingMixin` — precisely where that bites.
+
+**Not visually verified: the specific-times editor**, a creation-time flow the harness could not
+drive. Confirmed at the CSS level only.
+
 ### K3 — the "dev-only" crash was a shipped bug · **P1 · S** — DONE 2026-08-11
 
 Traced, and the label was wrong twice over.
