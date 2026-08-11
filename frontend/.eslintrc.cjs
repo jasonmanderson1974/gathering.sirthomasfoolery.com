@@ -2,8 +2,14 @@
 // justified warn-level tolerance is cleared (0 warnings), so the rules below
 // inherit `error` from `eslint:recommended` / `plugin:vue/essential`, and the
 // lint script runs with `--max-warnings 0` so any *new* warning fails CI too.
-// Vue 2.7 project, so the Vue 2 preset (`plugin:vue/essential`) is used, not
-// the vue3-* configs.
+// Vue 3 project (Part K), so the Vue 3 preset is used. `vue3-essential` rather
+// than `vue3-recommended` deliberately: this is the same severity tier the Vue
+// 2 config sat at, so the migration is not also absorbing a few hundred new
+// style-rule violations at the same time as a framework change. Tightening to
+// `vue3-recommended` is a follow-up worth doing on a quiet diff.
+//
+// The vue3 presets also carry the rules that catch removed Vue 2 syntax —
+// `vue/no-deprecated-*` — which is precisely what wants flagging here.
 //
 // The handful of surviving violations are silenced with targeted
 // `eslint-disable` comments that state why, next to the code:
@@ -22,7 +28,7 @@ module.exports = {
     ecmaVersion: "latest",
     sourceType: "module",
   },
-  extends: ["eslint:recommended", "plugin:vue/essential"],
+  extends: ["eslint:recommended", "plugin:vue/vue3-essential"],
   rules: {
     // Loop conditions like `while (true)` are idiomatic here; only the
     // non-loop form is worth flagging.

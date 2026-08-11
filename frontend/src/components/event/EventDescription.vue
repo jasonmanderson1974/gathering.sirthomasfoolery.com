@@ -52,14 +52,7 @@
           auto-grow
           hide-details
         ></v-textarea>
-        <v-btn
-          icon
-          :small="isPhone"
-          @click="
-            newDescription = event.description
-            isEditing = false
-          "
-        >
+        <v-btn icon :small="isPhone" @click="cancelEditing">
           <v-icon>mdi-close</v-icon>
         </v-btn>
         <v-btn icon :small="isPhone" color="primary" @click="saveDescription"
@@ -107,6 +100,17 @@ export default {
 
   methods: {
     ...mapActions(["showError"]),
+    /**
+     * Discard the edit and put the field back the way it was.
+     *
+     * Extracted from an inline two-statement `@click`: Vue 3's template
+     * compiler parses a handler as a single JavaScript *expression*, so two
+     * assignments separated by a newline no longer compile.
+     */
+    cancelEditing() {
+      this.newDescription = this.event.description
+      this.isEditing = false
+    },
     saveDescription() {
       const oldEvent = { ...this.event }
 
@@ -122,7 +126,7 @@ export default {
         type: this.event.type,
         description: this.newDescription,
       }
-      
+
       this.$emit("update:event", newEvent)
       this.isEditing = false
       put(`/events/${this.event._id}`, eventPayload).catch((err) => {

@@ -41,7 +41,7 @@ export default {
     this.checkScroll()
     this.scrollContainer.addEventListener("scroll", this.checkScroll)
   },
-  beforeDestroy() {
+  beforeUnmount() {
     this.scrollContainer.removeEventListener("scroll", this.checkScroll)
   },
   methods: {

@@ -2,7 +2,7 @@
   <div>
     <v-date-picker
       ref="datePicker"
-      :pickerDate.sync="pickerDate"
+      v-model:pickerDate="pickerDate"
       :value="value"
       @touchstart:date="touchstart"
       @mousedown:date="mousedown"
@@ -138,7 +138,7 @@ export default {
     })
   },
 
-  beforeDestroy() {
+  beforeUnmount() {
     this.datePickerEl.removeEventListener("mouseup", this.mouseup)
     this.datePickerEl.removeEventListener("touchmove", this.touchmove)
     this.datePickerEl.removeEventListener("touchend", this.mouseup)

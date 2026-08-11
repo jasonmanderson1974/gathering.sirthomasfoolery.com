@@ -1,19 +1,14 @@
-import Vue from "vue"
+import { createApp } from "vue"
 import App from "./App.vue"
 import router from "./router"
 import store from "./store"
 import vuetify from "./plugins/vuetify"
-import VueMeta from "vue-meta"
 import "./index.css"
 
-// Site Metadata
-Vue.use(VueMeta)
+const app = createApp(App)
 
-Vue.config.productionTip = false
+app.use(router)
+app.use(store)
+app.use(vuetify)
 
-new Vue({
-  router,
-  store,
-  vuetify,
-  render: (h) => h(App),
-}).$mount("#app")
+app.mount("#app")

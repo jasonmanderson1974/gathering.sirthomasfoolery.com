@@ -11,7 +11,7 @@
     :hide-details="hideDetails"
     :autofocus="autofocus"
     :prepend-inner-icon="hideIcon ? undefined : 'mdi-map-marker'"
-    :search-input.sync="search"
+    v-model:search-input="search"
     :menu-props="{ contentClass: 'location-input-menu' }"
     no-filter
     hide-no-data
@@ -125,7 +125,7 @@ export default {
     },
   },
 
-  beforeDestroy() {
+  beforeUnmount() {
     clearTimeout(this.debounceTimer)
   },
 }

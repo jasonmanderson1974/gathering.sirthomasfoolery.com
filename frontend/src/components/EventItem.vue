@@ -28,7 +28,7 @@
           }}</v-icon>
         </div>
         <div class="tw-ml-3">
-          <div>{{ this.event.name }}</div>
+          <div>{{ event.name }}</div>
           <div class="tw-text-sm tw-font-light tw-text-parchment-dim">
             {{ dateString }}
           </div>
@@ -37,7 +37,7 @@
       <div class="tw-min-w-max">
         <v-chip small class="tw-m-0.5 tw-bg-leather tw-text-parchment-dim">
           <v-icon left small> mdi-account-multiple </v-icon>
-          {{ this.event.numResponses }}
+          {{ event.numResponses }}
         </v-chip>
         <v-menu
           v-if="isOwner"

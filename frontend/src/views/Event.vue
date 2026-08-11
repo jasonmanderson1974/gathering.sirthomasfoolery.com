@@ -55,15 +55,7 @@
           <v-card-actions>
             <v-spacer />
             <v-btn text @click="pagesNotVisitedDialog = false">Cancel</v-btn>
-            <v-btn
-              text
-              color="primary"
-              @click="
-                () => {
-                  saveChanges(true)
-                  this.pagesNotVisitedDialog = false
-                }
-              "
+            <v-btn text color="primary" @click="confirmSaveWithPagesUnvisited"
               >Add anyways</v-btn
             >
           </v-card-actions>
@@ -89,7 +81,7 @@
           />
 
           <EventLocation
-            :event.sync="event"
+            v-model:event="event"
             :canEdit="event.ownerId != 0 && canEdit"
           />
 
@@ -123,7 +115,7 @@
 
             <!-- Description -->
             <EventDescription
-              :event.sync="event"
+              v-model:event="event"
               :canEdit="event.ownerId != 0 && canEdit"
             />
 
@@ -142,7 +134,7 @@
 
             <EventLocation
               v-if="!showGatheringSidebar"
-              :event.sync="event"
+              v-model:event="event"
               :canEdit="event.ownerId != 0 && canEdit"
             />
 
@@ -172,7 +164,7 @@
             :loadingCalendarEvents="loading"
             :calendarEventsMap="calendarEventsMap"
             :calendarPermissionGranted="calendarPermissionGranted"
-            :weekOffset.sync="weekOffset"
+            v-model:weekOffset="weekOffset"
             :curGuestId="curGuestId"
             :initial-timezone="initialTimezone"
             :addingAvailabilityAsGuest="addingAvailabilityAsGuest"
@@ -690,6 +682,19 @@ export default {
   methods: {
     ...mapActions(["showError", "showInfo", "getEvents"]),
     ...mapMutations(["setAuthUser"]),
+
+    /**
+     * "Add anyways" on the unvisited-pages warning: save, then dismiss.
+     *
+     * Extracted from an inline handler that referred to `this` inside a
+     * template expression. That worked under Vue 2 and still happens to work
+     * under Vue 3's Options API, but only because the compiled render function
+     * is invoked with the instance proxy — it is not something to rely on.
+     */
+    confirmSaveWithPagesUnvisited() {
+      this.saveChanges(true)
+      this.pagesNotVisitedDialog = false
+    },
 
     /** Show choice dialog if not signed in, otherwise, immediately start editing availability */
     addAvailability() {
@@ -1363,7 +1368,7 @@ export default {
       })
   },
 
-  beforeDestroy() {
+  beforeUnmount() {
     window.removeEventListener("beforeunload", this.onBeforeUnload)
     window.removeEventListener("message", this.handleMessage)
   },

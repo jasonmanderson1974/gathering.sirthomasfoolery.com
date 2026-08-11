@@ -298,14 +298,14 @@
             <NewEventAdvancedOptions
               :edit="edit"
               :guestEvent="guestEvent"
-              :timeIncrement.sync="timeIncrement"
-              :collectEmails.sync="collectEmails"
-              :blindAvailabilityEnabled.sync="blindAvailabilityEnabled"
-              :sendEmailAfterXResponsesEnabled.sync="
+              v-model:timeIncrement="timeIncrement"
+              v-model:collectEmails="collectEmails"
+              v-model:blindAvailabilityEnabled="blindAvailabilityEnabled"
+              v-model:sendEmailAfterXResponsesEnabled="
                 sendEmailAfterXResponsesEnabled
               "
-              :sendEmailAfterXResponses.sync="sendEmailAfterXResponses"
-              :timezone.sync="timezone"
+              v-model:sendEmailAfterXResponses="sendEmailAfterXResponses"
+              v-model:timezone="timezone"
               @signIn="$emit('signIn')"
             />
           </ExpandableSection>

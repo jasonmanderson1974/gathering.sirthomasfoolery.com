@@ -412,7 +412,7 @@ export default {
     }
   },
 
-  beforeDestroy() {
+  beforeUnmount() {
     if (this.resendTimer) clearInterval(this.resendTimer)
   },
 }

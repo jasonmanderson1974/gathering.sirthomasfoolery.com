@@ -108,28 +108,28 @@
                   :event="event"
                   :state="state"
                   :states="states"
-                  :cur-timezone.sync="curTimezone"
+                  v-model:cur-timezone="curTimezone"
                   :timezone-reference-date="timezoneReferenceDate"
-                  :show-best-times.sync="showBestTimes"
-                  :hide-if-needed.sync="hideIfNeeded"
+                  v-model:show-best-times="showBestTimes"
+                  v-model:hide-if-needed="hideIfNeeded"
                   :is-weekly="isWeekly"
                   :calendar-permission-granted="calendarPermissionGranted"
                   :week-offset="weekOffset"
                   :num-responses="respondents.length"
-                  :mobile-num-days.sync="mobileNumDays"
+                  v-model:mobile-num-days="mobileNumDays"
                   :allow-schedule-event="allowScheduleEvent"
                   :show-event-options="showEventOptions"
-                  :time-type.sync="timeType"
+                  v-model:time-type="timeType"
                   @toggleShowEventOptions="toggleShowEventOptions"
                   @update:weekOffset="(val) => $emit('update:weekOffset', val)"
                   @scheduleEvent="scheduleEvent"
                   @cancelScheduleEvent="cancelScheduleEvent"
                   @saveScheduleEvent="saveScheduleEvent"
                   @cancelGathering="cancelGathering"
-                  :reminder-enabled.sync="reminderEnabled"
-                  :reminder-lead-time-hours.sync="reminderLeadTimeHours"
-                  :recurrence-frequency.sync="recurrenceFrequency"
-                  :location.sync="scheduleLocation"
+                  v-model:reminder-enabled="reminderEnabled"
+                  v-model:reminder-lead-time-hours="reminderLeadTimeHours"
+                  v-model:recurrence-frequency="recurrenceFrequency"
+                  v-model:location="scheduleLocation"
                 />
               </div>
             </template>
@@ -212,13 +212,15 @@
                     "
                     class="tw-z-10 tw-flex tw-h-14 tw-items-center tw-bg-wood-deep sm:tw-top-16"
                   >
-                    <template v-for="(day, i) in days">
+                    <!-- One key on the <template>, not one per child: Vue 3
+                         keys the iterated template itself, so the gap spacer
+                         and the day column are a single keyed unit. -->
+                    <template v-for="(day, i) in days" :key="i">
                       <div
                         v-if="!day.isConsecutive"
                         :style="{ width: `${SPLIT_GAP_WIDTH}px` }"
-                        :key="`${i}-gap`"
                       ></div>
-                      <div :key="i" class="tw-flex-1 tw-bg-wood-deep">
+                      <div class="tw-flex-1 tw-bg-wood-deep">
                         <div class="tw-text-center">
                           <div
                             v-if="isSpecificDates"
@@ -254,14 +256,12 @@
                           />
                         </div>
 
-                        <template v-for="(day, d) in days">
+                        <template v-for="(day, d) in days" :key="d">
                           <div
                             v-if="!day.isConsecutive"
                             :style="{ width: `${SPLIT_GAP_WIDTH}px` }"
-                            :key="`${d}-gap`"
                           ></div>
                           <div
-                            :key="d"
                             class="tw-relative tw-flex-1"
                             :class="loadingResponses.loading && 'tw-opacity-50'"
                           >
@@ -372,10 +372,10 @@
                                 v-for="calendarEvent in calendarEventsByDay[
                                   d + page * maxDaysPerPage
                                 ]"
+                                :key="calendarEvent.id"
                               >
                                 <CalendarEventBlock
                                   :blockStyle="getTimeBlockStyle(calendarEvent)"
-                                  :key="calendarEvent.id"
                                   :calendarEvent="calendarEvent"
                                   :noEventNames="noEventNames"
                                   transitionName="fade-transition"
@@ -485,28 +485,28 @@
                   :event="event"
                   :state="state"
                   :states="states"
-                  :cur-timezone.sync="curTimezone"
+                  v-model:cur-timezone="curTimezone"
                   :timezone-reference-date="timezoneReferenceDate"
-                  :show-best-times.sync="showBestTimes"
-                  :hide-if-needed.sync="hideIfNeeded"
+                  v-model:show-best-times="showBestTimes"
+                  v-model:hide-if-needed="hideIfNeeded"
                   :is-weekly="isWeekly"
                   :calendar-permission-granted="calendarPermissionGranted"
                   :week-offset="weekOffset"
                   :num-responses="respondents.length"
-                  :mobile-num-days.sync="mobileNumDays"
+                  v-model:mobile-num-days="mobileNumDays"
                   :allow-schedule-event="allowScheduleEvent"
                   :show-event-options="showEventOptions"
-                  :time-type.sync="timeType"
+                  v-model:time-type="timeType"
                   @toggleShowEventOptions="toggleShowEventOptions"
                   @update:weekOffset="(val) => $emit('update:weekOffset', val)"
                   @scheduleEvent="scheduleEvent"
                   @cancelScheduleEvent="cancelScheduleEvent"
                   @saveScheduleEvent="saveScheduleEvent"
                   @cancelGathering="cancelGathering"
-                  :reminder-enabled.sync="reminderEnabled"
-                  :reminder-lead-time-hours.sync="reminderLeadTimeHours"
-                  :recurrence-frequency.sync="recurrenceFrequency"
-                  :location.sync="scheduleLocation"
+                  v-model:reminder-enabled="reminderEnabled"
+                  v-model:reminder-lead-time-hours="reminderLeadTimeHours"
+                  v-model:recurrence-frequency="recurrenceFrequency"
+                  v-model:location="scheduleLocation"
                 />
               </div>
 
@@ -691,10 +691,10 @@
                           <v-card-text
                             class="tw-flex tw-flex-col tw-gap-6 tw-pb-8 tw-pt-2"
                           >
-                            <BufferTimeSwitch :bufferTime.sync="bufferTime" />
+                            <BufferTimeSwitch v-model:bufferTime="bufferTime" />
 
                             <WorkingHoursToggle
-                              :workingHours.sync="workingHours"
+                              v-model:workingHours="workingHours"
                               :timezone="curTimezone"
                             />
                           </v-card-text>
@@ -740,10 +740,7 @@
                         <v-btn
                           text
                           color="error"
-                          @click="
-                            $emit('deleteAvailability')
-                            deleteAvailabilityDialog = false
-                          "
+                          @click="confirmDeleteAvailability"
                           >Delete</v-btn
                         >
                       </v-card-actions>
@@ -767,13 +764,13 @@
                   :parsedResponses="parsedResponses"
                   :isOwner="isOwner"
                   :attendees="event.attendees"
-                  :showCalendarEvents.sync="showCalendarEvents"
+                  v-model:showCalendarEvents="showCalendarEvents"
                   :responsesFormatted="responsesFormatted"
                   :timezone="curTimezone"
-                  :show-best-times.sync="showBestTimes"
-                  :hide-if-needed.sync="hideIfNeeded"
-                  :show-response-counts.sync="showResponseCounts"
-                  :start-calendar-on-monday.sync="startCalendarOnMonday"
+                  v-model:show-best-times="showBestTimes"
+                  v-model:hide-if-needed="hideIfNeeded"
+                  v-model:show-response-counts="showResponseCounts"
+                  v-model:start-calendar-on-monday="startCalendarOnMonday"
                   :show-event-options="showEventOptions"
                   :addingAvailabilityAsGuest="addingAvailabilityAsGuest"
                   @toggleShowEventOptions="toggleShowEventOptions"
@@ -796,29 +793,29 @@
           :event="event"
           :state="state"
           :states="states"
-          :cur-timezone.sync="curTimezone"
+          v-model:cur-timezone="curTimezone"
           :timezone-reference-date="timezoneReferenceDate"
-          :show-best-times.sync="showBestTimes"
-          :hide-if-needed.sync="hideIfNeeded"
-          :start-calendar-on-monday.sync="startCalendarOnMonday"
+          v-model:show-best-times="showBestTimes"
+          v-model:hide-if-needed="hideIfNeeded"
+          v-model:start-calendar-on-monday="startCalendarOnMonday"
           :is-weekly="isWeekly"
           :calendar-permission-granted="calendarPermissionGranted"
           :week-offset="weekOffset"
           :num-responses="respondents.length"
-          :mobile-num-days.sync="mobileNumDays"
+          v-model:mobile-num-days="mobileNumDays"
           :allow-schedule-event="allowScheduleEvent"
           :show-event-options="showEventOptions"
-          :time-type.sync="timeType"
+          v-model:time-type="timeType"
           @toggleShowEventOptions="toggleShowEventOptions"
           @update:weekOffset="(val) => $emit('update:weekOffset', val)"
           @scheduleEvent="scheduleEvent"
           @cancelScheduleEvent="cancelScheduleEvent"
           @saveScheduleEvent="saveScheduleEvent"
           @cancelGathering="cancelGathering"
-          :reminder-enabled.sync="reminderEnabled"
-          :reminder-lead-time-hours.sync="reminderLeadTimeHours"
-          :recurrence-frequency.sync="recurrenceFrequency"
-          :location.sync="scheduleLocation"
+          v-model:reminder-enabled="reminderEnabled"
+          v-model:reminder-lead-time-hours="reminderLeadTimeHours"
+          v-model:recurrence-frequency="recurrenceFrequency"
+          v-model:location="scheduleLocation"
         />
 
         <!-- Fixed bottom section for mobile -->
@@ -893,12 +890,12 @@
                   :parsedResponses="parsedResponses"
                   :isOwner="isOwner"
                   :attendees="event.attendees"
-                  :showCalendarEvents.sync="showCalendarEvents"
+                  v-model:showCalendarEvents="showCalendarEvents"
                   :responsesFormatted="responsesFormatted"
                   :timezone="curTimezone"
-                  :show-best-times.sync="showBestTimes"
-                  :hide-if-needed.sync="hideIfNeeded"
-                  :show-response-counts.sync="showResponseCounts"
+                  v-model:show-best-times="showBestTimes"
+                  v-model:hide-if-needed="hideIfNeeded"
+                  v-model:show-response-counts="showResponseCounts"
                   :show-event-options="showEventOptions"
                   :addingAvailabilityAsGuest="addingAvailabilityAsGuest"
                   @toggleShowEventOptions="toggleShowEventOptions"
@@ -1382,6 +1379,18 @@ export default {
     ...mapMutations(["setAuthUser"]),
     ...mapActions(["showInfo", "showError"]),
     displayName,
+
+    /**
+     * Confirm the delete-availability dialog: fire the event, then close.
+     *
+     * Extracted from an inline two-statement `@click`: Vue 3's template
+     * compiler parses a handler as a single JavaScript *expression*, so two
+     * statements separated by a newline no longer compile.
+     */
+    confirmDeleteAvailability() {
+      this.$emit("deleteAvailability")
+      this.deleteAvailabilityDialog = false
+    },
 
     // -----------------------------------
     //#region Date
@@ -1994,7 +2003,7 @@ export default {
 
     // Parse sign up blocks and responses
   },
-  beforeDestroy() {
+  beforeUnmount() {
     this.unbindGridInteractions()
     removeEventListener("click", this.deselectRespondents)
     removeEventListener("resize", this.onResize)

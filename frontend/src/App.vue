@@ -299,6 +299,6 @@ export default {
     this.mounted = true
   },
 
-  beforeDestroy() {},
+  beforeUnmount() {},
 }
 </script>

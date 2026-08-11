@@ -1,10 +1,7 @@
-import Vue from "vue"
-import VueRouter from "vue-router"
+import { createRouter, createWebHistory } from "vue-router"
 import Landing from "@/views/Landing"
 import { setUnauthorizedHandler } from "@/utils/fetch_utils"
 import store from "@/store"
-
-Vue.use(VueRouter)
 
 const routes = [
   {
@@ -72,15 +69,17 @@ const routes = [
     component: () => import("@/views/PrivacyPolicy.vue"),
   },
   {
-    path: "*",
+    // Vue Router 4 dropped the bare `*` wildcard; a catch-all is now a named
+    // param with a custom regexp. The trailing `*` is the repeatable modifier,
+    // without which a multi-segment path like /a/b would not match.
+    path: "/:pathMatch(.*)*",
     name: "404",
     component: () => import("@/views/PageNotFound.vue"),
   },
 ]
 
-const router = new VueRouter({
-  mode: "history",
-  base: process.env.BASE_URL,
+const router = createRouter({
+  history: createWebHistory(process.env.BASE_URL),
   routes,
 })
 
@@ -137,12 +136,16 @@ router.beforeEach(async (to, from, next) => {
 // roll) drops the cached user and sends them to sign-in with a way back.
 setUnauthorizedHandler(() => {
   store.commit("setAuthUser", null)
-  const current = router.currentRoute
+  // Router 4 makes currentRoute a ref, hence `.value`. Reading it without that
+  // yields the ref object itself, whose `.name` is undefined — which would look
+  // exactly like the placeholder case below and silently disable this handler.
+  const current = router.currentRoute.value
   if (publicRoutes.includes(current.name)) return
   // Before the first navigation resolves, currentRoute is Vue Router's
-  // placeholder (name null). Pushing then cancels the navigation in flight and
-  // the guard re-runs, so belt-and-braces against a redirect loop: the guard
-  // already sends signed-out visitors to sign-in on its own.
+  // placeholder (START_LOCATION, name undefined). Pushing then cancels the
+  // navigation in flight and the guard re-runs, so belt-and-braces against a
+  // redirect loop: the guard already sends signed-out visitors to sign-in on
+  // its own.
   if (!current.name) return
   router.push({
     name: "sign-in",

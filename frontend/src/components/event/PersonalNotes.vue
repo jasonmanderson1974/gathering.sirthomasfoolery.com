@@ -206,7 +206,7 @@ export default {
     window.addEventListener("beforeunload", this.warnIfUnsaved)
   },
 
-  beforeDestroy() {
+  beforeUnmount() {
     window.removeEventListener("beforeunload", this.warnIfUnsaved)
     this.flush()
   },

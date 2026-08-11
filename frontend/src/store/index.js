@@ -1,5 +1,4 @@
-import Vue from "vue"
-import Vuex from "vuex"
+import { createStore } from "vuex"
 import { get } from "@/utils"
 import { roleGetters } from "./role_getters"
 import {
@@ -10,9 +9,7 @@ import {
 } from "../utils/services/FolderService"
 import { archiveEvent } from "../utils/services/EventService"
 
-Vue.use(Vuex)
-
-export default new Vuex.Store({
+export default createStore({
   state: {
     error: "",
     info: "",

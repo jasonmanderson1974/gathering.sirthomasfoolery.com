@@ -4,7 +4,7 @@
 
     <v-combobox
       v-model="remindees"
-      :search-input.sync="query"
+      v-model:search-input="query"
       :items="searchedContacts"
       item-text="queryString"
       item-value="queryString"

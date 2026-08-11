@@ -558,7 +558,7 @@ export default {
     })
   },
 
-  beforeDestroy() {
+  beforeUnmount() {
     removeEventListener("resize", this.setDesktopMaxHeight)
     // removeEventListener("scroll", this.setDesktopMaxHeight)
   },

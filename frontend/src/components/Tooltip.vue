@@ -84,7 +84,7 @@ export default {
       )
     }
   },
-  beforeDestroy() {
+  beforeUnmount() {
     if (this.showTimeout) {
       clearTimeout(this.showTimeout)
     }
