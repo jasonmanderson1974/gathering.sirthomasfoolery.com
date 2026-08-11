@@ -28,15 +28,15 @@
 export default {
   name: "TeamsNotReadyDialog",
   props: {
-    value: Boolean,
+    modelValue: Boolean,
   },
   computed: {
     dialog: {
       get() {
-        return this.value
+        return this.modelValue
       },
       set(val) {
-        this.$emit("input", val)
+        this.$emit("update:modelValue", val)
       },
     },
   },

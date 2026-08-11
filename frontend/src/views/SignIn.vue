@@ -24,7 +24,9 @@
             <div class="tw-font-head tw-text-3xl tw-text-parchment">
               {{ isSignUp ? "Join the Fellowship" : "Welcome Back, Good Sir" }}
             </div>
-            <div class="tw-mt-1 tw-text-sm tw-font-normal tw-text-parchment-dim">
+            <div
+              class="tw-mt-1 tw-text-sm tw-font-normal tw-text-parchment-dim"
+            >
               {{
                 isSignUp ? "Establish your standing" : "Resume your standing"
               }}
@@ -105,7 +107,7 @@
             />
             <div class="tw-mb-1 tw-text-sm tw-font-medium">Email</div>
             <v-text-field
-              :value="email"
+              :model-value="email"
               placeholder="Email..."
               solo
               hide-details="auto"
@@ -122,10 +124,7 @@
             >
               Continue
             </v-btn>
-            <p
-              v-if="otpError"
-              class="tw-mt-3 tw-text-sm tw-text-oxblood"
-            >
+            <p v-if="otpError" class="tw-mt-3 tw-text-sm tw-text-oxblood">
               {{ otpError }}
             </p>
           </v-card-text>
@@ -230,9 +229,7 @@ export default {
 
   metaInfo() {
     return {
-      title: this.isSignUp
-        ? "Join · The Fellowship"
-        : "Enter · The Fellowship",
+      title: this.isSignUp ? "Join · The Fellowship" : "Enter · The Fellowship",
     }
   },
 

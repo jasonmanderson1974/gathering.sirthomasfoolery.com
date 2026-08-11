@@ -61,7 +61,7 @@
       <v-textarea
         v-show="view === 'write'"
         ref="input"
-        :value="draft"
+        :model-value="draft"
         placeholder="Anything you want to remember about this gathering — only you can see it."
         dense
         hide-details

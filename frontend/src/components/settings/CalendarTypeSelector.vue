@@ -48,10 +48,7 @@
             </v-btn>
             <v-btn block @click="state = states.ICS_CREDENTIALS">
               <div class="tw-flex tw-w-full tw-items-center tw-gap-2">
-                <v-icon
-                  class="tw-flex-initial"
-                  size="20"
-                >
+                <v-icon class="tw-flex-initial" size="20">
                   mdi-calendar-sync
                 </v-icon>
                 <v-spacer />
@@ -82,14 +79,14 @@
 
 <script>
 import AppleCredentials from "@/components/calendar_permission_dialogs/AppleCredentials.vue"
-import ICSCredentials from "@/components/calendar_permission_dialogs/ICSCredentials.vue";
+import ICSCredentials from "@/components/calendar_permission_dialogs/ICSCredentials.vue"
 
 export default {
   name: "CalendarTypeSelector",
 
   components: {
     AppleCredentials,
-    ICSCredentials
+    ICSCredentials,
   },
 
   props: {

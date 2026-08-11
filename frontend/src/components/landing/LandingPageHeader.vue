@@ -1,8 +1,8 @@
 <template>
   <div v-if="isPhone">
     <v-menu v-model="menuOpen">
-      <template v-slot:activator="{ on, attrs }">
-        <v-btn icon v-bind="attrs" v-on="on">
+      <template v-slot:activator="{ props }">
+        <v-btn icon v-bind="props">
           <v-icon>mdi-menu</v-icon>
         </v-btn>
       </template>

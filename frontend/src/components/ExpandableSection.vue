@@ -12,13 +12,13 @@
       </span>
       <v-spacer />
       <v-icon
-        :class="`tw-rotate-${value ? '180' : '0'} ${iconClass}`"
+        :class="`tw-rotate-${modelValue ? '180' : '0'} ${iconClass}`"
         :size="30"
         >mdi-chevron-down</v-icon
       ></v-btn
     >
     <v-expand-transition>
-      <div v-show="value">
+      <div v-show="modelValue">
         <slot></slot>
       </div>
     </v-expand-transition>
@@ -31,7 +31,7 @@ export default {
   name: "ExpandableSection",
 
   props: {
-    value: { type: Boolean, required: true },
+    modelValue: { type: Boolean, required: true },
     label: { type: String, default: "" },
     labelClass: { type: String, default: "tw-text-base" },
     iconClass: { type: String, default: "" },
@@ -40,7 +40,7 @@ export default {
 
   methods: {
     toggle() {
-      this.$emit("input", !this.value)
+      this.$emit("update:modelValue", !this.modelValue)
     },
     scrollToElement(element) {
       if (this.autoScroll && element) {
@@ -50,8 +50,8 @@ export default {
   },
 
   watch: {
-    value() {
-      if (this.value) {
+    modelValue() {
+      if (this.modelValue) {
         this.scrollToElement(this.$refs.scrollTo)
       }
     },

@@ -36,15 +36,14 @@
             label="Show guests"
           />
           <v-menu offset-y>
-            <template v-slot:activator="{ on, attrs }">
+            <template v-slot:activator="{ props }">
               <v-btn
                 id="roster-export-btn"
                 outlined
                 small
                 class="tw-text-brass"
                 :disabled="filteredMembers.length === 0"
-                v-on="on"
-                v-bind="attrs"
+                v-bind="props"
               >
                 <v-icon small left>mdi-download</v-icon>
                 Export
@@ -77,9 +76,7 @@
         class="tw-rounded-xl tw-border tw-border-brass-dim tw-bg-leather/40 tw-py-10 tw-text-center tw-text-sm tw-text-parchment-dim"
       >
         {{
-          search
-            ? "No one on the roll matches your search."
-            : "No one to show."
+          search ? "No one on the roll matches your search." : "No one to show."
         }}
       </div>
 
@@ -294,9 +291,9 @@ export default {
 <h1>The Fellowship</h1>
 <div class="sub">A directory of the membership · ${esc(
         String(this.filteredMembers.length)
-      )} ${this.filteredMembers.length === 1 ? "gentleman" : "gentlemen"} · ${esc(
-        today
-      )}</div>
+      )} ${
+        this.filteredMembers.length === 1 ? "gentleman" : "gentlemen"
+      } · ${esc(today)}</div>
 <table><thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Telephone</th></tr></thead>
 <tbody>${body}</tbody></table>
 </body></html>`

@@ -17,12 +17,12 @@
           class="tw-flex tw-items-center tw-justify-center tw-gap-2 tw-text-sm tw-text-parchment"
         >
           <v-select
-            menu-props="auto"
+            :menu-props="{ auto: true }"
             dense
             hide-details
             :items="bufferTimes"
             class="-tw-mt-0.5 tw-w-20 tw-text-xs"
-            :value="bufferTime.time"
+            :model-value="bufferTime.time"
             @input="(val) => updateCalendarOption('time', val)"
             @click="
               (e) => {

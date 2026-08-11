@@ -50,8 +50,8 @@
             class="tw-invisible tw-flex tw-items-center group-hover:tw-visible"
           >
             <v-menu offset-y>
-              <template v-slot:activator="{ on, attrs }">
-                <v-btn icon small v-bind="attrs" v-on="on" @click.stop.prevent>
+              <template v-slot:activator="{ props }">
+                <v-btn icon small v-bind="props" @click.stop.prevent>
                   <v-icon small>mdi-dots-horizontal</v-icon>
                 </v-btn>
               </template>
@@ -526,7 +526,7 @@ export default {
 </script>
 
 <style>
-.v-expansion-panel-header {
+.v-expansion-panel-title {
   padding: 16px 4px !important;
 }
 </style>

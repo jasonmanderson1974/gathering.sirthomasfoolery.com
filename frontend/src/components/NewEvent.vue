@@ -68,7 +68,7 @@
                 class="tw-mb-2 tw-mt-0 tw-pt-0"
                 hide-details
               >
-                <v-radio :value="false" color="primary">
+                <v-radio :model-value="false" color="primary">
                   <template v-slot:label>
                     <span
                       class="tw-text-sm"
@@ -88,9 +88,9 @@
                       class="tw-flex tw-items-baseline tw-justify-center tw-space-x-2"
                     >
                       <v-select
-                        :value="startTime"
+                        :model-value="startTime"
                         @input="(t) => (startTime = t.time)"
-                        menu-props="auto"
+                        :menu-props="{ auto: true }"
                         :items="times"
                         return-object
                         hide-details
@@ -98,9 +98,9 @@
                       ></v-select>
                       <div>to</div>
                       <v-select
-                        :value="endTime"
+                        :model-value="endTime"
                         @input="(t) => (endTime = t.time)"
-                        menu-props="auto"
+                        :menu-props="{ auto: true }"
                         :items="times"
                         return-object
                         hide-details
@@ -109,7 +109,7 @@
                     </div>
                   </div>
                 </v-expand-transition>
-                <v-radio :value="true" color="primary" class="tw-mt-3">
+                <v-radio :model-value="true" color="primary" class="tw-mt-3">
                   <template v-slot:label>
                     <span
                       class="tw-text-sm"
@@ -272,8 +272,8 @@
                       top
                       content-class="tw-bg-very-dark-gray tw-shadow-lg tw-opacity-100 tw-py-4"
                     >
-                      <template v-slot:activator="{ on, attrs }">
-                        <v-icon small v-bind="attrs" v-on="on"
+                      <template v-slot:activator="{ props }">
+                        <v-icon small v-bind="props"
                           >mdi-information-outline
                         </v-icon>
                       </template>

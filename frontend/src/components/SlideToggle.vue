@@ -20,7 +20,7 @@
           i === index ? tab.activeClass ?? defaultActiveClass : inactiveClass
         "
         :style="tab.style || {}"
-        @click="$emit('input', tab.value)"
+        @click="$emit('update:modelValue', tab.value)"
       >
         <slot :name="'option-' + tab.value" :option="tab" :active="i === index">
           <span :class="wrap ? 'tw-leading-tight' : 'tw-line-clamp-1'">{{
@@ -37,7 +37,7 @@ export default {
   name: "AvailabilityTypeToggle",
 
   props: {
-    value: { required: true },
+    modelValue: { required: true },
 
     // Array of objects of the following structure:
     // {
@@ -66,10 +66,12 @@ export default {
   },
 
   watch: {
-    value: {
+    modelValue: {
       immediate: true,
       handler() {
-        this.index = this.options.findIndex((tab) => tab.value === this.value)
+        this.index = this.options.findIndex(
+          (tab) => tab.value === this.modelValue
+        )
         if (this.index === -1) this.index = 0
       },
     },

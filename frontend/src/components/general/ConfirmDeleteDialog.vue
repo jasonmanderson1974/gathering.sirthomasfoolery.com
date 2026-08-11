@@ -1,11 +1,15 @@
 <template>
-  <v-dialog :value="value" max-width="400" @input="$emit('input', $event)">
+  <v-dialog
+    :model-value="modelValue"
+    max-width="400"
+    @update:model-value="$emit('update:modelValue', $event)"
+  >
     <v-card>
       <v-card-title class="tw-break-words">{{ title }}</v-card-title>
       <v-card-text v-if="body">{{ body }}</v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn text @click="$emit('input', false)">Cancel</v-btn>
+        <v-btn text @click="$emit('update:modelValue', false)">Cancel</v-btn>
         <v-btn color="red darken-1" text @click="$emit('confirm')">
           {{ confirmLabel }}
         </v-btn>
@@ -36,7 +40,7 @@ export default {
   name: "ConfirmDeleteDialog",
 
   props: {
-    value: { type: Boolean, default: false },
+    modelValue: { type: Boolean, default: false },
     // Names the target: `Delete "Menu"?`
     title: { type: String, required: true },
     // What else goes with it, when that isn't obvious. Omitted for a plain
@@ -45,6 +49,6 @@ export default {
     confirmLabel: { type: String, default: "Delete" },
   },
 
-  emits: ["input", "confirm"],
+  emits: ["update:modelValue", "confirm"],
 }
 </script>

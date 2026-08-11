@@ -2,7 +2,7 @@
   <ExpandableSection
     v-if="event.daysOnly || numResponses >= 1"
     label="Options"
-    :value="showEventOptions"
+    :model-value="showEventOptions"
     @input="$emit('toggleShowEventOptions')"
   >
     <div class="tw-flex tw-flex-col tw-gap-4 tw-pt-2">

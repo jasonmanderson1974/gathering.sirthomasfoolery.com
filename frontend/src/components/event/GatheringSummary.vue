@@ -20,8 +20,8 @@
       <!-- Changing or calling off the gathering is the organiser's business,
            so the menu only exists for them. Everyone else still sees the card. -->
       <v-menu v-if="canEdit" offset-y left>
-        <template v-slot:activator="{ on, attrs }">
-          <v-btn icon small v-bind="attrs" v-on="on" aria-label="Gathering options">
+        <template v-slot:activator="{ props }">
+          <v-btn icon small v-bind="props" aria-label="Gathering options">
             <v-icon small>mdi-dots-vertical</v-icon>
           </v-btn>
         </template>

@@ -50,7 +50,7 @@
             width="400"
             content-class="tw-m-0"
           >
-            <template v-slot:activator="{ on, attrs }">
+            <template v-slot:activator="{ props }">
               <div>
                 <v-btn
                   text
@@ -60,8 +60,7 @@
                       ? '-tw-ml-2 tw-mt-0 tw-w-min tw-px-2'
                       : '-tw-ml-2 tw-w-fit tw-px-2'
                   "
-                  v-bind="attrs"
-                  v-on="on"
+                  v-bind="props"
                   >+ Add calendar</v-btn
                 >
                 <p class="tw-mb-0 tw-mt-1 tw-text-xs tw-text-parchment-dim">

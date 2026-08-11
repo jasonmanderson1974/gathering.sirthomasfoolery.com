@@ -2,8 +2,14 @@
 <template>
   <span>
     <v-menu v-if="authUser" offset-y left>
-      <template v-slot:activator="{ on }">
-        <v-btn id="user-menu-btn" icon :width="size" :height="size" v-on="on">
+      <template v-slot:activator="{ props }">
+        <v-btn
+          id="user-menu-btn"
+          v-bind="props"
+          icon
+          :width="size"
+          :height="size"
+        >
           <v-avatar :size="size">
             <UserAvatarContent :user="authUser" :size="size" />
           </v-avatar>
@@ -35,23 +41,19 @@
             The Fellowship
           </v-list-item-title>
         </v-list-item>
-        <v-list-item
-          v-if="canInvite"
-          id="chronicle-btn"
-          @click="goToChronicle"
-        >
+        <v-list-item v-if="canInvite" id="chronicle-btn" @click="goToChronicle">
           <v-list-item-title class="tw-flex tw-items-center tw-gap-1">
-            <v-icon class="tw-mr-1" small color="black">mdi-book-open-page-variant-outline</v-icon>
+            <v-icon class="tw-mr-1" small color="black"
+              >mdi-book-open-page-variant-outline</v-icon
+            >
             The Chronicle
           </v-list-item-title>
         </v-list-item>
-        <v-list-item
-          v-if="canInvite"
-          id="members-btn"
-          @click="goToAdmin"
-        >
+        <v-list-item v-if="canInvite" id="members-btn" @click="goToAdmin">
           <v-list-item-title class="tw-flex tw-items-center tw-gap-1">
-            <v-icon class="tw-mr-1" small color="black">mdi-account-group</v-icon>
+            <v-icon class="tw-mr-1" small color="black"
+              >mdi-account-group</v-icon
+            >
             The Roll
           </v-list-item-title>
         </v-list-item>

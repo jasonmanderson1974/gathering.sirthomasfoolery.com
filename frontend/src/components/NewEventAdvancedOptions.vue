@@ -1,134 +1,126 @@
 <template>
-<div class="tw-flex tw-flex-col tw-gap-5 tw-pt-2">
-  <div v-if="!edit" class="tw-flex tw-items-center tw-gap-x-2">
-    <div class="tw-text-sm tw-text-parchment">Time increment:</div>
-    <v-select
-      v-model="timeIncrementProxy"
-      dense
-      class="-tw-mt-[2px] tw-w-24 tw-grow-0 tw-text-sm"
-      menu-props="auto"
+  <div class="tw-flex tw-flex-col tw-gap-5 tw-pt-2">
+    <div v-if="!edit" class="tw-flex tw-items-center tw-gap-x-2">
+      <div class="tw-text-sm tw-text-parchment">Time increment:</div>
+      <v-select
+        v-model="timeIncrementProxy"
+        dense
+        class="-tw-mt-[2px] tw-w-24 tw-grow-0 tw-text-sm"
+        :menu-props="{ auto: true }"
+        hide-details
+        :items="timeIncrementItems"
+      ></v-select>
+    </div>
+    <v-checkbox
+      v-if="authUser && !guestEvent"
+      v-model="collectEmailsProxy"
       hide-details
-      :items="timeIncrementItems"
-    ></v-select>
+    >
+      <template v-slot:label>
+        <span class="tw-text-sm tw-text-parchment">
+          Collect respondents' email addresses
+        </span>
+      </template>
+      <template v-slot:message="{ message }">
+        <div class="-tw-mt-1 tw-ml-[32px] tw-text-xs tw-text-parchment-dim">
+          {{ message }}
+        </div>
+      </template>
+    </v-checkbox>
+    <v-checkbox
+      v-else-if="!guestEvent"
+      disabled
+      messages="test"
+      off-icon="mdi-checkbox-blank-off-outline"
+    >
+      <template v-slot:label>
+        <span class="tw-text-sm">Collect respondents' email addresses</span>
+      </template>
+      <template v-slot:message>
+        <div
+          class="tw-pointer-events-auto -tw-mt-1 tw-ml-[32px] tw-text-xs tw-text-parchment-dim"
+        >
+          <span class="tw-font-medium tw-text-parchment-dim"
+            ><a @click="$emit('signIn')">Sign in</a>
+            to use this feature
+          </span>
+        </div>
+      </template>
+    </v-checkbox>
+    <v-checkbox
+      v-if="authUser && !guestEvent"
+      v-model="blindAvailabilityEnabledProxy"
+      messages="Only show responses to event creator"
+    >
+      <template v-slot:label>
+        <span class="tw-text-sm tw-text-parchment">
+          Hide responses from respondents
+        </span>
+      </template>
+      <template v-slot:message="{ message }">
+        <div class="-tw-mt-1 tw-ml-[32px] tw-text-xs tw-text-parchment-dim">
+          {{ message }}
+        </div>
+      </template>
+    </v-checkbox>
+    <v-checkbox
+      v-else-if="!guestEvent"
+      disabled
+      messages="Only show responses to event creator. "
+      off-icon="mdi-checkbox-blank-off-outline"
+    >
+      <template v-slot:label>
+        <span class="tw-text-sm">Hide responses from respondents</span>
+      </template>
+      <template v-slot:message="{ message }">
+        <div
+          class="tw-pointer-events-auto -tw-mt-1 tw-ml-[32px] tw-text-xs tw-text-parchment-dim"
+        >
+          {{ message }}
+          <span class="tw-font-medium tw-text-parchment-dim"
+            ><a @click="$emit('signIn')">Sign in</a>
+            to use this feature
+          </span>
+        </div>
+      </template>
+    </v-checkbox>
+    <v-checkbox
+      v-if="authUser && !guestEvent"
+      v-model="sendEmailAfterXResponsesEnabledProxy"
+      hide-details
+    >
+      <template v-slot:label>
+        <div
+          :class="!sendEmailAfterXResponsesEnabled && 'tw-opacity-50'"
+          class="tw-flex tw-items-center tw-gap-x-2 tw-text-sm tw-text-parchment-dim"
+        >
+          <div>Email me after</div>
+          <v-text-field
+            v-model="sendEmailAfterXResponsesProxy"
+            @click="
+              (e) => {
+                e.preventDefault()
+                e.stopPropagation()
+              }
+            "
+            :disabled="!sendEmailAfterXResponsesEnabled"
+            dense
+            class="email-me-after-text-field -tw-mt-[2px] tw-w-10"
+            :menu-props="{ auto: true }"
+            hide-details
+            type="number"
+            min="1"
+          ></v-text-field>
+          <div>responses</div>
+        </div>
+      </template>
+    </v-checkbox>
+    <TimezoneSelector
+      v-model="timezoneProxy"
+      label="Timezone"
+      @input="$emit('timezone-input', $event)"
+    />
   </div>
-  <v-checkbox
-    v-if="authUser && !guestEvent"
-    v-model="collectEmailsProxy"
-    hide-details
-  >
-    <template v-slot:label>
-      <span class="tw-text-sm tw-text-parchment">
-        Collect respondents' email addresses
-      </span>
-    </template>
-    <template v-slot:message="{ message }">
-      <div
-        class="-tw-mt-1 tw-ml-[32px] tw-text-xs tw-text-parchment-dim"
-      >
-        {{ message }}
-      </div>
-    </template>
-  </v-checkbox>
-  <v-checkbox
-    v-else-if="!guestEvent"
-    disabled
-    messages="test"
-    off-icon="mdi-checkbox-blank-off-outline"
-  >
-    <template v-slot:label>
-      <span class="tw-text-sm"
-        >Collect respondents' email addresses</span
-      >
-    </template>
-    <template v-slot:message>
-      <div
-        class="tw-pointer-events-auto -tw-mt-1 tw-ml-[32px] tw-text-xs tw-text-parchment-dim"
-      >
-        <span class="tw-font-medium tw-text-parchment-dim"
-          ><a @click="$emit('signIn')">Sign in</a>
-          to use this feature
-        </span>
-      </div>
-    </template>
-  </v-checkbox>
-  <v-checkbox
-    v-if="authUser && !guestEvent"
-    v-model="blindAvailabilityEnabledProxy"
-    messages="Only show responses to event creator"
-  >
-    <template v-slot:label>
-      <span class="tw-text-sm tw-text-parchment">
-        Hide responses from respondents
-      </span>
-    </template>
-    <template v-slot:message="{ message }">
-      <div
-        class="-tw-mt-1 tw-ml-[32px] tw-text-xs tw-text-parchment-dim"
-      >
-        {{ message }}
-      </div>
-    </template>
-  </v-checkbox>
-  <v-checkbox
-    v-else-if="!guestEvent"
-    disabled
-    messages="Only show responses to event creator. "
-    off-icon="mdi-checkbox-blank-off-outline"
-  >
-    <template v-slot:label>
-      <span class="tw-text-sm"
-        >Hide responses from respondents</span
-      >
-    </template>
-    <template v-slot:message="{ message }">
-      <div
-        class="tw-pointer-events-auto -tw-mt-1 tw-ml-[32px] tw-text-xs tw-text-parchment-dim"
-      >
-        {{ message }}
-        <span class="tw-font-medium tw-text-parchment-dim"
-          ><a @click="$emit('signIn')">Sign in</a>
-          to use this feature
-        </span>
-      </div>
-    </template>
-  </v-checkbox>
-  <v-checkbox
-    v-if="authUser && !guestEvent"
-    v-model="sendEmailAfterXResponsesEnabledProxy"
-    hide-details
-  >
-    <template v-slot:label>
-      <div
-        :class="!sendEmailAfterXResponsesEnabled && 'tw-opacity-50'"
-        class="tw-flex tw-items-center tw-gap-x-2 tw-text-sm tw-text-parchment-dim"
-      >
-        <div>Email me after</div>
-        <v-text-field
-          v-model="sendEmailAfterXResponsesProxy"
-          @click="
-            (e) => {
-              e.preventDefault()
-              e.stopPropagation()
-            }
-          "
-          :disabled="!sendEmailAfterXResponsesEnabled"
-          dense
-          class="email-me-after-text-field -tw-mt-[2px] tw-w-10"
-          menu-props="auto"
-          hide-details
-          type="number"
-          min="1"
-        ></v-text-field>
-        <div>responses</div>
-      </div>
-    </template>
-  </v-checkbox>
-  <TimezoneSelector
-    v-model="timezoneProxy"
-    label="Timezone"
-    @input="$emit('timezone-input', $event)"
-  />
-</div>
 </template>
 
 <script>

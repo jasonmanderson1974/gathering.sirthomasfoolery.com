@@ -1,7 +1,7 @@
 <template>
   <v-combobox
     ref="field"
-    :value="value"
+    :model-value="modelValue"
     :items="items"
     :loading="loading"
     :label="label"
@@ -11,12 +11,12 @@
     :hide-details="hideDetails"
     :autofocus="autofocus"
     :prepend-inner-icon="hideIcon ? undefined : 'mdi-map-marker'"
-    v-model:search-input="search"
+    v-model:search="search"
     :menu-props="{ contentClass: 'location-input-menu' }"
     no-filter
     hide-no-data
     append-icon=""
-    @input="onInput"
+    @update:model-value="onInput"
     @keyup.enter="$emit('enter')"
   />
 </template>
@@ -42,7 +42,7 @@ export default {
   name: "LocationInput",
 
   props: {
-    value: { type: String, default: "" },
+    modelValue: { type: String, default: "" },
     label: { type: String, default: undefined },
     placeholder: { type: String, default: "Venue or address…" },
     solo: { type: Boolean, default: false },
@@ -56,7 +56,7 @@ export default {
     return {
       items: [],
       loading: false,
-      search: this.value ?? "",
+      search: this.modelValue ?? "",
       sessionToken: null,
       debounceTimer: null,
       // Guards against an in-flight lookup resolving after a newer one
@@ -72,7 +72,8 @@ export default {
     search(query) {
       // v-combobox reports free typing here; mirror it out so the parent sees
       // text that was never "selected" from the menu
-      if ((query ?? "") !== (this.value ?? "")) this.$emit("input", query ?? "")
+      if ((query ?? "") !== (this.modelValue ?? ""))
+        this.$emit("update:modelValue", query ?? "")
       this.queueLookup(query)
     },
   },
@@ -121,7 +122,7 @@ export default {
       // Picking a suggestion ends the billing session
       this.sessionToken = null
       this.items = []
-      this.$emit("input", typeof v === "string" ? v : v?.text ?? "")
+      this.$emit("update:modelValue", typeof v === "string" ? v : v?.text ?? "")
     },
   },
 

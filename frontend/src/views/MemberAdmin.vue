@@ -12,8 +12,8 @@
             and set each member's standing; strike an email to revoke access.
           </span>
           <span v-else>
-            Invite a guest below, and see everyone on the roll. Only an admin may
-            raise a member's standing or strike them from the roll.
+            Invite a guest below, and see everyone on the roll. Only an admin
+            may raise a member's standing or strike them from the roll.
           </span>
         </div>
       </div>
@@ -55,7 +55,10 @@
             Extend invitation
           </v-btn>
         </div>
-        <div v-if="!canManageUsers" class="tw-mt-1 tw-text-xs tw-text-parchment-dim">
+        <div
+          v-if="!canManageUsers"
+          class="tw-mt-1 tw-text-xs tw-text-parchment-dim"
+        >
           Members may invite guests only.
         </div>
       </div>
@@ -67,7 +70,10 @@
           <span class="tw-text-parchment-dim">({{ members.length }})</span>
         </div>
 
-        <div v-if="loading" class="tw-py-8 tw-text-center tw-text-parchment-dim">
+        <div
+          v-if="loading"
+          class="tw-py-8 tw-text-center tw-text-parchment-dim"
+        >
           <v-progress-circular indeterminate color="brass" size="24" />
         </div>
 
@@ -108,7 +114,7 @@
             :class="
               member.hasAccount
                 ? 'tw-border-brass-dim tw-text-parchment-dim'
-                : 'tw-border-brass-dim tw-text-parchment-dim tw-italic'
+                : 'tw-border-brass-dim tw-italic tw-text-parchment-dim'
             "
           >
             {{ member.hasAccount ? "Joined" : "Invited" }}
@@ -117,14 +123,14 @@
           <!-- Role: editable selector, or a locked badge for super admin / self -->
           <v-select
             v-if="isEditable(member)"
-            :value="member.role"
+            :model-value="member.role"
             :items="grantableRoleOptions"
             solo
             dense
             hide-details
             :loading="busyEmail === member.email"
             :disabled="busyEmail === member.email"
-            class="tw-shrink-0 tw-max-w-[9rem]"
+            class="tw-max-w-[9rem] tw-shrink-0"
             @change="changeRole(member, $event)"
           />
           <span
@@ -187,7 +193,9 @@
                   :loading="savingAvatar"
                   @click="$refs.avatarEditor.pickFile()"
                 >
-                  {{ editingMember.avatarUpdatedAt ? "Change photo" : "Add photo" }}
+                  {{
+                    editingMember.avatarUpdatedAt ? "Change photo" : "Add photo"
+                  }}
                 </v-btn>
                 <v-btn
                   v-if="editingMember.avatarUpdatedAt"
@@ -389,7 +397,10 @@ export default {
           { label: "Respond to gatherings", caps: [true, true, true, true] },
           { label: "Create gatherings", caps: [false, true, true, true] },
           { label: "Invite guests", caps: [false, true, true, true] },
-          { label: "Invite members & admins", caps: [false, false, true, true] },
+          {
+            label: "Invite members & admins",
+            caps: [false, false, true, true],
+          },
           {
             label: "Manage the roll — set standings, strike members",
             caps: [false, false, true, true],
@@ -446,9 +457,11 @@ export default {
       return roleLabels[role] || roleLabels[roles.MEMBER]
     },
     roleBadgeClass(role) {
-      if (role === roles.SUPER_ADMIN) return "tw-border-brass tw-text-brass-bright"
+      if (role === roles.SUPER_ADMIN)
+        return "tw-border-brass tw-text-brass-bright"
       if (role === roles.ADMIN) return "tw-border-brass tw-text-brass"
-      if (role === roles.GUEST) return "tw-border-brass-dim tw-text-parchment-dim"
+      if (role === roles.GUEST)
+        return "tw-border-brass-dim tw-text-parchment-dim"
       return "tw-border-brass-dim tw-text-parchment"
     },
     // A row's role may be changed only by an admin, and never for a super admin
@@ -586,7 +599,10 @@ export default {
       try {
         const role = this.canManageUsers ? this.inviteRole : roles.GUEST
         const invitedEmail = this.email.trim()
-        const res = await post("/admin/allowlist", { email: invitedEmail, role })
+        const res = await post("/admin/allowlist", {
+          email: invitedEmail,
+          role,
+        })
         this.email = ""
         this.inviteRole = roles.GUEST
         if (this.canManageUsers) await this.fetchAllowlist()

@@ -3,7 +3,7 @@
     <v-date-picker
       ref="datePicker"
       v-model:pickerDate="pickerDate"
-      :value="value"
+      :model-value="modelValue"
       @touchstart:date="touchstart"
       @mousedown:date="mousedown"
       @mouseover:date="mouseover"
@@ -29,7 +29,7 @@ export default {
   name: "DatePicker",
 
   props: {
-    value: { type: Array, required: true },
+    modelValue: { type: Array, required: true },
     minCalendarDate: { type: String, default: "" },
     startCalendarOnMonday: { type: Boolean, default: false },
   },
@@ -103,7 +103,7 @@ export default {
 
     /** Sets the drag state based on the date */
     setDragState(date) {
-      const set = new Set(this.value)
+      const set = new Set(this.modelValue)
       if (set.has(date)) {
         this.dragState = this.dragStates.REMOVE
       } else {
@@ -118,14 +118,14 @@ export default {
       }
     },
     addDate(date) {
-      const set = new Set(this.value)
+      const set = new Set(this.modelValue)
       set.add(date)
-      this.$emit("input", [...set])
+      this.$emit("update:modelValue", [...set])
     },
     removeDate(date) {
-      const set = new Set(this.value)
+      const set = new Set(this.modelValue)
       set.delete(date)
-      this.$emit("input", [...set])
+      this.$emit("update:modelValue", [...set])
     },
   },
 

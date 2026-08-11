@@ -79,7 +79,11 @@
           <span class="tw-text-parchment-dim" v-else>No responses yet!</span>
         </div>
         <template v-else>
+          <!-- `tag` is required in Vue 3: without it a transition-group renders
+               a fragment, which has no single root to put `class` on — the grid
+               classes were being dropped with only a warning to say so. -->
           <transition-group
+            tag="div"
             name="list"
             class="tw-grid tw-grid-cols-2 tw-gap-x-2 sm:tw-block"
           >
@@ -103,10 +107,10 @@
                   </v-avatar>
                 </div>
 
-                <v-simple-checkbox
+                <v-checkbox-btn
                   @click="(e) => $emit('clickRespondent', e, user._id)"
                   color="primary"
-                  :value="respondentSelected(user._id)"
+                  :model-value="respondentSelected(user._id)"
                   class="tw-absolute -tw-top-[2px] tw-left-0 tw-bg-white tw-opacity-0 group-hover:tw-opacity-100 group-[&:has(.email-hover-target:hover)]:!tw-opacity-0"
                   :class="
                     respondentSelected(user._id)
@@ -142,8 +146,8 @@
               >
                 <template v-if="isPhone && (isGuest(user) || isOwner)">
                   <v-menu right offset-x>
-                    <template v-slot:activator="{ on, attrs }">
-                      <v-btn icon v-on="on" v-bind="attrs">
+                    <template v-slot:activator="{ props }">
+                      <v-btn icon v-bind="props">
                         <v-icon small color="#4F4F4F">mdi-dots-vertical</v-icon>
                       </v-btn>
                     </template>

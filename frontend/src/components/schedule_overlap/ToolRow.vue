@@ -15,16 +15,16 @@
         <div v-if="!event.daysOnly" class="tw-flex tw-items-center tw-gap-2">
           <TimezoneSelector
             class="tw-w-full sm:tw-w-[unset]"
-            :value="curTimezone"
+            :model-value="curTimezone"
             :reference-date="timezoneReferenceDate"
             @input="(val) => $emit('update:curTimezone', val)"
           />
           <v-select
-            :value="timeType"
+            :model-value="timeType"
             @input="$emit('update:timeType', $event)"
             :items="timeTypeOptions"
             :menu-props="{ auto: true }"
-            item-text="label"
+            item-title="label"
             item-value="value"
             class="tw-z-20 -tw-mt-px tw-w-16 tw-text-sm"
             dense
@@ -37,11 +37,11 @@
         >
           Show
           <v-select
-            :value="mobileNumDays"
+            :model-value="mobileNumDays"
             @input="$emit('update:mobileNumDays', $event)"
             :items="mobileNumDaysOptions"
             :menu-props="{ auto: true }"
-            item-text="label"
+            item-title="label"
             item-value="value"
             class="-tw-mt-px tw-flex-none tw-shrink tw-basis-24 tw-text-sm"
             dense
@@ -91,13 +91,8 @@
         <template v-if="state !== states.SCHEDULE_EVENT">
           <!-- A gathering time is already confirmed: show it + a menu to change/cancel -->
           <v-menu v-if="event.scheduledEvent" offset-y class="tw-z-20">
-            <template v-slot:activator="{ on, attrs }">
-              <v-btn
-                outlined
-                class="tw-w-full tw-text-brass"
-                v-bind="attrs"
-                v-on="on"
-              >
+            <template v-slot:activator="{ props }">
+              <v-btn outlined class="tw-w-full tw-text-brass" v-bind="props">
                 <v-icon small>mdi-calendar-check</v-icon>
                 <span class="tw-ml-2 tw-truncate">Gathering set</span>
                 <v-icon small right>mdi-chevron-down</v-icon>
@@ -105,14 +100,12 @@
             </template>
             <v-list dense>
               <v-list-item two-line class="tw-pointer-events-none">
-                <v-list-item-content>
-                  <v-list-item-title>{{
-                    scheduledGatheringText
-                  }}</v-list-item-title>
-                  <v-list-item-subtitle v-if="reminderSummaryText">
-                    {{ reminderSummaryText }}
-                  </v-list-item-subtitle>
-                </v-list-item-content>
+                <v-list-item-title>{{
+                  scheduledGatheringText
+                }}</v-list-item-title>
+                <v-list-item-subtitle v-if="reminderSummaryText">
+                  {{ reminderSummaryText }}
+                </v-list-item-subtitle>
               </v-list-item>
               <v-divider />
               <v-list-item :href="icsUrl">
@@ -148,12 +141,11 @@
             Cancel
           </v-btn>
           <v-menu offset-y class="tw-z-20">
-            <template v-slot:activator="{ on, attrs }">
+            <template v-slot:activator="{ props }">
               <v-btn
                 :disabled="!allowScheduleEvent"
                 class="tw-bg-brass tw-text-wood-deep"
-                v-bind="attrs"
-                v-on="on"
+                v-bind="props"
               >
                 Schedule
               </v-btn>
@@ -171,7 +163,7 @@
               </v-list-item>
               <v-list-item v-if="reminderEnabledLocal" @click.stop>
                 <v-select
-                  :value="reminderLeadTimeHours"
+                  :model-value="reminderLeadTimeHours"
                   :items="reminderLeadTimeOptions"
                   dense
                   hide-details
@@ -182,7 +174,7 @@
               <!-- Recurrence (C5): repeat this gathering on a cadence -->
               <v-list-item @click.stop>
                 <v-select
-                  :value="recurrenceFrequency"
+                  :model-value="recurrenceFrequency"
                   :items="recurrenceOptions"
                   dense
                   hide-details
@@ -193,7 +185,7 @@
               <!-- Venue for the confirmed gathering (optional) -->
               <v-list-item @click.stop>
                 <LocationInput
-                  :value="location"
+                  :model-value="location"
                   label="Location"
                   placeholder="Where? (optional)"
                   dense
@@ -210,11 +202,9 @@
                 <v-icon small class="tw-mr-2 tw-text-brass"
                   >mdi-calendar-check</v-icon
                 >
-                <v-list-item-content>
-                  <v-list-item-title class="tw-text-brass"
-                    >Save gathering</v-list-item-title
-                  >
-                </v-list-item-content>
+                <v-list-item-title class="tw-text-brass"
+                  >Save gathering</v-list-item-title
+                >
               </v-list-item>
             </v-list>
           </v-menu>

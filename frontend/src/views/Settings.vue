@@ -3,9 +3,7 @@
     <div class="tw-flex tw-flex-col tw-gap-16 tw-p-4">
       <!-- Name change section -->
       <div class="tw-flex tw-flex-col tw-gap-5">
-        <div
-          class="tw-text-xl tw-font-medium tw-text-parchment sm:tw-text-2xl"
-        >
+        <div class="tw-text-xl tw-font-medium tw-text-parchment sm:tw-text-2xl">
           Profile
         </div>
         <!-- Photo -->
@@ -118,12 +116,12 @@
         <div>
           <div class="tw-mb-1 tw-font-medium">Email</div>
           <div class="tw-mb-2 tw-max-w-lg tw-text-sm tw-text-parchment-dim">
-            Your email is how you sign in. Changing it requires confirming a code
-            sent to the new address.
+            Your email is how you sign in. Changing it requires confirming a
+            code sent to the new address.
           </div>
           <div v-if="emailStep === 'idle'" class="tw-max-w-lg">
             <v-text-field
-              :value="authUser.email"
+              :model-value="authUser.email"
               outlined
               hide-details
               disabled
@@ -153,7 +151,8 @@
           <div v-else class="tw-max-w-lg">
             <div class="tw-mb-2 tw-text-sm tw-text-parchment-dim">
               Enter the code sent to
-              <strong class="tw-text-parchment">{{ newEmail }}</strong>.
+              <strong class="tw-text-parchment">{{ newEmail }}</strong
+              >.
             </div>
             <div class="tw-flex tw-items-start tw-gap-2">
               <v-text-field
@@ -195,7 +194,11 @@
           </div>
           <v-expand-transition>
             <div v-if="phoneUnsavedChanges" class="tw-mt-4">
-              <v-btn @click="resetPhone" color="primary" outlined class="tw-mr-2"
+              <v-btn
+                @click="resetPhone"
+                color="primary"
+                outlined
+                class="tw-mr-2"
                 >Cancel</v-btn
               >
               <v-btn @click="savePhone" color="primary" :loading="savingPhone"
@@ -208,9 +211,7 @@
 
       <!-- Calendar Access Section -->
       <div class="tw-flex tw-flex-col tw-gap-5">
-        <div
-          class="tw-text-xl tw-font-medium tw-text-parchment sm:tw-text-2xl"
-        >
+        <div class="tw-text-xl tw-font-medium tw-text-parchment sm:tw-text-2xl">
           Calendar access
         </div>
         <div class="tw-flex tw-flex-col tw-gap-5 sm:tw-flex-row sm:tw-gap-28">
@@ -233,9 +234,7 @@
 
       <!-- Permissions Section -->
       <div class="tw-flex tw-flex-col tw-gap-5">
-        <div
-          class="tw-text-xl tw-font-medium tw-text-parchment sm:tw-text-2xl"
-        >
+        <div class="tw-text-xl tw-font-medium tw-text-parchment sm:tw-text-2xl">
           Permissions
         </div>
         <div
@@ -274,9 +273,7 @@
 
       <!-- Question Section -->
       <div class="tw-flex tw-flex-col tw-gap-5">
-        <div
-          class="tw-text-xl tw-font-medium tw-text-parchment sm:tw-text-2xl"
-        >
+        <div class="tw-text-xl tw-font-medium tw-text-parchment sm:tw-text-2xl">
           Have a question?
         </div>
         <div class="tw-flex tw-flex-col tw-gap-5 sm:tw-flex-row sm:tw-gap-28">
@@ -296,8 +293,8 @@
       <div class="tw-mt-28 tw-flex tw-flex-row tw-justify-center">
         <div class="tw-w-64">
           <v-dialog v-model="deleteDialog" width="400" persistent>
-            <template v-slot:activator="{ on, attrs }">
-              <v-btn outlined class="tw-text-red" block v-bind="attrs" v-on="on"
+            <template v-slot:activator="{ props }">
+              <v-btn outlined class="tw-text-red" block v-bind="props"
                 >Delete account</v-btn
               >
             </template>

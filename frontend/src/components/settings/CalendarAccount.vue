@@ -49,13 +49,8 @@
           {{ account.email }}
         </div>
         <v-tooltip top v-if="accountHasError">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn
-              icon
-              v-bind="attrs"
-              v-on="on"
-              @click="reauthenticateCalendarAccount"
-            >
+          <template v-slot:activator="{ props }">
+            <v-btn icon v-bind="props" @click="reauthenticateCalendarAccount">
               <v-icon>mdi-alert-circle</v-icon>
             </v-btn>
           </template>
@@ -80,7 +75,10 @@
     <!-- Sub-calendar accounts -->
 
     <v-expand-transition>
-      <div v-if="hasSubCalendars && showSubCalendars" class="tw-space-y-2 tw-bg-[#EBF7EF] tw-py-2">
+      <div
+        v-if="hasSubCalendars && showSubCalendars"
+        class="tw-space-y-2 tw-bg-[#EBF7EF] tw-py-2"
+      >
         <div
           v-for="(subCalendar, id) in account.subCalendars"
           :key="id"
@@ -240,10 +238,14 @@ export default {
       }
     },
     toggleSubCalendarAccount(enabled, subCalendarId) {
-      this.toggleAccount("/user/toggle-sub-calendar", "toggleSubCalendarAccount", {
-        enabled,
-        subCalendarId,
-      })
+      this.toggleAccount(
+        "/user/toggle-sub-calendar",
+        "toggleSubCalendarAccount",
+        {
+          enabled,
+          subCalendarId,
+        }
+      )
     },
     toggleCalendarAccount(enabled) {
       // Collapsing the sub-calendar list is local state, so it happens either

@@ -2,42 +2,52 @@
   <div>
     <slot name="header"></slot>
 
+    <!-- Vuetify 3 combobox, and almost every attribute here moved:
+         `search-input.sync` is now `v-model:search`, `item-text` is
+         `item-title`, and both scoped slots receive the item WRAPPED — the
+         contact object is `item.raw`, not `item`. A free-typed address has no
+         contact behind it, so `raw` is then the plain string, which is exactly
+         the case `isContact` already distinguishes. -->
     <v-combobox
       v-model="remindees"
-      v-model:search-input="query"
+      v-model:search="query"
       :items="searchedContacts"
-      item-text="queryString"
+      item-title="queryString"
       item-value="queryString"
       class="tw-mt-2 tw-text-sm"
       placeholder="Type an email address and press enter..."
       multiple
       append-icon=""
-      solo
+      variant="solo"
       :rules="[validEmails]"
     >
-      <template v-slot:selection="data">
+      <template v-slot:selection="{ item }">
         <UserChip
           :user="
-            isContact(data.item) ? data.item : { email: data.item, picture: '' }
+            isContact(item.raw) ? item.raw : { email: item.raw, picture: '' }
           "
           :removable="true"
           :removeEmail="removeEmail"
         ></UserChip>
       </template>
-      <template v-slot:item="{ item }">
-        <v-list-item-avatar>
-          <UserAvatarContent :user="item" :size="40" />
-        </v-list-item-avatar>
-        <v-list-item-content>
+      <template v-slot:item="{ props, item }">
+        <v-list-item v-bind="props" :title="null">
+          <template #prepend>
+            <UserAvatarContent :user="item.raw" :size="40" />
+          </template>
           <v-list-item-title>
-            {{ displayName(item) }}
+            {{ displayName(item.raw) }}
           </v-list-item-title>
-          <v-list-item-subtitle>{{ item.email }}</v-list-item-subtitle>
-        </v-list-item-content>
+          <v-list-item-subtitle>{{ item.raw.email }}</v-list-item-subtitle>
+        </v-list-item>
       </template>
     </v-combobox>
 
-    <div class="tw-transition-all tw-relative" :class="emailsAreValid ? '-tw-mt-5' : ''" @click="requestContactsAccess">
+    <div
+      class="tw-relative tw-transition-all"
+      :class="emailsAreValid ? '-tw-mt-5' : ''"
+      @click="requestContactsAccess"
+    >
       <v-expand-transition>
         <div class="tw-text-xs tw-text-parchment-dim" v-if="!hasContactsAccess">
           <a class="tw-underline" @click="requestContactsAccess"
@@ -182,10 +192,12 @@ export default {
     },
     query() {
       if (this.query && this.query.length > 0) {
-        if ( /[,\s]/.test(this.query)) {
+        if (/[,\s]/.test(this.query)) {
           /** If the query has spaces or commas, add the valid emails to the list */
           let successfullyAdded = false
-          const emailsArray = this.query.split(/[,\s]+/).filter(email => email.trim() !== "");
+          const emailsArray = this.query
+            .split(/[,\s]+/)
+            .filter((email) => email.trim() !== "")
 
           emailsArray.forEach((email) => {
             if (validateEmail(email) && !this.remindees.includes(email)) {
@@ -198,7 +210,6 @@ export default {
             this.query = ""
             return
           }
-          
         }
 
         this.searchContacts()

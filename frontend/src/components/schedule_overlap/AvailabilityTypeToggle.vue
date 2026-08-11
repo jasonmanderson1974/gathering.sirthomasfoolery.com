@@ -1,7 +1,7 @@
 <template>
   <SlideToggle
-    :value="value"
-    @input="(e) => $emit('input', e)"
+    :model-value="modelValue"
+    @update:model-value="(e) => $emit('update:modelValue', e)"
     :options="options"
   />
 </template>
@@ -14,7 +14,7 @@ export default {
   name: "AvailabilityTypeToggle",
 
   props: {
-    value: { type: String, required: true },
+    modelValue: { type: String, required: true },
   },
 
   components: { SlideToggle },

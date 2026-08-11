@@ -7,8 +7,8 @@
           The Chronicle
         </div>
         <div class="tw-text-sm tw-text-parchment-dim">
-          A record of gatherings past — where the Fellowship has met, and who was
-          there.
+          A record of gatherings past — where the Fellowship has met, and who
+          was there.
         </div>
       </div>
 
@@ -33,7 +33,9 @@
           :key="entry._id"
           class="tw-rounded-md tw-border tw-border-brass-dim tw-bg-leather tw-p-4 tw-text-parchment"
         >
-          <div class="tw-flex tw-flex-wrap tw-items-baseline tw-justify-between tw-gap-x-3 tw-gap-y-1">
+          <div
+            class="tw-flex tw-flex-wrap tw-items-baseline tw-justify-between tw-gap-x-3 tw-gap-y-1"
+          >
             <router-link
               :to="`/e/${entry.shortId || entry.eventId}`"
               class="tw-font-head tw-text-lg tw-text-brass hover:tw-underline"
@@ -49,7 +51,9 @@
             v-if="entry.location"
             class="tw-mt-1 tw-text-sm tw-text-parchment-dim"
           >
-            <v-icon x-small class="tw-mr-1 tw-text-parchment-dim">mdi-map-marker</v-icon>
+            <v-icon x-small class="tw-mr-1 tw-text-parchment-dim"
+              >mdi-map-marker</v-icon
+            >
             {{ entry.location }}
           </div>
 
@@ -61,9 +65,13 @@
           </div>
 
           <!-- Attendees -->
-          <div class="tw-mt-3 tw-border-t tw-border-brass-dim/60 tw-pt-2 tw-text-sm">
+          <div
+            class="tw-mt-3 tw-border-t tw-border-brass-dim/60 tw-pt-2 tw-text-sm"
+          >
             <template v-if="entry.attendees && entry.attendees.length">
-              <span class="tw-font-medium">{{ entry.headCount }} attended:</span>
+              <span class="tw-font-medium"
+                >{{ entry.headCount }} attended:</span
+              >
               <span class="tw-text-parchment-dim">
                 {{ attendeeList(entry.attendees) }}
               </span>
@@ -127,7 +135,9 @@ export default {
     },
     attendeeList(attendees) {
       return attendees
-        .map((a) => (a.guestCount > 0 ? `${a.name} (+${a.guestCount})` : a.name))
+        .map((a) =>
+          a.guestCount > 0 ? `${a.name} (+${a.guestCount})` : a.name
+        )
         .join(", ")
     },
   },

@@ -26,7 +26,12 @@
         <v-btn icon x-small @click="$emit('cancel-edit')">
           <v-icon small>mdi-close</v-icon>
         </v-btn>
-        <v-btn icon x-small color="primary" @click="$emit('save-edit', comment)">
+        <v-btn
+          icon
+          x-small
+          color="primary"
+          @click="$emit('save-edit', comment)"
+        >
           <v-icon small>mdi-check</v-icon>
         </v-btn>
       </div>
@@ -34,21 +39,27 @@
       <!-- One span per part, no whitespace between them: the parts already
            carry the comment's own spacing and this renders pre-wrap, so any
            the template added would show up in the message. -->
-      <div v-else class="tw-whitespace-pre-wrap tw-break-words tw-text-sm tw-text-parchment-dim"
-        ><span
-          v-for="(part, i) in parts"
-          :key="i"
-          :class="mentionClass(part)"
-          >{{ part.type === "mention" ? `@${part.text}` : part.text }}</span
-        ></div
+      <div
+        v-else
+        class="tw-whitespace-pre-wrap tw-break-words tw-text-sm tw-text-parchment-dim"
       >
+        <span v-for="(part, i) in parts" :key="i" :class="mentionClass(part)">{{
+          part.type === "mention" ? `@${part.text}` : part.text
+        }}</span>
+      </div>
 
       <!-- Controls -->
       <div v-if="!editing" class="tw-mt-0.5 tw-flex tw-gap-3">
-        <a v-if="canEdit" class="tw-text-xs tw-text-brass" @click="$emit('start-edit', comment)"
+        <a
+          v-if="canEdit"
+          class="tw-text-xs tw-text-brass"
+          @click="$emit('start-edit', comment)"
           >Edit</a
         >
-        <a v-if="canDelete" class="tw-text-xs tw-text-red" @click="$emit('remove', comment)"
+        <a
+          v-if="canDelete"
+          class="tw-text-xs tw-text-red"
+          @click="$emit('remove', comment)"
           >Delete</a
         >
         <a
@@ -90,7 +101,14 @@ export default {
     viewerId: { type: String, default: "" },
   },
 
-  emits: ["start-edit", "cancel-edit", "save-edit", "remove", "tag-thread", "update:editText"],
+  emits: [
+    "start-edit",
+    "cancel-edit",
+    "save-edit",
+    "remove",
+    "tag-thread",
+    "update:editText",
+  ],
 
   computed: {
     /**
@@ -108,9 +126,7 @@ export default {
      * monogram.
      */
     author() {
-      return (
-        this.comment.author ?? userFromDisplayName(this.comment.authorName)
-      )
+      return this.comment.author ?? userFromDisplayName(this.comment.authorName)
     },
     // Proxies the parent's shared edit buffer via .sync, so only one row is ever
     // in edit mode and the parent keeps ownership of the draft text.

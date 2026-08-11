@@ -219,7 +219,7 @@
     />
 
     <ConfirmDeleteDialog
-      :value="!!pendingDelete"
+      :model-value="!!pendingDelete"
       :title="pendingDelete ? pendingDelete.title : ''"
       :body="pendingDelete ? pendingDelete.body : ''"
       @input="(open) => !open && (pendingDelete = null)"

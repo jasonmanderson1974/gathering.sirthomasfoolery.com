@@ -2,8 +2,10 @@
   <v-snackbar v-model="show" top :color="color">
     <span class="tw-mr-2 tw-text-sm">{{ text }}</span>
 
-    <template v-slot:action="{ attrs }">
-      <v-btn v-bind="attrs" icon @click="show = false">
+    <!-- Vuetify 3 renamed this slot from `action` to `actions` and no longer
+         passes `attrs` down to it. -->
+    <template v-slot:actions>
+      <v-btn icon @click="show = false">
         <v-icon>mdi-close</v-icon>
       </v-btn>
     </template>

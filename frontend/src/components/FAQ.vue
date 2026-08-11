@@ -24,7 +24,9 @@
 
     <v-expand-transition>
       <div v-if="toggled">
-        <div class="tw-pt-4 tw-font-body tw-text-base tw-text-parchment-dim sm:tw-pt-6">
+        <div
+          class="tw-pt-4 tw-font-body tw-text-base tw-text-parchment-dim sm:tw-pt-6"
+        >
           <div v-html="answer"></div>
           <div
             v-if="authRequired"

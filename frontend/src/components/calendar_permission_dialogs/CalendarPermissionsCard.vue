@@ -38,7 +38,12 @@
 
     <div class="tw-flex">
       <!-- <v-spacer /> -->
-      <v-btn v-if="cancelLabel != ''" @click="$emit('cancel')" text class="tw-mr-2 tw-flex-1">
+      <v-btn
+        v-if="cancelLabel != ''"
+        @click="$emit('cancel')"
+        text
+        class="tw-mr-2 tw-flex-1"
+      >
         {{ cancelLabel }}
       </v-btn>
       <v-btn @click="$emit('allow')" class="tw-flex-1 tw-bg-brass" dark>

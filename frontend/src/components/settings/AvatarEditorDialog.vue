@@ -14,8 +14,8 @@
     />
 
     <v-dialog
-      :value="value"
-      @input="onDialogInput"
+      :model-value="modelValue"
+      @update:model-value="onDialogInput"
       width="480"
       content-class="tw-m-0"
       persistent
@@ -103,7 +103,7 @@ export default {
   name: "AvatarEditorDialog",
 
   props: {
-    value: { type: Boolean, default: false },
+    modelValue: { type: Boolean, default: false },
     /** Set by the caller while its upload request is in flight. */
     saving: { type: Boolean, default: false },
     /**
@@ -113,7 +113,7 @@ export default {
     title: { type: String, default: "Choose your photo" },
   },
 
-  emits: ["input", "save"],
+  emits: ["update:modelValue", "save"],
 
   data: () => ({
     imageSrc: "",
@@ -189,7 +189,10 @@ export default {
     openIfLargeEnough(dataUrl) {
       const probe = new Image()
       probe.onload = () => {
-        const problem = avatarSourceError(probe.naturalWidth, probe.naturalHeight)
+        const problem = avatarSourceError(
+          probe.naturalWidth,
+          probe.naturalHeight
+        )
         if (problem) {
           this.showError(problem)
           return
@@ -204,7 +207,7 @@ export default {
       this.teardown()
       this.imageSrc = dataUrl
       this.loading = true
-      this.$emit("input", true)
+      this.$emit("update:modelValue", true)
 
       // The <img> has to exist before Cropper can take it over.
       await this.$nextTick()
@@ -254,7 +257,7 @@ export default {
     },
 
     close() {
-      this.$emit("input", false)
+      this.$emit("update:modelValue", false)
     },
 
     onDialogInput(open) {

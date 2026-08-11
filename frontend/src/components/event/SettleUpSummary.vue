@@ -32,7 +32,9 @@
           <v-icon x-small class="tw-flex-none tw-text-parchment-dim">
             {{ isOpen(person) ? "mdi-chevron-down" : "mdi-chevron-right" }}
           </v-icon>
-          <span class="tw-min-w-0 tw-flex-grow tw-truncate">{{ person.name }}</span>
+          <span class="tw-min-w-0 tw-flex-grow tw-truncate">{{
+            person.name
+          }}</span>
           <span class="tw-flex-none tw-tabular-nums">
             {{ formatCents(person.paidCents) }}
           </span>
@@ -45,16 +47,22 @@
           v-if="isOpen(person)"
           class="tw-mb-1 tw-ml-3 tw-border-l tw-border-brass-dim tw-pl-2 tw-text-xs"
         >
-          <div class="tw-flex tw-justify-between tw-gap-3 tw-text-parchment-dim">
+          <div
+            class="tw-flex tw-justify-between tw-gap-3 tw-text-parchment-dim"
+          >
             <span>Responsible for</span>
-            <span class="tw-tabular-nums">{{ formatCents(person.shareCents) }}</span>
+            <span class="tw-tabular-nums">{{
+              formatCents(person.shareCents)
+            }}</span>
           </div>
           <div class="tw-flex tw-justify-between tw-gap-3">
             <span class="tw-text-parchment-dim">{{ netLabel(person) }}</span>
             <span :class="netClass(person)">{{ netAmount(person) }}</span>
           </div>
 
-          <div class="tw-mt-1 tw-space-y-0.5 tw-border-t tw-border-brass-dim/50 tw-pt-1">
+          <div
+            class="tw-mt-1 tw-space-y-0.5 tw-border-t tw-border-brass-dim/50 tw-pt-1"
+          >
             <!-- Title on its own line with the figures right-aligned beneath,
                  rather than the two sharing a row. Side by side, an expense
                  someone both paid for and shares needs ~24 characters of
@@ -66,7 +74,9 @@
               :key="row.expenseId"
               class="tw-py-0.5"
             >
-              <div class="tw-truncate tw-text-parchment-dim">{{ row.title }}</div>
+              <div class="tw-truncate tw-text-parchment-dim">
+                {{ row.title }}
+              </div>
               <div class="tw-flex tw-justify-end tw-gap-2 tw-tabular-nums">
                 <!-- "paid" only when they actually fronted this one, so a row
                      they merely share never reads as money they put in. -->
@@ -123,10 +133,7 @@
 </template>
 
 <script>
-import {
-  settleUpSummary,
-  personBreakdown,
-} from "@/components/event/settleUp"
+import { settleUpSummary, personBreakdown } from "@/components/event/settleUp"
 import { formatCents } from "@/components/event/expenseForm"
 
 /**

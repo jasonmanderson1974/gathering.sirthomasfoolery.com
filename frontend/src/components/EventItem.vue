@@ -48,25 +48,21 @@
           right
           offset-x
         >
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn plain icon v-bind="attrs" v-on="on" @click.prevent>
+          <template v-slot:activator="{ props }">
+            <v-btn plain icon v-bind="props" @click.prevent>
               <v-icon>mdi-dots-vertical</v-icon>
             </v-btn>
           </template>
 
           <v-list class="tw-py-1" dense>
             <v-list-item @click="copyLink">
-              <v-list-item-content>
-                <v-list-item-title>Copy link</v-list-item-title>
-              </v-list-item-content>
+              <v-list-item-title>Copy link</v-list-item-title>
             </v-list-item>
             <v-divider />
             <v-dialog v-model="duplicateDialog" width="400" persistent>
-              <template v-slot:activator="{ on, attrs }">
-                <v-list-item id="duplicate-event-btn" v-bind="attrs" v-on="on">
-                  <v-list-item-content>
-                    <v-list-item-title>Duplicate</v-list-item-title>
-                  </v-list-item-content>
+              <template v-slot:activator="{ props }">
+                <v-list-item id="duplicate-event-btn" v-bind="props">
+                  <v-list-item-title>Duplicate</v-list-item-title>
                 </v-list-item>
               </template>
               <v-card>
@@ -113,24 +109,25 @@
               :close-on-content-click="false"
               open-on-hover
             >
-              <template v-slot:activator="{ on: onMenu, attrs: attrsMenu }">
+              <template v-slot:activator="{ props: menuProps }">
                 <v-list-item
-                  v-bind="attrsMenu"
-                  v-on="onMenu"
+                  v-bind="menuProps"
                   class="tw-cursor-pointer tw-pr-1 hover:tw-bg-leather"
                 >
                   <v-list-item-title>Move to</v-list-item-title>
-                  <v-list-item-icon>
+                  <!-- v-list-item-icon / -action / -content are all gone in
+                       Vuetify 3; trailing adornments go in the `append` slot. -->
+                  <template #append>
                     <v-icon small>mdi-chevron-right</v-icon>
-                  </v-list-item-icon>
+                  </template>
                 </v-list-item>
               </template>
               <v-list dense class="tw-py-1">
                 <v-list-item @click="moveEventToFolder(null)" class="tw-pr-1">
                   <v-list-item-title>No folder</v-list-item-title>
-                  <v-list-item-action v-if="folderId === null">
+                  <template v-if="folderId === null" #append>
                     <v-icon small>mdi-check</v-icon>
-                  </v-list-item-action>
+                  </template>
                 </v-list-item>
                 <v-list-item
                   v-for="folder in folders"
@@ -139,9 +136,9 @@
                   class="tw-pr-1"
                 >
                   <v-list-item-title>{{ folder.name }}</v-list-item-title>
-                  <v-list-item-action v-if="folder._id === folderId">
+                  <template v-if="folder._id === folderId" #append>
                     <v-icon small>mdi-check</v-icon>
-                  </v-list-item-action>
+                  </template>
                 </v-list-item>
               </v-list>
             </v-menu>
@@ -152,16 +149,13 @@
               }}</v-list-item-title>
             </v-list-item>
             <v-dialog v-model="removeDialog" width="400" persistent>
-              <template v-slot:activator="{ on, attrs }">
+              <template v-slot:activator="{ props }">
                 <v-list-item
                   id="delete-event-btn"
                   class="red--text"
-                  v-bind="attrs"
-                  v-on="on"
+                  v-bind="props"
                 >
-                  <v-list-item-content>
-                    <v-list-item-title>Delete {{ typeText }}</v-list-item-title>
-                  </v-list-item-content>
+                  <v-list-item-title>Delete {{ typeText }}</v-list-item-title>
                 </v-list-item>
               </template>
               <v-card>

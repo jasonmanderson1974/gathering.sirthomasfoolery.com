@@ -34,10 +34,10 @@
         >
           <!-- 1. Overview -->
           <v-expansion-panel>
-            <v-expansion-panel-header>
+            <v-expansion-panel-title>
               The scheduling process, start to finish
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
               <ol class="tw-list-decimal tw-space-y-1 tw-pl-5">
                 <li>
                   <strong>Call a Gathering.</strong> Give it a name and lay out
@@ -61,20 +61,20 @@
                   gathering is archived to the club's history automatically.
                 </li>
               </ol>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
 
           <!-- 2. Calling a gathering -->
           <v-expansion-panel>
-            <v-expansion-panel-header>
+            <v-expansion-panel-title>
               Calling a Gathering — the date &amp; time settings
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
               <p class="tw-mb-2">
                 Press <strong>Call a Gathering</strong> (or the
                 <v-icon small class="tw-text-brass">mdi-plus</v-icon> beside a
-                folder). There are <em>two</em> separate questions to answer, and
-                they combine freely.
+                folder). There are <em>two</em> separate questions to answer,
+                and they combine freely.
               </p>
               <p class="tw-mb-2">
                 <strong>First, how precisely people answer:</strong>
@@ -95,8 +95,8 @@
                 </li>
                 <li>
                   <strong>Dates only</strong> — poll which whole days work, with
-                  no times at all, for when the hour doesn't matter. Offered when
-                  creating a gathering, not when editing one: switching an
+                  no times at all, for when the hour doesn't matter. Offered
+                  when creating a gathering, not when editing one: switching an
                   existing gathering in or out of it would change what its dates
                   mean.
                 </li>
@@ -116,15 +116,15 @@
                   reorders the week.
                 </li>
               </ul>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
 
           <!-- 3. Casting availability -->
           <v-expansion-panel>
-            <v-expansion-panel-header>
+            <v-expansion-panel-title>
               Casting your availability
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
               <p class="tw-mb-2">
                 Open the event and drag across the grid to mark the times you're
                 free. As people respond, the grid darkens where more members
@@ -148,19 +148,19 @@
                 You must be signed in to open a gathering at all — there is no
                 anonymous access. For someone without an account (a wife, a
                 visitor), any member can press
-                <strong>+ Add guest availability</strong> in the respondents list
-                and enter it on their behalf; edit it later with the pencil
+                <strong>+ Add guest availability</strong> in the respondents
+                list and enter it on their behalf; edit it later with the pencil
                 beside their name.
               </p>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
 
           <!-- 4. Settling on a time -->
           <v-expansion-panel>
-            <v-expansion-panel-header>
+            <v-expansion-panel-title>
               Settling on the final time (scheduling)
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
               <p class="tw-mb-2">
                 When enough availability is in, the organiser presses
                 <strong>Schedule event</strong>, drags to select the winning
@@ -191,15 +191,15 @@
                 plus-ones). The organiser can <em>Reschedule</em> or
                 <em>Cancel</em> the gathering later from the same menu.
               </p>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
 
           <!-- 5. Recurring — the headline -->
           <v-expansion-panel>
-            <v-expansion-panel-header>
+            <v-expansion-panel-title>
               How recurring gatherings work
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
               <p class="tw-mb-2">
                 When you schedule a gathering, the <strong>Repeat</strong>
                 setting turns it into a standing fixture. The choices are:
@@ -256,15 +256,15 @@
                 confirmed gathering and set <strong>Repeat</strong> back to
                 <em>Does not repeat</em> (or a different frequency).
               </p>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
 
           <!-- 6. Advanced options -->
           <v-expansion-panel>
-            <v-expansion-panel-header>
+            <v-expansion-panel-title>
               What the Advanced options do
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
               <ul class="tw-list-disc tw-space-y-2 tw-pl-5">
                 <li>
                   <strong>Time increment</strong> — the grid's resolution (15,
@@ -289,15 +289,15 @@
                   zone.
                 </li>
               </ul>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
 
           <!-- 7. Reminders & notifications -->
           <v-expansion-panel>
-            <v-expansion-panel-header>
+            <v-expansion-panel-title>
               Reminders &amp; notifications
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
               <ul class="tw-list-disc tw-space-y-2 tw-pl-5">
                 <li>
                   <strong>Email me when someone joins</strong> — a note to the
@@ -316,15 +316,15 @@
                   repeats).
                 </li>
               </ul>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
 
           <!-- 8. RSVPs, Polls, Chronicle -->
           <v-expansion-panel>
-            <v-expansion-panel-header>
+            <v-expansion-panel-title>
               RSVPs, Polls, Discussion &amp; The Chronicle
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
               <ul class="tw-list-disc tw-space-y-2 tw-pl-5">
                 <li>
                   <strong>RSVPs</strong> — once a gathering has a confirmed
@@ -350,15 +350,16 @@
                   record survives even if the original event is later removed.
                 </li>
               </ul>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
 
           <!-- 9. The tabs beneath a gathering -->
           <v-expansion-panel>
-            <v-expansion-panel-header>
-              The tabs beneath a gathering — Lists, My Lists, My Notes, Settle Up
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
+            <v-expansion-panel-title>
+              The tabs beneath a gathering — Lists, My Lists, My Notes, Settle
+              Up
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
               <p class="tw-mb-2">
                 Under the calendar sits a row of tabs. The first two are shared
                 with everyone on the gathering; the next two are yours alone.
@@ -380,29 +381,30 @@
                   see it, not even an admin.
                 </li>
                 <li>
-                  <strong>My Notes</strong> — one private notebook per gathering,
-                  written in Markdown, saved as you type. Also invisible to
-                  everyone else.
+                  <strong>My Notes</strong> — one private notebook per
+                  gathering, written in Markdown, saved as you type. Also
+                  invisible to everyone else.
                 </li>
                 <li>
                   <strong>Settle Up</strong> — the shared ledger, for when money
                   changed hands. See below.
                 </li>
               </ul>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
 
           <!-- 10. Settle Up -->
           <v-expansion-panel>
-            <v-expansion-panel-header>
+            <v-expansion-panel-title>
               Settling the bill (Settle Up)
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
               <p class="tw-mb-2">
-                Log what was spent and the ledger works out who owes whom. Add an
-                expense with what it was, what it cost, <strong>who paid</strong>
-                and who it's shared between; attach a photo of the receipt if you
-                have one.
+                Log what was spent and the ledger works out who owes whom. Add
+                an expense with what it was, what it cost,
+                <strong>who paid</strong>
+                and who it's shared between; attach a photo of the receipt if
+                you have one.
               </p>
               <p class="tw-mb-2">Split it three ways:</p>
               <ul class="tw-list-disc tw-space-y-2 tw-pl-5">
@@ -411,8 +413,8 @@
                   with any odd penny handled for you.
                 </li>
                 <li>
-                  <strong>By amount</strong> — type each person's share; it won't
-                  save until the parts add up to the total, to the penny.
+                  <strong>By amount</strong> — type each person's share; it
+                  won't save until the parts add up to the total, to the penny.
                 </li>
                 <li>
                   <strong>By share</strong> — for "he had two courses, I had
@@ -423,21 +425,21 @@
                 A running summary shows what each person <em>paid</em>, with the
                 gathering's total beneath it; click a row to expand what they
                 actually <em>owe</em> and the items behind it. Everyone on the
-                gathering can read the ledger — guests included, since a guest at
-                the dinner has a fair interest in the bill — but only members and
-                up can add to it, and only the person who entered a row (or an
-                admin) can change it. Every edit is kept, with who made it, and a
-                deleted expense leaves its trail behind.
+                gathering can read the ledger — guests included, since a guest
+                at the dinner has a fair interest in the bill — but only members
+                and up can add to it, and only the person who entered a row (or
+                an admin) can change it. Every edit is kept, with who made it,
+                and a deleted expense leaves its trail behind.
               </p>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
 
           <!-- 11. Folders -->
           <v-expansion-panel>
-            <v-expansion-panel-header>
+            <v-expansion-panel-title>
               Folders on your dashboard
-            </v-expansion-panel-header>
-            <v-expansion-panel-content>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
               <p class="tw-mb-2">
                 Your dashboard files everything into folders. Two are made for
                 you and can't be renamed or deleted:
@@ -457,7 +459,7 @@
                 stuck there: drag an event between the two defaults, or into any
                 folder you make yourself, and the placement is remembered.
               </p>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
         </v-expansion-panels>
       </div>
@@ -487,25 +489,25 @@ export default {
 .faq-panels >>> .v-expansion-panel::before {
   box-shadow: none !important;
 }
-.faq-panels >>> .v-expansion-panel-header {
+.faq-panels >>> .v-expansion-panel-title {
   color: #ede4d3; /* parchment */
   font-weight: 500;
   padding: 14px 4px;
   min-height: 48px;
 }
-.faq-panels >>> .v-expansion-panel-header .v-icon {
+.faq-panels >>> .v-expansion-panel-title .v-icon {
   color: #b8ad97; /* parchment-dim */
 }
-.faq-panels >>> .v-expansion-panel-content {
+.faq-panels >>> .v-expansion-panel-text {
   color: #b8ad97; /* parchment-dim */
   font-size: 0.875rem;
   line-height: 1.5;
 }
-.faq-panels >>> .v-expansion-panel-content strong {
+.faq-panels >>> .v-expansion-panel-text strong {
   color: #ede4d3; /* parchment */
   font-weight: 600;
 }
-.faq-panels >>> .v-expansion-panel-content code {
+.faq-panels >>> .v-expansion-panel-text code {
   background-color: rgba(138, 115, 51, 0.2);
   color: #e3c578; /* brass-bright */
   padding: 1px 5px;

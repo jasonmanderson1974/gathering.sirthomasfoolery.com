@@ -349,7 +349,7 @@
           <LocationInput
             v-if="isLocationList(list)"
             :ref="`addInput-${list._id}`"
-            :value="newItemText[list._id] || ''"
+            :model-value="newItemText[list._id] || ''"
             dense
             hide-details
             placeholder="Add a place…"
@@ -359,7 +359,7 @@
           <v-text-field
             v-else
             :ref="`addInput-${list._id}`"
-            :value="newItemText[list._id] || ''"
+            :model-value="newItemText[list._id] || ''"
             dense
             hide-details
             placeholder="Add an entry…"
@@ -433,7 +433,7 @@
     </template>
 
     <ConfirmDeleteDialog
-      :value="!!pendingDelete"
+      :model-value="!!pendingDelete"
       :title="pendingDelete ? pendingDelete.title : ''"
       :body="pendingDelete ? pendingDelete.body : ''"
       @input="onConfirmDialogInput"

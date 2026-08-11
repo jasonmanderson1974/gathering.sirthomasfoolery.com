@@ -1,7 +1,7 @@
 <template>
   <v-dialog
-    :value="value"
-    @input="(e) => $emit('input', e)"
+    :model-value="modelValue"
+    @update:model-value="(e) => $emit('update:modelValue', e)"
     width="400"
     content-class="tw-m-0"
   >
@@ -57,10 +57,7 @@
             </v-btn>
             <v-btn block @click="autofillWithICS" class="tw-bg-white">
               <div class="tw-flex tw-w-full tw-items-center tw-gap-2">
-                <v-icon
-                  class="tw-flex-initial"
-                  size="20"
-                >
+                <v-icon class="tw-flex-initial" size="20">
                   mdi-calendar-sync
                 </v-icon>
                 <v-spacer />
@@ -127,7 +124,7 @@ export default {
   name: "MarkAvailabilityDialog",
 
   props: {
-    value: { type: Boolean, required: true },
+    modelValue: { type: Boolean, required: true },
     initialState: { type: String, default: "choices" },
   },
 
@@ -185,8 +182,9 @@ export default {
   },
 
   watch: {
-    value() {
-      if (!this.value) setTimeout(() => (this.state = this.states.CHOICES), 100)
+    modelValue() {
+      if (!this.modelValue)
+        setTimeout(() => (this.state = this.states.CHOICES), 100)
     },
   },
 }

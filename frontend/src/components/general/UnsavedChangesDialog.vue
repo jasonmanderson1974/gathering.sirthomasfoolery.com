@@ -1,7 +1,7 @@
 <template>
   <v-dialog
-    :value="value"
-    @input="(e) => $emit('input', e)"
+    :model-value="modelValue"
+    @update:model-value="(e) => $emit('update:modelValue', e)"
     width="400"
     content-class="tw-m-0"
   >
@@ -13,7 +13,10 @@
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn text @click="$emit('input', false)" class="tw-text-brass"
+        <v-btn
+          text
+          @click="$emit('update:modelValue', false)"
+          class="tw-text-brass"
           >Cancel</v-btn
         >
         <v-btn text @click="$emit('leave')">Leave page</v-btn>
@@ -27,7 +30,7 @@ export default {
   name: "UnsavedChangesDialog",
 
   props: {
-    value: { type: Boolean, required: true },
+    modelValue: { type: Boolean, required: true },
   },
 }
 </script>

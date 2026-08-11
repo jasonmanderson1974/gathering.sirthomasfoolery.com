@@ -51,7 +51,8 @@ export default {
     checkScroll() {
       const { scrollHeight, clientHeight, scrollTop } = this.scrollContainer
       this.showGradient =
-        scrollHeight > clientHeight && scrollTop < scrollHeight - clientHeight - 1 // 1px tolerance
+        scrollHeight > clientHeight &&
+        scrollTop < scrollHeight - clientHeight - 1 // 1px tolerance
     },
     scrollToBottom() {
       // `scrollContainer` is a raw HTMLElement, not Vue state — setting

@@ -4,14 +4,14 @@
   <div class="tw-relative tw-flex-grow">
     <v-textarea
       ref="input"
-      :value="value"
+      :model-value="modelValue"
       :placeholder="placeholder"
       dense
       hide-details
       auto-grow
       :rows="1"
       class="tw-text-sm"
-      @input="onInput"
+      @update:model-value="onInput"
       @click="syncTrigger"
       @keyup="syncTrigger"
       @keydown="onKeydown"
@@ -76,13 +76,13 @@ export default {
   components: { UserAvatarContent },
 
   props: {
-    value: { type: String, default: "" },
+    modelValue: { type: String, default: "" },
     placeholder: { type: String, default: "" },
     /** Slim users from GET /events/:eventId/mentionables. */
     candidates: { type: Array, default: () => [] },
   },
 
-  emits: ["input"],
+  emits: ["update:modelValue"],
 
   data: () => ({
     /** The partial mention at the caret, from mentionTrigger — null when closed. */
@@ -125,7 +125,7 @@ export default {
     },
 
     onInput(value) {
-      this.$emit("input", value)
+      this.$emit("update:modelValue", value)
       // After the parent has taken the value: selectionStart is read off the
       // DOM, which is already current, but the trigger is only meaningful once
       // the keystroke that caused it is in the field.
@@ -214,14 +214,14 @@ export default {
 
     select(candidate) {
       const field = this.field()
-      const text = field ? field.value : this.value ?? ""
+      const text = field ? field.value : this.modelValue ?? ""
       const caret = field ? field.selectionStart ?? text.length : text.length
 
       const applied = applyMention(text, caret, candidate)
       this.close()
       if (!applied) return
 
-      this.$emit("input", applied.text)
+      this.$emit("update:modelValue", applied.text)
       this.highlight = 0
       // Once the parent's re-render has put the token in the field: picking
       // with the mouse leaves focus in the composer, and the caret goes after

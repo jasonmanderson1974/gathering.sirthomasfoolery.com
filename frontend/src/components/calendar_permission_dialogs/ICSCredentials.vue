@@ -1,22 +1,37 @@
 <template>
   <div class="tw-flex tw-flex-col tw-gap-6">
     <div class="tw-flex tw-flex-col tw-gap-3">
-      <div class="tw-text-md tw-flex tw-flex-row tw-items-center tw-justify-start tw-gap-2 tw-font-medium">
+      <div
+        class="tw-text-md tw-flex tw-flex-row tw-items-center tw-justify-start tw-gap-2 tw-font-medium"
+      >
         Connect an ICS calendar feed
       </div>
       <div class="tw-flex tw-flex-col tw-gap-2">
         <div class="tw-text-sm tw-text-parchment-dim">
-          Paste the ICS feed URL from your calendar provider. This is usually found in your calendar's sharing or export settings.
+          Paste the ICS feed URL from your calendar provider. This is usually
+          found in your calendar's sharing or export settings.
         </div>
       </div>
     </div>
     <div class="tw-flex tw-flex-col tw-gap-3">
-      <v-text-field solo placeholder="Feed URL" v-model="feedUrl" hide-details="auto" :error-messages="feedUrlError" />
+      <v-text-field
+        solo
+        placeholder="Feed URL"
+        v-model="feedUrl"
+        hide-details="auto"
+        :error-messages="feedUrlError"
+      />
       <v-text-field solo placeholder="Label" hide-details v-model="label" />
       <div class="tw-flex tw-items-center tw-gap-2">
         <v-btn text class="tw-grow" @click="$emit('back')">Back</v-btn>
-        <v-btn :disabled="!enableSubmit" color="primary" class="tw-grow" :loading="loading"
-          @click="submit">Submit</v-btn>
+        <v-btn
+          :disabled="!enableSubmit"
+          color="primary"
+          class="tw-grow"
+          :loading="loading"
+          @click="submit"
+          >Submit</v-btn
+        >
       </div>
     </div>
   </div>
@@ -25,7 +40,7 @@
 <script>
 import { post } from "@/utils"
 import { mapActions } from "vuex"
-import { urlRegex } from "@/constants";
+import { urlRegex } from "@/constants"
 
 export default {
   name: "ICSCredentials",

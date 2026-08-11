@@ -660,7 +660,7 @@
                 >
                   <ExpandableSection
                     label="Options"
-                    :value="showEditOptions"
+                    :model-value="showEditOptions"
                     @input="toggleShowEditOptions"
                   >
                     <div class="tw-flex tw-flex-col tw-gap-5 tw-pt-2.5">
@@ -669,12 +669,11 @@
                         v-model="calendarOptionsDialog"
                         width="500"
                       >
-                        <template v-slot:activator="{ on, attrs }">
+                        <template v-slot:activator="{ props }">
                           <v-btn
                             outlined
                             class="tw-border-gray tw-text-sm"
-                            v-on="on"
-                            v-bind="attrs"
+                            v-bind="props"
                           >
                             Calendar options...
                           </v-btn>
@@ -716,10 +715,9 @@
                     width="500"
                     persistent
                   >
-                    <template v-slot:activator="{ on, attrs }">
+                    <template v-slot:activator="{ props }">
                       <span
-                        v-bind="attrs"
-                        v-on="on"
+                        v-bind="props"
                         class="tw-cursor-pointer tw-text-sm tw-text-red"
                       >
                         Delete availability

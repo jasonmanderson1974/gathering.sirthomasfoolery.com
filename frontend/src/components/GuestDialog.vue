@@ -1,7 +1,7 @@
 <template>
   <v-dialog
-    :value="value"
-    @input="(e) => $emit('input', e)"
+    :model-value="modelValue"
+    @update:model-value="(e) => $emit('update:modelValue', e)"
     width="400"
     content-class="tw-m-0"
   >
@@ -9,7 +9,7 @@
       <v-card-title class="tw-flex">
         <div>Add availability for a guest</div>
         <v-spacer />
-        <v-btn icon @click="$emit('input', false)">
+        <v-btn icon @click="$emit('update:modelValue', false)">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -64,10 +64,10 @@ import { isPhone, validateEmail } from "@/utils"
 export default {
   name: "GuestDialog",
 
-  emits: ["input", "submit"],
+  emits: ["update:modelValue", "submit"],
 
   props: {
-    value: { type: Boolean, required: true },
+    modelValue: { type: Boolean, required: true },
     event: { type: Object, required: true },
     respondents: { type: Array, required: true },
   },
@@ -114,8 +114,8 @@ export default {
   },
 
   watch: {
-    value() {
-      if (this.value) {
+    modelValue() {
+      if (this.modelValue) {
         this.name = ""
         this.email = ""
         this.nameRules = []

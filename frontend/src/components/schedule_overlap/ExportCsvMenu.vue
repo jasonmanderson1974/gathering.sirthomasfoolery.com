@@ -1,54 +1,48 @@
 <template>
-    <v-menu right offset-x>
-      <template v-slot:activator="{ on, attrs }">
-        <v-btn icon v-on="on" v-bind="attrs"
-          ><v-icon>mdi-dots-vertical</v-icon></v-btn
-        >
-      </template>
-      <v-list class="tw-py-1" dense>
-        <v-dialog v-model="exportCsvDialog.visible" width="400">
-          <template v-slot:activator="{ on, attrs }">
-            <v-list-item
-              id="export-csv-btn"
-              v-on="on"
-              v-bind="attrs"
+  <v-menu right offset-x>
+    <template v-slot:activator="{ props }">
+      <v-btn icon v-bind="props"><v-icon>mdi-dots-vertical</v-icon></v-btn>
+    </template>
+    <v-list class="tw-py-1" dense>
+      <v-dialog v-model="exportCsvDialog.visible" width="400">
+        <template v-slot:activator="{ props }">
+          <v-list-item id="export-csv-btn" v-bind="props">
+            <v-list-item-title>Export CSV</v-list-item-title>
+          </v-list-item>
+        </template>
+        <v-card>
+          <v-card-title>Export CSV</v-card-title>
+          <v-card-text>
+            <div class="tw-mb-1">Select CSV format:</div>
+            <v-select
+              v-model="exportCsvDialog.type"
+              solo
+              hide-details
+              :items="exportCsvDialog.types"
+              item-title="text"
+              item-value="value"
+            />
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn
+              text
+              @click="exportCsvDialog.visible = false"
+              :disabled="exportCsvDialog.loading"
+              >Cancel</v-btn
             >
-              <v-list-item-title>Export CSV</v-list-item-title>
-            </v-list-item>
-          </template>
-          <v-card>
-            <v-card-title>Export CSV</v-card-title>
-            <v-card-text>
-              <div class="tw-mb-1">Select CSV format:</div>
-              <v-select
-                v-model="exportCsvDialog.type"
-                solo
-                hide-details
-                :items="exportCsvDialog.types"
-                item-text="text"
-                item-value="value"
-              />
-            </v-card-text>
-            <v-card-actions>
-              <v-spacer />
-              <v-btn
-                text
-                @click="exportCsvDialog.visible = false"
-                :disabled="exportCsvDialog.loading"
-                >Cancel</v-btn
-              >
-              <v-btn
-                text
-                @click="exportCsv"
-                color="primary"
-                :loading="exportCsvDialog.loading"
-                >Export</v-btn
-              >
-            </v-card-actions>
-          </v-card>
-        </v-dialog>
-      </v-list>
-    </v-menu>
+            <v-btn
+              text
+              @click="exportCsv"
+              color="primary"
+              :loading="exportCsvDialog.loading"
+              >Export</v-btn
+            >
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+    </v-list>
+  </v-menu>
 </template>
 
 <script>
@@ -115,9 +109,7 @@ export default {
       if (this.exportCsvDialog.type === "datesToAvailable") {
         // Write CSV header
         const header = ["Date / Time"]
-        header.push(
-          ...responses.map((r) => displayName(r.user))
-        )
+        header.push(...responses.map((r) => displayName(r.user)))
         csv.push(header)
 
         // Iterate through the dates

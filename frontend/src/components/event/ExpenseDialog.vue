@@ -1,10 +1,10 @@
 <template>
   <v-dialog
-    :value="value"
+    :model-value="modelValue"
     max-width="560"
     scrollable
     content-class="tw-m-0"
-    @input="onDialogInput"
+    @update:model-value="onDialogInput"
   >
     <v-card>
       <v-card-title class="tw-text-base">
@@ -21,17 +21,16 @@
           offset-y
           min-width="auto"
         >
-          <template #activator="{ on, attrs }">
+          <template #activator="{ props }">
             <v-text-field
-              :value="dateLabel"
+              :model-value="dateLabel"
               label="Date"
               readonly
               dense
               hide-details
               prepend-inner-icon="mdi-calendar"
               class="tw-mb-3"
-              v-bind="attrs"
-              v-on="on"
+              v-bind="props"
             />
           </template>
           <!--
@@ -88,7 +87,7 @@
         <v-select
           v-model="paidBy"
           :items="participantOptions"
-          item-text="name"
+          item-title="name"
           item-value="id"
           label="Paid by"
           dense
@@ -163,7 +162,7 @@
               </div>
               <v-text-field
                 v-else
-                :value="typedAmounts[person.id]"
+                :model-value="typedAmounts[person.id]"
                 :disabled="!isSelected(person.id)"
                 prefix="$"
                 inputmode="decimal"
@@ -313,14 +312,14 @@ export default {
   name: "ExpenseDialog",
 
   props: {
-    value: { type: Boolean, default: false },
+    modelValue: { type: Boolean, default: false },
     /** Short id or _id — whichever the route gave; the server resolves both. */
     eventId: { type: String, required: true },
     /** The row being edited, or null to add a new one. */
     expense: { type: Object, default: null },
   },
 
-  emits: ["input", "save"],
+  emits: ["update:modelValue", "save"],
 
   data: () => ({
     date: todayIso(),
@@ -695,11 +694,11 @@ export default {
     },
 
     close() {
-      this.$emit("input", false)
+      this.$emit("update:modelValue", false)
     },
 
     onDialogInput(open) {
-      this.$emit("input", open)
+      this.$emit("update:modelValue", open)
     },
   },
 }

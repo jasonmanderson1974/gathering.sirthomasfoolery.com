@@ -14,7 +14,7 @@
       >
         <div class="tw-flex tw-items-start tw-justify-between tw-gap-2">
           <div class="tw-min-w-0">
-            <div class="tw-font-medium tw-break-words">{{ poll.title }}</div>
+            <div class="tw-break-words tw-font-medium">{{ poll.title }}</div>
             <div class="tw-text-xs tw-text-parchment-dim">
               {{ poll.allowMultiple ? "Choose one or more" : "Choose one" }}
             </div>
@@ -45,7 +45,14 @@
             ]"
             @click="toggle(poll, option._id)"
           >
-            <v-icon small :class="isChosen(poll, option._id) ? 'tw-text-brass' : 'tw-text-parchment-dim'">
+            <v-icon
+              small
+              :class="
+                isChosen(poll, option._id)
+                  ? 'tw-text-brass'
+                  : 'tw-text-parchment-dim'
+              "
+            >
               {{ chooseIcon(poll, option._id) }}
             </v-icon>
             <span class="tw-min-w-0 tw-flex-grow tw-break-words tw-text-sm">
@@ -58,7 +65,10 @@
         </div>
 
         <!-- Voter roster (transparent, like the RSVP roster) -->
-        <div v-if="pollHasVotes(poll)" class="tw-mt-2 tw-space-y-0.5 tw-text-xs">
+        <div
+          v-if="pollHasVotes(poll)"
+          class="tw-mt-2 tw-space-y-0.5 tw-text-xs"
+        >
           <div v-for="option in poll.options" :key="`voters-${option._id}`">
             <template v-if="voters(option).length">
               <span class="tw-font-medium">{{ option.label }}:</span>
@@ -76,7 +86,10 @@
 
     <!-- Owner: create a new poll -->
     <template v-if="isEventOwner">
-      <div v-if="showNewPoll" class="tw-mt-3 tw-border-t tw-border-brass-dim tw-pt-3">
+      <div
+        v-if="showNewPoll"
+        class="tw-mt-3 tw-border-t tw-border-brass-dim tw-pt-3"
+      >
         <v-text-field
           v-model="newTitle"
           label="Poll question (e.g. Where should we meet?)"
@@ -106,7 +119,9 @@
           </v-btn>
         </div>
         <div class="tw-mt-1 tw-flex tw-flex-wrap tw-items-center tw-gap-3">
-          <a class="tw-text-xs tw-text-brass" @click="addOption">+ Add option</a>
+          <a class="tw-text-xs tw-text-brass" @click="addOption"
+            >+ Add option</a
+          >
           <v-checkbox
             v-model="newAllowMultiple"
             label="Allow multiple choices"
@@ -139,7 +154,7 @@
     </template>
 
     <ConfirmDeleteDialog
-      :value="!!pendingDelete"
+      :model-value="!!pendingDelete"
       :title="pendingDelete ? pendingDelete.title : ''"
       :body="pendingDelete ? pendingDelete.body : ''"
       @input="onConfirmDialogInput"
@@ -220,7 +235,9 @@ export default {
         for (const id of Object.keys(option.votes ?? {})) voters.add(id)
       }
       this.pendingDelete = {
-        title: `Delete "${title.length > 80 ? `${title.slice(0, 79)}…` : title}"?`,
+        title: `Delete "${
+          title.length > 80 ? `${title.slice(0, 79)}…` : title
+        }"?`,
         body: voters.size
           ? `This removes the poll and the ${voters.size} ${
               voters.size === 1 ? "vote" : "votes"
@@ -263,17 +280,13 @@ export default {
     // Current selection set for a poll, derived from the persisted votes.
     mySelections(poll) {
       if (!this.myKey) return []
-      return poll.options
-        .filter((o) => o.votes?.[this.myKey])
-        .map((o) => o._id)
+      return poll.options.filter((o) => o.votes?.[this.myKey]).map((o) => o._id)
     },
     toggle(poll, optionId) {
       if (!this.canVote) return
       const current = new Set(this.mySelections(poll))
       if (poll.allowMultiple) {
-        current.has(optionId)
-          ? current.delete(optionId)
-          : current.add(optionId)
+        current.has(optionId) ? current.delete(optionId) : current.add(optionId)
       } else {
         // Single choice: clicking the active option clears it; else select it.
         if (current.has(optionId)) current.clear()

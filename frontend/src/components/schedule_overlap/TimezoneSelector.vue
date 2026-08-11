@@ -7,8 +7,8 @@
     <div :class="`tw-mr-2 tw-mt-px ${labelColor}`">{{ label }}</div>
     <v-select
       id="timezone-select"
-      :value="value"
-      @input="onChange"
+      :model-value="modelValue"
+      @update:model-value="onChange"
       :items="timezones"
       :menu-props="{ auto: true }"
       class="tw-z-20 -tw-mt-px tw-w-52 tw-text-sm"
@@ -16,21 +16,22 @@
       color="#219653"
       item-color="green"
       hide-details
-      item-text="label"
+      item-title="label"
       return-object
     >
-      <template v-slot:item="{ item, on, attrs }">
-        <v-list-item v-bind="attrs" v-on="on">
-          <v-list-item-content>
-            <v-list-item-title>
-              {{ item.gmtString }} {{ item.label }}
-            </v-list-item-title>
-          </v-list-item-content>
+      <!-- Vuetify 3's item slot hands over a single `props` bundle instead of
+           `on`/`attrs`, and wraps the underlying object: the timezone itself is
+           `item.raw`, not `item`. -->
+      <template v-slot:item="{ props, item }">
+        <v-list-item v-bind="props" :title="null">
+          <v-list-item-title>
+            {{ item.raw.gmtString }} {{ item.raw.label }}
+          </v-list-item-title>
         </v-list-item>
       </template>
       <template v-slot:selection="{ item }">
-        <div class="v-select__selection v-select__selection--comma">
-          {{ item.gmtString }} {{ item.label }}
+        <div class="v-select__selection">
+          {{ item.raw.gmtString }} {{ item.raw.label }}
         </div>
       </template>
     </v-select>
@@ -52,7 +53,7 @@ export default {
   name: "TimezoneSelector",
 
   props: {
-    value: { type: Object, required: true },
+    modelValue: { type: Object, required: true },
     label: { type: String, default: "Shown in" },
     labelColor: { type: String, default: "" },
     referenceDate: { type: Date, default: null },
@@ -63,16 +64,16 @@ export default {
       this.timezoneModified = true
     }
 
-    if (this.value.value) return // Timezone has already been set
+    if (this.modelValue.value) return // Timezone has already been set
 
     // Set timezone to localstorage timezone if localstorage is set
     if (localStorage["timezone"]) {
-      this.$emit("input", JSON.parse(localStorage["timezone"]))
+      this.$emit("update:modelValue", JSON.parse(localStorage["timezone"]))
       return
     }
 
     // Otherwise, set timezone to local timezone
-    this.$emit("input", this.getLocalTimezone())
+    this.$emit("update:modelValue", this.getLocalTimezone())
   },
 
   data() {
@@ -124,7 +125,7 @@ export default {
     /** Updates local storage and emits the new timezone */
     onChange(val) {
       localStorage["timezone"] = JSON.stringify(val)
-      this.$emit("input", val)
+      this.$emit("update:modelValue", val)
       this.timezoneModified = true
     },
     /** Returns a timezone object for the local timezone */
@@ -138,8 +139,12 @@ export default {
         // Step 2: Match by offsets at two reference dates (Jan + Jul)
         // Distinguishes DST-observing zones from non-DST zones that share
         // the same current offset (e.g. Europe/Belgrade vs Africa/Casablanca)
-        const janOffset = dayjs.tz("2024-01-15 12:00", localTimezone).utcOffset()
-        const julOffset = dayjs.tz("2024-07-15 12:00", localTimezone).utcOffset()
+        const janOffset = dayjs
+          .tz("2024-01-15 12:00", localTimezone)
+          .utcOffset()
+        const julOffset = dayjs
+          .tz("2024-07-15 12:00", localTimezone)
+          .utcOffset()
 
         timezoneObject = this.timezones.find((t) => {
           const tJan = dayjs.tz("2024-01-15 12:00", t.value).utcOffset()
@@ -160,7 +165,7 @@ export default {
     },
     /** Resets timezone to the local timezone and clears localstorage as well */
     resetTimezone() {
-      this.$emit("input", this.getLocalTimezone())
+      this.$emit("update:modelValue", this.getLocalTimezone())
       localStorage.removeItem("timezone")
       this.timezoneModified = false
     },
@@ -168,15 +173,18 @@ export default {
 
   watch: {
     referenceDate() {
-      if (!this.value?.value) {
+      if (!this.modelValue?.value) {
         return
       }
 
       const refreshedTimezone = this.timezones.find(
-        (timezone) => timezone.value === this.value.value
+        (timezone) => timezone.value === this.modelValue.value
       )
 
-      if (!refreshedTimezone || refreshedTimezone.offset === this.value.offset) {
+      if (
+        !refreshedTimezone ||
+        refreshedTimezone.offset === this.modelValue.offset
+      ) {
         return
       }
 
@@ -184,7 +192,7 @@ export default {
         localStorage["timezone"] = JSON.stringify(refreshedTimezone)
       }
 
-      this.$emit("input", refreshedTimezone)
+      this.$emit("update:modelValue", refreshedTimezone)
     },
   },
 }

@@ -1,6 +1,6 @@
 <template>
   <v-dialog
-    :value="value"
+    :model-value="modelValue"
     @click:outside="handleDialogInput"
     no-click-animation
     persistent
@@ -14,11 +14,11 @@
     <v-card class="tw-pt-4">
       <NewEvent
         ref="form"
-        :key="`event-${value}`"
+        :key="`event-${modelValue}`"
         :event="event"
         :edit="edit"
         @input="handleDialogInput"
-        :is-dialog-open="value"
+        :is-dialog-open="modelValue"
         :contactsPayload="contactsPayload"
         :folder-id="folderId"
         @signIn="$emit('signIn')"
@@ -35,10 +35,10 @@ import UnsavedChangesDialog from "@/components/general/UnsavedChangesDialog.vue"
 export default {
   name: "NewDialog",
 
-  emits: ["input"],
+  emits: ["update:modelValue"],
 
   props: {
-    value: { type: Boolean, required: true },
+    modelValue: { type: Boolean, required: true },
     event: { type: Object },
     edit: { type: Boolean, default: false },
     contactsPayload: { type: Object, default: () => ({}) },
@@ -71,7 +71,7 @@ export default {
       }
     },
     exitDialog() {
-      this.$emit("input", false)
+      this.$emit("update:modelValue", false)
       if (this.edit) this.$refs.form.resetToEventData()
       else this.$refs.form.reset()
     },

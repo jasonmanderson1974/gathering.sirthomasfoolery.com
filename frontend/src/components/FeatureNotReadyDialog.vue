@@ -14,8 +14,8 @@
         </v-btn>
       </v-card-title>
       <v-card-text class="tw-text-parchment-dim">
-        You've caught us a bit early! We're considering adding folders to the Fellowship
-        and will do so once we get enough demand from users.
+        You've caught us a bit early! We're considering adding folders to the
+        Fellowship and will do so once we get enough demand from users.
         <v-textarea
           v-model="folderUsageFeedback"
           label="What would you like to use folders for?"
@@ -40,7 +40,7 @@ import { mapActions } from "vuex"
 export default {
   name: "FeatureNotReadyDialog",
   props: {
-    value: Boolean,
+    modelValue: Boolean,
   },
   data() {
     return {
@@ -50,10 +50,10 @@ export default {
   computed: {
     dialog: {
       get() {
-        return this.value
+        return this.modelValue
       },
       set(val) {
-        this.$emit("input", val)
+        this.$emit("update:modelValue", val)
       },
     },
   },
