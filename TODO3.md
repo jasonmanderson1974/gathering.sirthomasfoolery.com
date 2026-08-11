@@ -786,6 +786,31 @@ Two things worth knowing for the next post-deploy run:
   version string, and the Go side is untouched by all of Part K — so it would have passed with
   every page blank. The browser check is the gate that matters for a frontend release.
 
+### K5 — `@change` on Vuetify 3 gives the DOM event, not the value · **P0 · S** — DONE 2026-08-11
+
+**The first real user-visible breakage from Part K**, reported from production: toggling a calendar
+answered "There was a problem with toggling your calendar account!".
+
+Vuetify 2's `change` on a checkbox/switch/select emitted the new **value**; Vuetify 3's is the
+**native DOM event**. The calendar toggle POSTs that value to `/user/toggle-sub-calendar`, which
+binds `Enabled *bool` with `binding:"required"` — an `Event` object fails binding, the server
+answers 400, and the catch shows that message.
+
+**K2c converted `@input` and never looked at `@change`, so the whole class survived the migration.**
+Sixteen sites; fourteen were on Vuetify components and became `@update:model-value`. The two that
+stayed are `<input type="file">` in `AvatarEditorDialog` and `ExpenseDialog`, where `change` really
+is the native event — converting those would have broken avatar and receipt uploads.
+
+Also silently broken, none of it reported: role changes on The Roll, expense split selection,
+buffer time, working hours, reminder lead time, recurrence, and the four availability-grid
+switches. Those four take `!!val`, and **`!!someEvent` is always `true`, so they could be turned ON
+but never OFF** — which is what made this verifiable without a real calendar: the same bug, in a
+control local dev can reach. Deployed as `f32178c`.
+
+**The lesson for the next framework bump:** sweeping one event name is not sweeping the class.
+Enumerate every handler bound on a library component and check each against the new API, which is
+now done — what remains is `@click`, `@keyup*`, `@keydown*`, `@blur` and one `@click:outside`.
+
 **STILL UNVERIFIED: the Google/Microsoft/Apple calendar paths.** `compose.dev.yaml` has no OAuth,
 and the account used for the live check has no calendar linked, so nothing in this migration has
 ever exercised calendar linking or availability import — despite `ScheduleOverlap` carrying 39 of
