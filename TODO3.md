@@ -701,11 +701,52 @@ exists anywhere, dynamic or otherwise (there is no `require.context` or `<compon
 app). Unlike J13's `/ids` endpoint there is no external-contract argument — a Vue component is not
 API surface.
 
-### K2 — the cutover · **P0 · L** — NOT STARTED
+### K2 — the cutover · **P0 · L** — DONE on branch `vue3` (2026-08-11), not yet merged
 
-Vue 3 + Vuetify 3 + Vuex 4 + Router 4 together on a `vue3` branch, then the Vuetify template sweep,
-then the styling pass, then `vue-meta` → `@unhead/vue`. See the plan for ordering and the
-per-component counts. `main` must stay free of frontend churn while that branch is open.
+Five commits on `vue3`. The app runs on **Vue 3.5.41 / Vuetify 3.13.1 / vue-router 4.6.4 /
+Vuex 4.1.0**, with `vue-meta`, `vue-worker`, `vue-template-compiler`, `vuetify-loader` and
+`vue-cli-plugin-vuetify` all gone. `check:routes` and `check-signed-out` are ALL PASS, lint is
+clean and all 395 unit tests are green.
+
+**The point of the exercise is achieved: `npm audit` no longer lists `vue`.** The unfixable ReDoS
+is cleared. What remains (4 under `--omit=dev`, 50 including dev) is Vue CLI's own webpack/babel
+toolchain — the same class J12 assessed and left alone, and read by `npm ls`, not by the severity
+column.
+
+**Vuetify 3, not 4**, though 4.1.8 is `latest`: both lines ship on the same days and `v3-stable` is
+maintained, the v2→v3 migration is the documented path, and v3→v4 later is a well-trodden second
+hop. **Router 4, not 5**: vue-router 5 lists `pinia` among its peers and is a different design.
+
+Per-phase notes are in the commit messages; the ones with the longest half-life:
+
+- **`$vuetify.breakpoint` → `$vuetify.display` was a one-file fix**, exactly as J17 intended — but
+  its failure mode is the thing to remember. `breakpoint` is `undefined` on v3, so `.name` threw
+  inside a *computed*, and Vue 3 responds by logging and leaving the subtree blank. Three routes
+  rendered nothing while the harness reported zero console errors, because **production builds
+  strip framework warnings**. Every subsequent phase was driven from `npm run serve`.
+- **Vuetify 3 wraps slot items**: in an `item`/`selection` slot the real object is `item.raw`.
+  Silent when wrong — the row just renders empty.
+- **v3's default item field is `item-title`, defaulting to `title`**, where v2's was `item-text`
+  defaulting to `text`. Every `:items` of `{ text, value }` objects rendered `[object Object]`.
+- **`v-date-picker` is a reimplementation, not a port.** v3 removed the `@mousedown:date` /
+  `@mouseover:date` events drag-to-select was built on, and renders a `readonly` picker greyed out.
+  Vuetify now owns the click and the component owns the drag. Two bugs there are worth knowing:
+  `stopPropagation` on mouseup stops the browser synthesising the `click` Vuetify toggles on, and
+  two toggles in one tick discard each other because each rebuilds from a `modelValue` the parent
+  has not written back yet.
+- **Vue 3 removed `el.__vue__` and `$children`**, so every instance-walking probe in
+  `/root/tools/browser/` is dead. Read the DOM.
+
+Still open before this merges:
+
+- **A dev-only crash opening the New Gathering dialog** — a prop type check fails and Vue throws
+  while formatting the message (`Cannot convert object to primitive value` inside
+  `getInvalidTypeMessage`). `validateProps` does not run in production, so nothing ships broken,
+  but it means a real type mismatch is in there.
+- **One `Extraneous non-props attributes` warning** left to trace.
+- **Nothing has been exercised against real Google/Microsoft calendar accounts**, which
+  `compose.dev.yaml` cannot do — same gap J8 had, and it needs the same post-deploy check.
+- Neither `main` nor `vue3` has been pushed.
 
 ---
 
