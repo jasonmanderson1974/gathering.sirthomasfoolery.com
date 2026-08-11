@@ -10,7 +10,7 @@
         v-if="numResponses > 1 && isPhone"
         inset
         id="show-best-times-toggle"
-        :input-value="showBestTimes"
+        :model-value="showBestTimes"
         @update:model-value="(val) => $emit('update:showBestTimes', !!val)"
         hide-details
       >
@@ -24,7 +24,7 @@
         v-if="numResponses >= 1"
         inset
         id="hide-if-needed-toggle"
-        :input-value="hideIfNeeded"
+        :model-value="hideIfNeeded"
         @update:model-value="(val) => $emit('update:hideIfNeeded', !!val)"
         hide-details
       >
@@ -38,7 +38,7 @@
         v-if="numResponses >= 1"
         inset
         id="show-response-counts-toggle"
-        :input-value="showResponseCounts"
+        :model-value="showResponseCounts"
         @update:model-value="(val) => $emit('update:showResponseCounts', !!val)"
         hide-details
       >
@@ -47,13 +47,36 @@
         </template>
       </v-switch>
 
+      <!-- Your own calendar, drawn behind the grid.
+           Only offered when there is actually something to draw: a member with
+           no linked calendar would otherwise get a switch that does nothing.
+           Until now this was worse than absent — the state existed but nothing
+           was bound to it, so the events could only ever be seen while editing
+           your availability. -->
+      <v-switch
+        v-if="hasCalendarEvents"
+        inset
+        id="show-calendar-events-toggle"
+        :model-value="showCalendarEvents"
+        @update:model-value="(val) => $emit('update:showCalendarEvents', !!val)"
+        hide-details
+      >
+        <template v-slot:label>
+          <div class="tw-text-sm tw-text-parchment">
+            Show my calendar events
+          </div>
+        </template>
+      </v-switch>
+
       <!-- Start on monday -->
       <v-switch
         v-if="event.daysOnly"
         inset
         id="start-calendar-on-monday-toggle"
-        :input-value="startCalendarOnMonday"
-        @update:model-value="(val) => $emit('update:startCalendarOnMonday', !!val)"
+        :model-value="startCalendarOnMonday"
+        @update:model-value="
+          (val) => $emit('update:startCalendarOnMonday', !!val)
+        "
         hide-details
       >
         <template v-slot:label>
@@ -83,6 +106,9 @@ export default {
     numResponses: { type: Number, required: true },
     showEventOptions: { type: Boolean, required: true },
     startCalendarOnMonday: { type: Boolean, default: false },
+    showCalendarEvents: { type: Boolean, default: false },
+    /** Whether this member has any calendar events in the visible range. */
+    hasCalendarEvents: { type: Boolean, default: false },
   },
 
   computed: {

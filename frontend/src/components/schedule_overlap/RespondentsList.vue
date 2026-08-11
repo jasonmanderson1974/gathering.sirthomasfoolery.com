@@ -241,7 +241,7 @@
           class="tw-mb-4"
           inset
           id="show-best-times-toggle"
-          :input-value="showBestTimes"
+          :model-value="showBestTimes"
           @update:model-value="(val) => $emit('update:showBestTimes', !!val)"
           hide-details
         >
@@ -267,6 +267,11 @@
           @update:startCalendarOnMonday="
             (val) => $emit('update:startCalendarOnMonday', val)
           "
+          :showCalendarEvents="showCalendarEvents"
+          @update:showCalendarEvents="
+            (val) => $emit('update:showCalendarEvents', val)
+          "
+          :hasCalendarEvents="hasCalendarEvents"
           :numResponses="respondents.length"
         />
       </template>
@@ -365,6 +370,12 @@ export default {
     hideIfNeeded: { type: Boolean, required: true },
     showResponseCounts: { type: Boolean, default: true },
     startCalendarOnMonday: { type: Boolean, default: false },
+    // Passed straight through to EventOptions. ScheduleOverlap has bound
+    // `showCalendarEvents` here since before the Vue 3 migration, but no
+    // component ever declared it, so the binding was inert and the value could
+    // never leave its initial `false`.
+    showCalendarEvents: { type: Boolean, default: false },
+    hasCalendarEvents: { type: Boolean, default: false },
     showEventOptions: { type: Boolean, required: true },
     addingAvailabilityAsGuest: { type: Boolean, required: true },
   },

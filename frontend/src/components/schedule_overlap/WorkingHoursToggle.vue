@@ -7,7 +7,7 @@
     <v-switch
       id="working-hours-toggle"
       inset
-      :input-value="workingHours.enabled"
+      :model-value="workingHours.enabled"
       @update:model-value="(val) => updateCalendarOption('enabled', val)"
       hide-details
     >

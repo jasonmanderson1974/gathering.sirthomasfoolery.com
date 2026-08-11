@@ -646,7 +646,7 @@
                   <v-switch
                     id="overlay-availabilities-toggle"
                     inset
-                    :input-value="overlayAvailability"
+                    :model-value="overlayAvailability"
                     @update:model-value="updateOverlayAvailability"
                     hide-details
                   >
@@ -774,6 +774,7 @@
                   :isOwner="isOwner"
                   :attendees="event.attendees"
                   v-model:showCalendarEvents="showCalendarEvents"
+                  :hasCalendarEvents="hasCalendarEvents"
                   :responsesFormatted="responsesFormatted"
                   :timezone="curTimezone"
                   v-model:show-best-times="showBestTimes"
@@ -900,6 +901,7 @@
                   :isOwner="isOwner"
                   :attendees="event.attendees"
                   v-model:showCalendarEvents="showCalendarEvents"
+                  :hasCalendarEvents="hasCalendarEvents"
                   :responsesFormatted="responsesFormatted"
                   :timezone="curTimezone"
                   v-model:show-best-times="showBestTimes"
@@ -1359,6 +1361,17 @@ export default {
     },
     hintTextShown() {
       return this.showHintText && this.hintText != "" && !this.hintClosed
+    },
+
+    /**
+     * Whether this member has any calendar events in the range on screen.
+     *
+     * Gates the "Show my calendar events" switch: without a linked calendar
+     * there is nothing to draw, and a switch that visibly does nothing is worse
+     * than no switch at all.
+     */
+    hasCalendarEvents() {
+      return (this.calendarEventsByDay ?? []).some((day) => day?.length > 0)
     },
 
     /** Whether to show spinner on top of availability grid */

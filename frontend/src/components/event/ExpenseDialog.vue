@@ -143,7 +143,7 @@
               class="tw-flex tw-items-center tw-gap-2 tw-py-0.5"
             >
               <v-checkbox
-                :input-value="isSelected(person.id)"
+                :model-value="isSelected(person.id)"
                 :label="person.name"
                 dense
                 hide-details
