@@ -2,10 +2,7 @@
   <div
     v-if="showGradient"
     class="tw-pointer-events-none tw-absolute tw-bottom-0 tw-left-0 tw-right-0 tw-z-20 tw-flex tw-h-16 tw-items-end tw-justify-center"
-    :style="{
-      background:
-        'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
-    }"
+    :style="{ background: gradient }"
   >
     <v-btn
       v-if="showArrow"
@@ -42,6 +39,28 @@ export default {
     showArrow: {
       type: Boolean,
       default: true,
+    },
+    /**
+     * The colour the fade resolves to — i.e. whatever this sits on top of.
+     *
+     * Was hardcoded to white, which is a pre-Fellowship light-theme leftover:
+     * on the dark theme it drew a white veil over the bottom of whatever it was
+     * covering, which is what made the responses list look washed out. Defaults
+     * to the page's wood; pass the surface colour when it sits on something
+     * else.
+     */
+    fadeTo: {
+      type: String,
+      default: "#1c1410", // wood-deep, the page background
+    },
+  },
+
+  computed: {
+    gradient() {
+      // The transparent stop must be the SAME colour, not `transparent`:
+      // `transparent` is rgba(0,0,0,0), so interpolating from it darkens the
+      // midpoint into a grey smear on any non-black background.
+      return `linear-gradient(to bottom, ${this.fadeTo}00 0%, ${this.fadeTo} 100%)`
     },
   },
   data() {

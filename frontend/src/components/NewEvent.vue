@@ -341,9 +341,12 @@
       </div>
     </v-card-actions>
 
+    <!-- Fades to the dialog's own surface, not the page: index.css tints
+         overlay cards to #241a13. -->
     <OverflowGradient
       v-if="hasMounted"
       :scrollContainer="$refs.cardText"
+      fade-to="#241a13"
       class="tw-bottom-[90px]"
     />
   </v-card>

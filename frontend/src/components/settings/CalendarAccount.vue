@@ -69,7 +69,7 @@
         } ${!allowDelete ? 'tw-hidden' : ''}`"
         class="group-hover:tw-opacity-100"
         @click="openRemoveDialog"
-        ><v-icon color="#4F4F4F">mdi-close</v-icon></v-btn
+        ><v-icon color="#b8ad97">mdi-close</v-icon></v-btn
       >
     </div>
 

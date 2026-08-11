@@ -111,7 +111,7 @@
                   @click="(e) => $emit('clickRespondent', e, user._id)"
                   color="primary"
                   :model-value="respondentSelected(user._id)"
-                  class="tw-absolute -tw-top-[2px] tw-left-0 tw-bg-white tw-opacity-0 group-hover:tw-opacity-100 group-[&:has(.email-hover-target:hover)]:!tw-opacity-0"
+                  class="tw-absolute -tw-top-[2px] tw-left-0 tw-rounded tw-bg-wood-deep tw-opacity-0 group-hover:tw-opacity-100 group-[&:has(.email-hover-target:hover)]:!tw-opacity-0"
                   :class="
                     respondentSelected(user._id)
                       ? 'tw-opacity-100'
@@ -148,7 +148,7 @@
                   <v-menu right>
                     <template v-slot:activator="{ props }">
                       <v-btn icon v-bind="props">
-                        <v-icon size="small" color="#4F4F4F"
+                        <v-icon size="small" color="#b8ad97"
                           >mdi-dots-vertical</v-icon
                         >
                       </v-btn>
@@ -159,7 +159,7 @@
                         @click="$emit('editGuestAvailability', user._id)"
                       >
                         <v-list-item-title class="tw-flex tw-items-center">
-                          <v-icon size="small" class="tw-mr-2" color="#4F4F4F"
+                          <v-icon size="small" class="tw-mr-2" color="#b8ad97"
                             >mdi-pencil</v-icon
                           >
                           Edit
@@ -170,7 +170,7 @@
                         @click="() => showDeleteAvailabilityDialog(user)"
                       >
                         <v-list-item-title class="tw-flex tw-items-center">
-                          <v-icon size="small" class="tw-mr-2" color="#4F4F4F"
+                          <v-icon size="small" class="tw-mr-2" color="#b8ad97"
                             >mdi-delete</v-icon
                           >
                           Delete
@@ -184,9 +184,9 @@
                     v-if="isGuest(user)"
                     size="small"
                     icon
-                    class="tw-bg-white"
+                    class="tw-bg-leather"
                     @click="$emit('editGuestAvailability', user._id)"
-                    ><v-icon size="small" color="#4F4F4F"
+                    ><v-icon size="small" color="#b8ad97"
                       >mdi-pencil</v-icon
                     ></v-btn
                   >
@@ -194,12 +194,12 @@
                     v-if="isOwner"
                     size="small"
                     icon
-                    class="tw-bg-white"
+                    class="tw-bg-leather"
                     @click="() => showDeleteAvailabilityDialog(user)"
                     ><v-icon
                       size="small"
                       class="hover:tw-text-red"
-                      color="#4F4F4F"
+                      color="#b8ad97"
                       >mdi-delete</v-icon
                     ></v-btn
                   >
