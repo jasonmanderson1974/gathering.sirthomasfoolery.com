@@ -4,11 +4,11 @@
 # mints a session cookie, and runs the routes check against it.
 #
 # WHY THIS EXISTS (TODO3 L5): `frontend/scripts/check-routes.js` is the only
-# thing in this repo that looks at a rendered page. The unit suite is pure JS
-# with `environment: "node"` — no `.vue` file is imported anywhere and
-# `@vue/test-utils` is not a dependency — so it stays green through a total
-# rendering failure, and lint and the build are no better. Every browser-only
-# bug this repo has paid for lived in that gap: `v-show` beaten by Tailwind's
+# thing in this repo that looks at a REAL rendered page. The `dom` unit tier
+# (M6) mounts components under happy-dom, but with no real CSS, no layout and no
+# viewport; the `node` tier renders nothing at all. Lint and the build are no
+# better than either. Every browser-only bug this repo has paid for lived in
+# that gap: `v-show` beaten by Tailwind's
 # `important: true`, a purged class name built from a template string, a fifth
 # band tab pushing a phone into horizontal scroll, K3's shipped dialog crash,
 # K5's silently-broken toggles, L2's off-screen button. The check only ever ran
@@ -20,8 +20,17 @@
 #
 #   scripts/browser-check.sh                 # build, seed, check, tear down
 #   KEEP_STACK=1 scripts/browser-check.sh    # leave it up to poke at
+#   REUSE=1 scripts/browser-check.sh         # ...and check again against it
+#   ONLY=event scripts/browser-check.sh      # just the event page's sections
 #   scripts/browser-check.sh --dev           # ...against a DEV build (see below)
 #   scripts/browser-check.sh --shots out/    # leave a PNG of every page visited
+#
+# REUSE AND ONLY EXIST FOR THE MIDDLE OF FIXING SOMETHING (TODO3 M7). A full run
+# is two image builds, a boot, a seed and ~14 navigations; reproducing one
+# failing assertion cost all of it, every time. `KEEP_STACK=1` once, then
+# `REUSE=1 ONLY=event` for each attempt after that: no build, no seed, one
+# section. Neither changes what is asserted — `ONLY` says so on its own verdict
+# line, so a partial run cannot be quoted as a full one.
 #
 # --dev EXISTS BECAUSE TWELVE ASSERTIONS CANNOT FAIL WITHOUT IT (TODO3 M2). The
 # frontend image runs `npm run build` — a PRODUCTION build — and Vue and Vuetify
@@ -66,10 +75,19 @@ if [ -n "$SHOTS_DIR" ]; then
   mkdir -p "$SHOTS_DIR"
 fi
 
+REUSE="${REUSE:-}"
+# Reusing a stack and then destroying it on the way out would make the next
+# REUSE run fail on a stack that was there when this one started. Asking to
+# reuse is asking to keep.
+[ -n "$REUSE" ] && KEEP_STACK=1
+
 # Before anything is built, because both things it checks make this run report
 # on artifacts that are not the checkout (TODO3 M5) — and in --dev mode a stale
 # `frontend/node_modules` is not a subtle wrongness, it is what `npm run serve`
 # actually executes.
+#
+# Run under REUSE as well. It is the install check only, and a reused stack
+# changes nothing about which `node_modules` `npm run serve` executes from.
 echo "--- checking this machine is not stale"
 scripts/dev-doctor.sh --deps
 
@@ -116,6 +134,19 @@ compose() { docker compose -f "$ROOT/compose.dev.yaml" -p "$PROJECT" "$@"; }
 SERVE_PID=""
 SERVE_LOG="$(mktemp -t browser-check-serve.XXXXXX.log)"
 
+# Set by anything that has already said, in one line, exactly what went wrong
+# and what to do about it. Sixty lines of mongo's WiredTiger checkpoint chatter
+# on top of "you asked to reuse a stack booted in the other mode" does not add
+# information; it buries the sentence that was the whole point.
+SELF_EXPLAINED=""
+
+# Prints each argument on its own line and exits 1 without the log dump.
+fail() {
+  SELF_EXPLAINED=1
+  printf '%s\n' "$@" >&2
+  exit 1
+}
+
 cleanup() {
   local status=$?
 
@@ -124,7 +155,10 @@ cleanup() {
   # it is the stack that failed rather than a page, nothing else says anything
   # at all. Printing here rather than in the CI job means a local run is just as
   # informative, and means the teardown can't race the diagnosis.
-  if [ "$status" -ne 0 ]; then
+  #
+  # Exit 2 is the check's own usage/harness code (a bad --only, no Chrome), and
+  # it has already explained itself for the same reason.
+  if [ "$status" -ne 0 ] && [ -z "$SELF_EXPLAINED" ] && [ "$status" -ne 2 ]; then
     echo "--- FAILED (exit $status) — last 60 lines of the stack:"
     compose logs --tail=60 2>&1 || true
     if [ -n "$SERVE_PID" ]; then
@@ -151,53 +185,111 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Start from nothing, every time. A stack left behind by an interrupted run (or
-# by KEEP_STACK) keeps its Mongo volume, and seeding a second club into it fails
-# on the allowlist's unique email index — which reports as a duplicate-key error
-# rather than as "you have a stale stack".
-echo "--- clearing any previous $PROJECT stack"
-compose down -v --remove-orphans >/dev/null 2>&1 || true
+# What REUSE needs to skip the seed: the ids the fixture produced, and which
+# mode the stack was booted in. Per compose project, and in the temp directory
+# rather than the repo — it describes a running container, so it should not
+# outlive a reboot, and it must never be something git can see.
+#
+# The session cookie is deliberately NOT in here. It is a credential, and this
+# file's whole purpose is to be readable by a later process; re-minting it costs
+# one `go run` and removes the question.
+STATE_FILE="${TMPDIR:-/tmp}/browser-check-${PROJECT}.state"
+MODE=$([ -n "$DEV_BUILD" ] && echo dev || echo prod)
 
-echo "--- building and starting the stack ($PROJECT on $DEV_HTTP_PORT)"
-# --build is not optional: the frontend bundle is baked into the frontend image
-# and the Go binary into the server image, so without it the whole run reports
-# on artifacts that predate the change under test.
-if [ -n "$DEV_BUILD" ]; then
-  # Only Mongo and the API. The frontend image is not built at all, because in
-  # this mode nothing is served from it — the pages come from `npm run serve`.
-  # `--no-deps` on the server is what skips it (compose.dev.yaml has the server
-  # depending on the frontend service, to get the dist volume populated first).
-  #
-  # The server then boots with an empty dist and logs "index.html not found",
-  # which is correct and harmless here: nothing asks it for a page. It still
-  # serves every /api route, which is all this mode wants from it.
-  compose up -d --wait mongo
-  compose up -d --build --no-deps server
+if [ -n "$REUSE" ]; then
+  echo "--- REUSE: checking against the $PROJECT stack already up"
+
+  if [ ! -f "$STATE_FILE" ]; then
+    fail "REUSE=1 but no fixture is recorded for $PROJECT ($STATE_FILE)." \
+      "Run once with KEEP_STACK=1 first, then REUSE=1 after that."
+  fi
+  # shellcheck disable=SC1090
+  . "$STATE_FILE"
+
+  if ! curl -fsS "$API_BASE/api/health" >/dev/null 2>&1; then
+    fail "REUSE=1 but nothing healthy is answering on $API_BASE." \
+      "The stack is gone; run once with KEEP_STACK=1 to rebuild it."
+  fi
+
+  # A mode switch cannot be honoured by reusing, and failing loudly here is the
+  # whole difference between a five-second error and twenty minutes: CORS_ORIGINS
+  # is read by the server AT BOOT, so a stack booted without --dev rejects every
+  # API call from the :8080 dev server. The app then renders as a completely
+  # empty database — no error, no warning, just a club with nothing in it — and
+  # every assertion fails for a reason that has nothing to do with the code.
+  if [ "$MODE" != "${STATE_MODE:-}" ]; then
+    fail "REUSE=1 but the stack on $API_BASE was booted for '${STATE_MODE:-unknown}' and this run wants '$MODE'." \
+      "CORS_ORIGINS is fixed at boot, so the two modes cannot share a stack." \
+      "Re-run without REUSE=1 (add KEEP_STACK=1 to keep the new one)."
+  fi
+
+  echo "    reusing event $EVENT_ID (seeded for mode '$STATE_MODE')"
 else
-  compose up -d --build
-fi
+  # Start from nothing, every time. A stack left behind by an interrupted run (or
+  # by KEEP_STACK) keeps its Mongo volume, and seeding a second club into it fails
+  # on the allowlist's unique email index — which reports as a duplicate-key error
+  # rather than as "you have a stale stack".
+  echo "--- clearing any previous $PROJECT stack"
+  compose down -v --remove-orphans >/dev/null 2>&1 || true
+  rm -f "$STATE_FILE"
 
-echo "--- waiting for the server"
-for i in $(seq 1 90); do
-  if curl -fsS "$API_BASE/api/health" >/dev/null 2>&1; then break; fi
-  if [ "$i" = 90 ]; then
-    echo "server never became healthy; last 50 lines:" >&2
-    compose logs --tail=50 server >&2
+  echo "--- building and starting the stack ($PROJECT on $DEV_HTTP_PORT)"
+  # --build is not optional: the frontend bundle is baked into the frontend image
+  # and the Go binary into the server image, so without it the whole run reports
+  # on artifacts that predate the change under test.
+  if [ -n "$DEV_BUILD" ]; then
+    # Only Mongo and the API. The frontend image is not built at all, because in
+    # this mode nothing is served from it — the pages come from `npm run serve`.
+    # `--no-deps` on the server is what skips it (compose.dev.yaml has the server
+    # depending on the frontend service, to get the dist volume populated first).
+    #
+    # The server then boots with an empty dist and logs "index.html not found",
+    # which is correct and harmless here: nothing asks it for a page. It still
+    # serves every /api route, which is all this mode wants from it.
+    compose up -d --wait mongo
+    compose up -d --build --no-deps server
+  else
+    compose up -d --build
+  fi
+
+  echo "--- waiting for the server"
+  for i in $(seq 1 90); do
+    if curl -fsS "$API_BASE/api/health" >/dev/null 2>&1; then break; fi
+    if [ "$i" = 90 ]; then
+      echo "server never became healthy; last 50 lines:" >&2
+      compose logs --tail=50 server >&2
+      exit 1
+    fi
+    sleep 2
+  done
+
+  # One fixture, shared with `scripts/dev-up.sh` (TODO3 M4). mongosh is given as
+  # an explicit command rather than left to the default host one: the CI runner has
+  # no mongosh installed, only the container does.
+  SEED_OUT=$(scripts/seed-club.sh "$API_BASE" \
+    docker compose -f "$ROOT/compose.dev.yaml" -p "$PROJECT" \
+    exec -T mongo mongosh --quiet "mongodb://localhost:27017/schej-it")
+  read -r USER_ID RESPONDER_ID EVENT_ID <<<"$SEED_OUT"
+  if ! [[ "$EVENT_ID" =~ ^[0-9a-f]{24}$ ]]; then
+    echo "seed-club.sh did not produce an event id; it said: $SEED_OUT" >&2
     exit 1
   fi
-  sleep 2
-done
 
-# One fixture, shared with `scripts/dev-up.sh` (TODO3 M4). mongosh is given as
-# an explicit command rather than left to the default host one: the CI runner has
-# no mongosh installed, only the container does.
-SEED_OUT=$(scripts/seed-club.sh "$API_BASE" \
-  docker compose -f "$ROOT/compose.dev.yaml" -p "$PROJECT" \
-  exec -T mongo mongosh --quiet "mongodb://localhost:27017/schej-it")
-read -r USER_ID RESPONDER_ID EVENT_ID <<<"$SEED_OUT"
-if ! [[ "$EVENT_ID" =~ ^[0-9a-f]{24}$ ]]; then
-  echo "seed-club.sh did not produce an event id; it said: $SEED_OUT" >&2
-  exit 1
+  # Written even when this run will tear the stack down, because that costs
+  # nothing and the alternative is remembering to set KEEP_STACK *before* the
+  # run you turn out to want to repeat. A stale file on its own is harmless:
+  # REUSE checks the stack is answering before it trusts anything in here.
+  # The umask is set in a subshell so it applies to this file and nothing else
+  # the script goes on to create.
+  (
+    umask 077
+    cat >"$STATE_FILE" <<EOF
+USER_ID=$USER_ID
+RESPONDER_ID=$RESPONDER_ID
+EVENT_ID=$EVENT_ID
+STATE_MODE=$MODE
+EOF
+  )
 fi
 
 # Minted here rather than returned by seed-club.sh: a session cookie is a
@@ -242,7 +334,11 @@ echo "--- running the routes check against $CHECK_BASE"
 # `--prefix` rather than `cd frontend`: the EXIT trap runs wherever the script
 # left the shell, and it needs to still be somewhere compose and the repo make
 # sense.
-SHOT_ARGS=()
-[ -n "$SHOTS_DIR" ] && SHOT_ARGS=(--shots "$SHOTS_DIR")
+CHECK_ARGS=()
+[ -n "$SHOTS_DIR" ] && CHECK_ARGS+=(--shots "$SHOTS_DIR")
+# ONLY is a regexp matched against section names, case-insensitively — see the
+# check's own header for what the sections are called. Passed through rather
+# than interpreted here: one place decides what a section is.
+[ -n "${ONLY:-}" ] && CHECK_ARGS+=(--only "$ONLY")
 npm --prefix "$ROOT/frontend" run --silent check:routes -- \
-  "$CHECK_BASE" "$COOKIE" "$EVENT_ID" "${SHOT_ARGS[@]}"
+  "$CHECK_BASE" "$COOKIE" "$EVENT_ID" "${CHECK_ARGS[@]}"

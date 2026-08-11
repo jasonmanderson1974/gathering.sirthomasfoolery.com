@@ -212,8 +212,51 @@ Run before pushing.
 
 **Frontend** (`cd frontend`):
 ```bash
-npm run test:unit
+npm run test:unit          # both tiers
+npm run test:unit:node     # just the pure-JS tier
+npm run test:unit:dom      # just the mounted-component tier
 ```
+
+**There are two tiers, split by filename** (TODO3 M6), and the split is worth
+understanding before adding a test:
+
+| | `node` | `dom` |
+|---|---|---|
+| files | `src/**/*.test.js` | `src/**/*.spec.js` |
+| environment | `node` | `happy-dom` |
+| what it sees | pure JS, extracted *out of* components | a mounted component: template, props, events, watchers, slots |
+| what it cannot see | anything rendered | real CSS, layout, the icon webfont, a 390px viewport |
+
+The `node` tier is the original suite and is unchanged: ~395 tests in 1.5s,
+importing no `.vue` file. That was a deliberate Vue 2 decision and it stays.
+
+The `dom` tier is the missing middle between it and `scripts/browser-check.sh`,
+which was the only other thing in the repo that rendered a component and cost
+two minutes to say so. Every browser-only bug this repo has paid for that was
+*not* a layout bug lived in that gap — K3's dialog that threw on every open,
+L1's validation guard that never fired, K5's toggles that could be switched on
+but not off. Mount tests find those in milliseconds.
+
+Three things to know before writing one:
+
+- **`src/test/setup.dom.js` fails every test on an unasserted `console.error` or
+  `[Vue warn]`.** That guard, not the assertions, is what would have caught K3:
+  Vue catches a throw from a lifecycle hook, reports it to the console and
+  carries on, so the mount succeeds and the page looks fine. Opt a single
+  expected line out with `expectConsole(/…/)` — never a whole test.
+- **`fetch` is faked for the tier** (`src/test/api.js`). An unmocked call gets
+  `{}` and a 200 rather than a socket; `mockApi(route, body)` answers one, and
+  `apiCalls()` / `calledApi(route)` assert that a call happened. It is faked at
+  `fetch` rather than at `@/utils` so `fetch_utils.js` — the layer every call
+  site's error handling is written against — is real code under test.
+- **Mount through `src/test/mount.js`** (`mountApp`), which assembles Vuetify, a
+  store with the app's real role getters, and a memory router carrying the app's
+  real route names. It attaches to a live element because Vuetify teleports
+  every overlay to `document.body`; use `openDialogs()` to find one.
+
+`@vitejs/plugin-vue` is a devDependency purely so this tier can compile `.vue`.
+**It is not a step toward Vite** — see the repo-layout note in `CLAUDE.md` for
+why the app stays on Vue CLI / webpack.
 
 **Backend** (`cd server`) — needs a Go toolchain, plus a reachable Mongo if you
 want the integration tests to actually run (`compose.dev.yaml` provides one on
@@ -320,14 +363,47 @@ frontend renders what the API returns), in **two legs**, `prod` and `dev` (see
 from `scripts/browser-check.sh`, which is also how you run it here:
 
 ```bash
-scripts/browser-check.sh                 # build, seed, check, tear down (~3m)
-scripts/browser-check.sh --dev           # ...served by `npm run serve` (~2m)
+scripts/browser-check.sh                 # build, seed, check, tear down (~2m)
+scripts/browser-check.sh --dev           # ...served by `npm run serve` (~57s)
 scripts/browser-check.sh --shots out/    # leave a PNG of every page it visits
 KEEP_STACK=1 scripts/browser-check.sh    # leave it up on :3010 to poke at
+REUSE=1 scripts/browser-check.sh         # ...and check again against it (~31s)
+REUSE=1 ONLY=event scripts/browser-check.sh   # ...one section only (~11s)
 ```
 
 It refuses to start on a stale checkout: the first thing it runs is
 `scripts/dev-doctor.sh --deps` (below).
+
+**`REUSE` and `ONLY` are for the middle of fixing something** (TODO3 M7). A full
+run is two image builds, a boot, a seed and fourteen navigations, and until
+these existed, reproducing one failing assertion cost all of it every time. Run
+once with `KEEP_STACK=1`, then `REUSE=1 ONLY=event` for each attempt after that
+— about eleven seconds.
+
+- `REUSE=1` skips the teardown, the build, the boot and the seed, and implies
+  `KEEP_STACK=1` (tearing down a stack you asked to reuse would break the next
+  run). The fixture's ids are recorded in
+  `${TMPDIR:-/tmp}/browser-check-<project>.state` — never the session cookie,
+  which is a credential and is re-minted each run.
+- It refuses, in one line and without dumping sixty lines of container log, if
+  there is no recorded fixture, if nothing healthy is answering on :3010, or if
+  the stack was booted in the **other mode**. That last one matters:
+  `CORS_ORIGINS` is read by the server at boot, so a stack booted without
+  `--dev` rejects every API call from the :8080 dev server — and the app then
+  renders as a completely empty club, with no error anywhere, failing every
+  assertion for a reason that has nothing to do with the code.
+- `ONLY=<regexp>` is matched case-insensitively against section names (the
+  route names, plus `event band tabs`, `dialogs`, `home phone`, `event phone`).
+  It changes nothing about what is asserted, and it stamps `(PARTIAL: …)` on the
+  verdict line so a filtered run cannot be quoted later as a full one. A pattern
+  matching nothing exits 2 and lists the sections, rather than printing a green
+  `ALL PASS` over zero assertions.
+- Independently of both: a navigation now polls the route's own first assertion
+  instead of sleeping a flat six seconds, with the six as a **ceiling**. A short
+  grace still follows, because the two assertions every visit makes are about
+  console output and some of it arrives after the page is usable — returning the
+  instant the page renders would shrink the window those watch, which is a check
+  getting weaker while appearing to get faster.
 
 That script brings up its **own** compose project (`timeful-check`) on **:3010**
 and **:27018**, so it never touches a dev stack you have running on :3002 — nor
@@ -427,12 +503,13 @@ known requirement:
 > - **Members and Chronicle entries.** An empty club renders its empty states
 >   perfectly and asserts nothing about the list rendering that actually breaks.
 
-> **Why it exists.** Nothing else in the repo can fail on a rendering bug. All 23
-> unit-test files are pure JS deliberately extracted *out of* components —
-> `vitest.config.mjs` sets `environment: "node"`, no test imports a `.vue` file,
-> and `@vue/test-utils` is not a dependency — so the suite stays green through a
-> total rendering failure. It is written against the DOM rather than against Vue
-> so that it keeps its value across a framework upgrade.
+> **Why it exists.** Nothing else in the repo can fail on a *rendered-page* bug.
+> The `node` unit tier is pure JS deliberately extracted *out of* components and
+> renders nothing; the `dom` tier (M6) mounts components, but under happy-dom,
+> where there is no real CSS, no layout, no icon webfont and no viewport — so
+> everything the two assertions below are aimed at is invisible to it by
+> construction. This check is written against the DOM rather than against Vue so
+> that it keeps its value across a framework upgrade.
 >
 > Two assertions are worth knowing about. **"exactly one band panel visible"**
 > is aimed at `v-show` being defeated by Tailwind's `important: true`, which
@@ -596,7 +673,9 @@ where its two screenshots land.
   `go list ./... | grep -v '/scripts'` — every package except the stale one-off
   migrations. Nothing here enumerates packages, so nothing can drift out of sync
   with the Testing section above (TODO E12).
-- **`frontend-ci.yml`** — on `frontend/**` changes: `npm run test:unit` + build.
+- **`frontend-ci.yml`** — on `frontend/**` changes: lint + `check:vuetify-props`
+  + `npm run test:unit` + build. `test:unit` runs **both** vitest projects, so
+  the mounted-component tier (M6) is covered by the step that was already there.
 - Both run on push to `main` and PRs. `gh run list` targets this repo directly
   (it was detached from the schej-it fork network), so no `--repo` flag is needed.
 

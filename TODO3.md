@@ -21,20 +21,26 @@
 > **Part L (opened 2026-08-11) is the post-migration review. L1–L8 are closed; L9–L15 are open**
 > and are all P2/P3 — dependency and hardening work, nothing user-facing left in it.
 >
-> **Part M (opened 2026-08-11): M1–M5 are DONE (2026-08-11). M6 and M7 are open.** It is not a
+> **Part M (opened 2026-08-11) is COMPLETE — M1–M7 all shipped 2026-08-11.** It is not a
 > code review: it is a review of what can be verified on a dev box without a deploy, run after
 > everything in the repo was confirmed green on the WSL box (395 unit tests, lint,
-> `check:vuetify-props`, the Go suite, and `browser-check.sh` ALL PASS in 3m19s). Five items in,
+> `check:vuetify-props`, the Go suite, and `browser-check.sh` ALL PASS in 3m19s). Seven items in,
 > this box can now do things it could not on the morning of the 11th: take a screenshot (M1), fail
-> on a framework warning (M2), **sign in** (M3), hold a club worth clicking through (M4), and say
-> so when it is stale (M5). Left: the missing mount-test tier (M6) and the check's
-> one-mode-only ergonomics (M7).
+> on a framework warning (M2), **sign in** (M3), hold a club worth clicking through (M4), say
+> so when it is stale (M5), **mount a component** (M6), and re-run one section of the browser check
+> in eleven seconds instead of rebuilding everything (M7).
 >
-> Two of the five found something the item had not predicted, both by testing rather than reading:
+> The numbers moved: **411 unit tests in 7.3s** (was 395), and the full browser check is **1m58s**
+> with `--dev` at **57s** (was 3m19s / 2m) — same 64 assertions.
+>
+> Four of the seven found something the item had not predicted, all by testing rather than reading:
 > M2 exposed an icon-font assertion that inferred "painted" from network shape and reported a
-> working font as missing, and **M3's proposed gate did not work at all** — the dev image ran
+> working font as missing; **M3's proposed gate did not work at all** — the dev image ran
 > `-release=true`, so `gin.Mode()` had been silently claiming production on every dev stack for
-> months. Neither was visible from the source.
+> months; M6 found that happy-dom lets a mounted component open a real socket to whatever is
+> listening on the machine; and M7 found that the script's own failure path buried its
+> one-sentence diagnosis under sixty lines of container log. None of the four was visible from the
+> source.
 >
 > **The backlog was the Vue 3 migration (Part K).** The three inherited `P3` items (`TODO2.md` G2, G3, G4) were **closed
 > won't-do on 2026-08-10** by user decision — see the section below for the reasoning, which is
@@ -1663,7 +1669,7 @@ other files newer than it, and the frontend container was running an image that 
 at all. That is the 18-hours-of-Vue-2-out-of-a-Vue-3-checkout state, reported in one line instead
 of being discovered by debugging a fake regression.
 
-### M6 — no fast render tier: a component regression costs 3m19s · **P2 · M**
+### M6 — no fast render tier: a component regression costs 3m19s · **P2 · M** — DONE 2026-08-11
 
 Measured on this box: `scripts/browser-check.sh` is **3m19s** end to end (two image builds, boot,
 seed, ~14 navigations at a flat 6s each), and it is the **only** thing in the repo that renders a
@@ -1686,7 +1692,45 @@ proof — the New Gathering dialog opening, the event band tabs switching, one f
 It does not replace `check:routes`: it cannot see layout, real CSS, the icon webfont or a 390px
 viewport. It is the missing middle, not a substitute for either end.
 
-### M7 — `browser-check.sh` has exactly one mode: everything, from scratch · **P3 · S**
+**DONE 2026-08-11**, at the scope asked for: two dependencies, one vitest project, three specs.
+**411 tests now, up from 395; the whole suite is 7.3s.** The tiers are split by *filename* —
+`*.test.js` is `node`, `*.spec.js` is `dom` — so the two globs cannot overlap and a file's tier is
+readable from its name.
+
+**The console guard is the part that would actually have caught K3, and it is not an assertion any
+spec makes.** `src/test/setup.dom.js` fails every test in the tier on an unasserted
+`console.error` or `[Vue warn]`, because a component that throws from a lifecycle hook does not
+fail a test on its own: Vue catches it, reports it to the console and returns a wrapper that looks
+fine. `expectConsole(/…/)` opts one line out, mirroring `expectConsoleErrors` on a route.
+Verified in both directions — a bad prop type and a hook that throws each fail a test that asserts
+nothing else.
+
+**Verified against the bug it is named after.** With L1's guard put back
+(`if (!this.$refs.form.validate()) return`, a Promise, always truthy), 4 of the 6 GuestDialog specs
+fail. That is the assertion this repo could not make before.
+
+Three things the item did not anticipate, all found by running it rather than reading:
+
+- **`fetch` had to be faked for the whole tier, not per spec.** `NewEvent` mounts `EmailInput`,
+  which warms a contacts cache in `mounted()`, and happy-dom will open a real socket to
+  localhost:3000 to do it — a suite whose result depends on what is listening on the machine.
+  `src/test/api.js` fakes it at `fetch` rather than at `@/utils`, so `fetch_utils.js` (the layer
+  every call site's error handling is written against) stays real code under test.
+- **Four browser APIs Vuetify calls unconditionally are absent from happy-dom** — `ResizeObserver`,
+  `visualViewport`, `matchMedia`, `Element.prototype.animate`. The `visualViewport` one is read
+  from inside a watcher, so it surfaced as an unhandled rejection rather than at the mount.
+- **`@vitejs/plugin-vue` is needed to compile `.vue`,** and vite does not resolve extensionless
+  `.vue` imports the way Vue CLI's webpack config does. The app has ~20 of them, and the first one
+  in a mounted tree failed the whole spec file at collection, pointing at a file that exists.
+  `resolve.extensions` now matches the app. **None of this moves the app toward Vite** — the plugin
+  is the SFC compiler wired into the transform vitest uses, and never runs over the shipped bundle.
+
+One thing the tier found on its own: `Event.vue`'s `scheduleOverlapComponent?.states.SET_SPECIFIC_TIMES`
+(and `?.respondents.length`) guard the ref being absent but not the property being absent on it.
+Harmless in the app, since the real child always has both — so the spec's stub carries that
+contract rather than the assertion being weakened, and the coupling is now written down somewhere.
+
+### M7 — `browser-check.sh` has exactly one mode: everything, from scratch · **P3 · S** — DONE 2026-08-11
 
 `KEEP_STACK=1` leaves a stack up and there is no way to then *use* it — no `REUSE=1`, so
 reproducing one failing assertion means another full rebuild and reseed. There is no way to run a
@@ -1696,6 +1740,33 @@ the 199 seconds are spent waiting on pages that settled in one.
 `REUSE=1`, `ONLY=event`, and a poll on the route's own first assertion with the 6s as a ceiling
 rather than a floor. None of it changes what is checked — it changes whether the check is
 reachable in the middle of fixing something, which is the only time it is worth the most.
+
+**DONE 2026-08-11**, all three, measured on this box: a full run **1m58s** (was 3m19s), `REUSE=1`
+**31s**, `REUSE=1 ONLY=event` **11s**. `--dev` is **57s**. ALL PASS in both modes, 64 assertions,
+unchanged.
+
+- **The poll's grace period is deliberate and is not padding.** Returning the instant the route's
+  first assertion goes true would quietly shrink the window the two console assertions watch — a
+  panel that fetches on mount can warn a beat after the element the readiness check looks for
+  exists. That is a check getting weaker while appearing to get faster, which is the exact failure
+  M2 was about. 900ms after ready; the full 6s whenever the page needs it.
+- **The readiness signal is the route's own first assertion**, so no route maintains a second
+  description of "has it rendered", and the wait can never pass on a page the run is about to fail.
+- **`REUSE` records the fixture ids in `${TMPDIR}/browser-check-<project>.state`, never the session
+  cookie** — that is a credential, and this file exists to be read by a later process. Re-minting
+  costs one `go run`.
+- **The mode guard is the load-bearing part of `REUSE`.** `CORS_ORIGINS` is read by the server at
+  boot, so reusing a non-`--dev` stack under `--dev` means every API call from :8080 is rejected
+  and the app renders as a completely empty club — no error, no warning, every assertion failing
+  for a reason that has nothing to do with the code. It refuses in one line instead.
+- **A partial run says so on its own verdict line**, not only in a header: `ALL PASS` is the string
+  that gets pasted into a commit message, so one that checked a single route has to be unable to
+  pass for the real thing. A pattern matching nothing exits **2** and lists the sections, rather
+  than printing a green ALL PASS over zero assertions.
+- One thing the item did not anticipate: the failure path drowned its own diagnosis. Every non-zero
+  exit dumped 60 lines of stack log, which is right when the stack died and useless when the script
+  has just explained in one sentence that you asked to reuse a stack booted in the other mode. A
+  `fail()` helper marks those as self-explained, and exit 2 from the check is treated the same way.
 
 ---
 
@@ -1725,3 +1796,10 @@ them exists because ignoring it cost a debugging session:
   putting a phone into horizontal scroll. The `CLAUDE.md` frontend section lists the ones already
   paid for. **Run `--dev` when the change is framework-shaped** (M2): a production build has no
   warnings in it to find, so the twelve warning assertions only mean something there.
+- **Reach for the right tier** (M6/M7). A component fault — a dialog that throws on open, a guard
+  that never fires, a toggle that will not turn off — belongs in a `*.spec.js` mount test, which
+  costs a second. A *rendered-page* fault — layout, real CSS, the icon webfont, 390px — can only
+  be seen by `check:routes`, and no mount test will ever catch one. When fixing something the
+  browser check found, run it once with `KEEP_STACK=1` and then `REUSE=1 ONLY=<section>` for each
+  attempt; a partial run stamps `(PARTIAL: …)` on its verdict line, so don't quote one as a full
+  run.

@@ -41,9 +41,26 @@ The Go module is `sirtom/server` (renamed from `schej.it/server`, 2026-07-23). T
 ### Frontend (`cd frontend`)
 - `npm run serve` — dev server with hot reload (port 8080).
 - `npm run build` — production build into `frontend/dist`.
-- `npm run test:unit` — Vitest (config in `vitest.config.mjs`, matches `src/**/*.test.js`, alias `@` → `src/`).
+- `npm run test:unit` — Vitest, **both tiers** (config in `vitest.config.mjs`, alias `@` → `src/`).
+  `npm run test:unit:node` / `:dom` run one. The two are split by filename, and the split is
+  load-bearing (M6):
+  - **`node` — `src/**/*.test.js`**, `environment: "node"`, ~395 tests in 1.5s. Pure JS extracted
+    *out of* components; it renders nothing and never should.
+  - **`dom` — `src/**/*.spec.js`**, `environment: "happy-dom"`, mounts real components with
+    `@vue/test-utils` + Vuetify + a store + a router (`src/test/mount.js`). This is the missing
+    middle between the node tier and the 2-minute browser check, and it is where K3's dialog crash,
+    L1's dead validation guard and K5's stuck toggles all lived. **`src/test/setup.dom.js` fails
+    every test in this tier on an unasserted `console.error` or `[Vue warn]`** — that is the half
+    that would actually have caught K3, since Vue reports a throw from a hook to the console and
+    carries on. Opt one line out with `expectConsole(/…/)`, never a whole test.
+  - `fetch` is faked for the whole `dom` tier (`src/test/api.js`); an unmocked call returns `{}`
+    rather than opening a socket. Mock a route with `mockApi("/user/profile", {...})`.
+  - **It does not replace `check:routes`**: no real CSS, no layout, no icon webfont, no 390px
+    viewport. Don't move a layout assertion down into it.
 - `npm run test:unit:watch` — Vitest watch mode.
 - Run a single test: `npx vitest run src/utils/date_utils.test.js` (or `-t "test name"`).
+- **`@vitejs/plugin-vue` is a devDependency and compiles `.vue` for the `dom` tier only.** It is not
+  a step toward Vite — the app stays on Vue CLI / webpack for the reason in the repo layout below.
 - `npm run check:vuetify-props` — diffs every prop bound on a `v-*` tag against Vuetify's own
   shipped `.d.ts` declarations, and fails on any that no longer exists. Runs in CI. **Vue 3 turns
   an unrecognised prop into a plain DOM attribute silently**, so a Vuetify 2 leftover renders at
@@ -55,16 +72,26 @@ The Go module is `sirtom/server` (renamed from `schej.it/server`, 2026-07-23). T
   project `timeful-check` on `:3010`/`:27018`, so it can't touch a dev stack you
   have on `:3002`), seeds a populated club, mints a superAdmin cookie and runs
   `check:routes` against it, then tears it down. `KEEP_STACK=1` leaves it up.
-  **This is the only thing in the repo that looks at a rendered page** — the
-  unit suite is pure JS with `environment: "node"`, imports no `.vue` file and
-  has no `@vue/test-utils`, so it stays green through a total rendering failure
-  (TODO3 L5). Runs in CI as `browser-ci.yml`, on `frontend/**` *and* `server/**`.
+  **This is the only thing in the repo that looks at a REAL rendered page** —
+  with real CSS, real layout, the icon webfont and a phone viewport. The `dom`
+  unit tier (above) mounts components but has none of those (TODO3 L5/M6). Runs
+  in CI as `browser-ci.yml`, on `frontend/**` *and* `server/**`.
+- **`REUSE=1` and `ONLY=<regexp>` are the fixing-something loop** (M7). Run once
+  with `KEEP_STACK=1`, then `REUSE=1 ONLY=event` for every attempt after that:
+  no build, no boot, no seed, one section — ~11s against ~2m. `REUSE` refuses
+  with a one-line reason if the stack is gone or was booted in the other mode
+  (`CORS_ORIGINS` is fixed at boot, so `--dev` and non-`--dev` cannot share a
+  stack). `ONLY` changes nothing about what is asserted and stamps
+  `(PARTIAL: …)` on its own verdict line, so a filtered run can't be quoted as a
+  full one; a pattern matching nothing exits 2 rather than printing ALL PASS
+  over zero assertions. A navigation now polls the route's own first assertion
+  with the old flat 6s as a **ceiling** rather than a floor.
 - **`--dev` is not an optional extra: without it twelve of the assertions cannot
   fail.** The frontend image runs `npm run build`, and Vue and Vuetify compile
   every warning out of a production build, so each "— no framework warnings"
   line reports PASS whatever the app does. `--dev` serves the app from
   `npm run serve` against the same stack's API, where the warnings are real —
-  and it is *faster* (2m vs 3m), because no frontend image is built. CI runs
+  and it is *faster* (57s vs 2m), because no frontend image is built. CI runs
   both legs. A framework upgrade speaks mostly through warnings, not throws:
   that is the channel K5, L1, L3 and L7 were all found through, by hand (M2).
   The split works because `src/constants.js` honours `VUE_APP_API_URL` and

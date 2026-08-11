@@ -48,6 +48,10 @@ jobs:
       - name: Check Vuetify props
         run: npm run check:vuetify-props
 
+      # BOTH vitest projects: the `node` tier (pure JS, renders nothing) and the
+      # `dom` tier (real components mounted under happy-dom, TODO3 M6). The dom
+      # tier fails on an unasserted console.error or [Vue warn], which is the
+      # channel a lifecycle-hook throw and a framework deprecation both use.
       - name: Run unit tests
         run: npm run test:unit
 

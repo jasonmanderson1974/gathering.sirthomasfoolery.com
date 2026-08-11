@@ -3,10 +3,13 @@
  * Every route, every band tab, signed in — does it render, and does it render
  * quietly?
  *
- * WHY THIS EXISTS: the unit suite cannot fail on any of this. All 23 test files
- * are pure JS extracted *out of* components — `vitest.config.mjs` sets
- * `environment: "node"`, nothing imports a `.vue` file, and `@vue/test-utils`
- * is not a dependency. The suite stays green through a total rendering failure.
+ * WHY THIS EXISTS: no unit test can fail on any of this. The `node` tier is
+ * pure JS extracted *out of* components and renders nothing at all; the `dom`
+ * tier (M6) mounts components but under happy-dom, with no real CSS, no layout,
+ * no icon webfont and no viewport — so `v-show` beaten by an `!important`
+ * display utility, an element 1,300px below the fold and a fifth tab that
+ * wraps at 390px are all invisible to it by construction. This is the only
+ * thing in the repo that sees a page the way a person does.
  * Lint and the production build are no better: the repo has already shipped
  * `v-show` beaten by Tailwind's `important: true`, a purged class name built
  * from a template string, and a fifth band tab pushing a phone into horizontal
@@ -23,13 +26,21 @@
  * exercised if the session has the role.
  *
  * Usage: node scripts/check-routes.js <baseUrl> <sessionCookie> <eventId>
- *                                     [--shots <dir>]
+ *                                     [--shots <dir>] [--only <pattern>]
  *
  * `--shots` leaves a PNG of every page it visits in <dir> (TODO3 M1). A failing
  * run then hands over an image of the page that failed rather than only the name
  * of the assertion — which is the difference between "band tab Lists — exactly
  * one panel visible: FAIL" and seeing that two panels are stacked. For one page
  * in isolation use `scripts/shot.js`, which drives the same code.
+ *
+ * `--only <pattern>` runs just the sections whose name matches (TODO3 M7) — a
+ * case-insensitive regexp, so `--only event` is the event page, its band tabs
+ * and its phone pass, and nothing else. It changes NOTHING about what is
+ * asserted; it exists so that fixing one page does not cost a full run each
+ * time. A filtered run says so on every summary line it prints, because a green
+ * "ALL PASS" that only checked one route is exactly the kind of thing that gets
+ * quoted later as if it were a full one.
  */
 const path = require("path")
 const {
@@ -45,22 +56,38 @@ const args = process.argv.slice(2)
 
 // Pulled out before the positionals are read, so `--shots <dir>` can go
 // anywhere on the line and the three required arguments keep their order.
-let SHOTS = null
-const shotsAt = args.indexOf("--shots")
-if (shotsAt !== -1) {
-  SHOTS = args[shotsAt + 1]
-  if (!SHOTS) {
-    console.error("--shots needs a directory")
+function takeOption(name) {
+  const at = args.indexOf(name)
+  if (at === -1) return null
+  const value = args[at + 1]
+  if (!value) {
+    console.error(`${name} needs a value`)
     process.exit(2)
   }
-  args.splice(shotsAt, 2)
+  args.splice(at, 2)
+  return value
+}
+
+const SHOTS = takeOption("--shots")
+const ONLY_SOURCE = takeOption("--only")
+// Built once so a bad pattern fails here, naming itself, rather than on the
+// first section it is tested against.
+let ONLY = null
+if (ONLY_SOURCE) {
+  try {
+    ONLY = new RegExp(ONLY_SOURCE, "i")
+  } catch (e) {
+    console.error(`--only ${ONLY_SOURCE} is not a valid regexp: ${e.message}`)
+    process.exit(2)
+  }
 }
 
 const [rawBase, COOKIE, EVENT_ID] = args
 
 if (!rawBase || !COOKIE || !EVENT_ID) {
   console.error(
-    "usage: node scripts/check-routes.js <baseUrl> <sessionCookie> <eventId> [--shots <dir>]"
+    "usage: node scripts/check-routes.js <baseUrl> <sessionCookie> <eventId> " +
+      "[--shots <dir>] [--only <pattern>]"
   )
   process.exit(2)
 }
@@ -336,11 +363,57 @@ async function setViewport(cdp, vp) {
   })
 }
 
-/** Navigates, waits for the SPA to settle, and reports console noise. */
-async function visit(cdp, events, url, label, expected = null) {
+/*
+ * How long a navigation is given to settle (TODO3 M7).
+ *
+ * This used to be a flat `sleep(6000)` per navigation — about 90 of the run's
+ * 199 seconds spent waiting on pages that were done in one. It is now a
+ * CEILING: poll the route's own first assertion until it is true, then allow a
+ * short grace and move on.
+ *
+ * The grace is not padding. The two assertions every visit makes are about
+ * console output, and some of it arrives after the page is usable — a panel
+ * that fetches on mount can warn a beat after the element the readiness check
+ * looks for exists. Returning the instant `ready` goes true would quietly
+ * shrink the window those two assertions watch, which is a check getting
+ * weaker while appearing to get faster. Six seconds of console is still six
+ * seconds of console whenever the page needs it.
+ */
+const SETTLE_CEILING_MS = 6000
+const SETTLE_GRACE_MS = 900
+const POLL_MS = 250
+
+/**
+ * Navigates, waits for the SPA to settle, and reports console noise.
+ *
+ * `ready` is a page-side expression that is true once the route has rendered —
+ * in practice the route's own first assertion, so nothing new has to be written
+ * per route and the wait cannot pass on a page the run is about to fail.
+ */
+async function visit(cdp, events, url, label, { expected = null, ready } = {}) {
   events.length = 0
   await cdp("Page.navigate", { url })
-  await sleep(6000)
+
+  if (ready) {
+    const deadline = Date.now() + SETTLE_CEILING_MS
+    let settled = false
+    while (Date.now() < deadline) {
+      await sleep(POLL_MS)
+      try {
+        settled = (await evaluate(cdp, ready)) === true
+      } catch {
+        // Evaluating mid-navigation can fail outright; that is a "not yet".
+        settled = false
+      }
+      if (settled) break
+    }
+    // Not settled means the full ceiling has already elapsed, so there is
+    // nothing left to grant — the assertions below run on six seconds of page,
+    // exactly as they always did.
+    if (settled) await sleep(SETTLE_GRACE_MS)
+  } else {
+    await sleep(SETTLE_CEILING_MS)
+  }
 
   // `expected` is a regexp for errors a route legitimately produces. Anything
   // not matching it still fails — muting a whole route would defeat the point.
@@ -362,6 +435,21 @@ async function visit(cdp, events, url, label, expected = null) {
   await shoot(cdp, label)
 }
 
+// Everything `--only` can select, counted so a filtered run can say what it
+// left out rather than leaving the reader to infer it from a short log.
+let skipped = 0
+let ran = 0
+const sectionNames = []
+function selected(name) {
+  sectionNames.push(name)
+  if (!ONLY || ONLY.test(name)) {
+    ran++
+    return true
+  }
+  skipped++
+  return false
+}
+
 async function main() {
   const { cdp, events, close } = await launch({ port: 9444 })
 
@@ -373,17 +461,22 @@ async function main() {
       path: "/",
     })
 
-    console.log("--- routes, desktop (1280x900) ---")
-    await setViewport(cdp, DESKTOP)
+    if (ONLY) console.log(`--- ONLY /${ONLY_SOURCE}/i — a PARTIAL run ---`)
 
-    for (const route of routes(EVENT_ID)) {
-      await visit(
-        cdp,
-        events,
-        BASE + route.path,
-        route.name,
-        route.expectConsoleErrors
-      )
+    const desktopRoutes = routes(EVENT_ID).filter((r) => selected(r.name))
+
+    if (desktopRoutes.length > 0) {
+      console.log("--- routes, desktop (1280x900) ---")
+      await setViewport(cdp, DESKTOP)
+    }
+
+    for (const route of desktopRoutes) {
+      await visit(cdp, events, BASE + route.path, route.name, {
+        expected: route.expectConsoleErrors,
+        // The route's own first assertion doubles as its readiness signal, so
+        // no route has to maintain a second description of "has it rendered".
+        ready: route.assertions[0]?.[1],
+      })
 
       const path = await evaluate(cdp, "location.pathname")
       if (/sign-in/.test(path)) {
@@ -402,66 +495,102 @@ async function main() {
       }
     }
 
-    console.log("\n--- event band tabs ---")
-    await visit(cdp, events, `${BASE}/e/${EVENT_ID}`, "event (tabs)")
-    for (const tab of BAND_TABS) {
-      const clicked = await evaluate(cdp, clickButton(`/^${tab}( |$)/`))
-      if (clicked !== "ok") {
-        report(false, `band tab "${tab}" — present`, clicked)
-        continue
+    if (selected("event band tabs")) {
+      console.log("\n--- event band tabs ---")
+      await visit(cdp, events, `${BASE}/e/${EVENT_ID}`, "event (tabs)", {
+        ready: buttonMatching("/^Discussion/"),
+      })
+      for (const tab of BAND_TABS) {
+        const clicked = await evaluate(cdp, clickButton(`/^${tab}( |$)/`))
+        if (clicked !== "ok") {
+          report(false, `band tab "${tab}" — present`, clicked)
+          continue
+        }
+        await sleep(1200)
+        const visible = await evaluate(cdp, visibleBandPanels)
+        report(
+          visible === 1,
+          `band tab "${tab}" — exactly one panel visible`,
+          `saw ${visible}`
+        )
+        await shoot(cdp, `band-${tab}`)
       }
-      await sleep(1200)
-      const visible = await evaluate(cdp, visibleBandPanels)
-      report(
-        visible === 1,
-        `band tab "${tab}" — exactly one panel visible`,
-        `saw ${visible}`
-      )
-      await shoot(cdp, `band-${tab}`)
     }
 
-    console.log("\n--- dialogs ---")
-    await visit(cdp, events, `${BASE}/home`, "home (dialog)")
-    const opened = await evaluate(cdp, clickButton("/call a gathering/i"))
-    report(opened === "ok", "New Gathering — activator present")
-    await sleep(2500)
-    // Asserted on the ARIA role rather than a Vuetify class. This line
-    // originally read `.v-dialog--active`, which Vuetify 3 does not emit — so
-    // the check failed on the framework upgrade while the dialog itself was
-    // opening perfectly well. `[role=dialog]` is the app's contract with
-    // assistive technology and survives the next upgrade too.
-    report(
-      (await evaluate(
-        cdp,
-        `[...document.querySelectorAll('[role=dialog]')]
-           .filter((e) => e.getBoundingClientRect().height > 0).length === 1`
-      )) === true,
-      "New Gathering — dialog opens"
-    )
-    report(
-      (await evaluate(cdp, hasText("/Dates and times/i"))) === true,
-      "New Gathering — form renders"
-    )
-    await shoot(cdp, "new-gathering-dialog")
-
-    console.log("\n--- phone (390x844) ---")
-    await setViewport(cdp, PHONE)
-    for (const [label, path] of [
-      ["home", "/home"],
-      ["event", `/e/${EVENT_ID}`],
-    ]) {
-      await visit(cdp, events, BASE + path, `${label} @390px`)
+    if (selected("dialogs")) {
+      console.log("\n--- dialogs ---")
+      await visit(cdp, events, `${BASE}/home`, "home (dialog)", {
+        ready: buttonMatching("/call a gathering/i"),
+      })
+      const opened = await evaluate(cdp, clickButton("/call a gathering/i"))
+      report(opened === "ok", "New Gathering — activator present")
+      await sleep(2500)
+      // Asserted on the ARIA role rather than a Vuetify class. This line
+      // originally read `.v-dialog--active`, which Vuetify 3 does not emit — so
+      // the check failed on the framework upgrade while the dialog itself was
+      // opening perfectly well. `[role=dialog]` is the app's contract with
+      // assistive technology and survives the next upgrade too.
       report(
-        (await evaluate(cdp, noHorizontalScroll)) === true,
-        `${label} @390px — no horizontal scroll`
+        (await evaluate(
+          cdp,
+          `[...document.querySelectorAll('[role=dialog]')]
+           .filter((e) => e.getBoundingClientRect().height > 0).length === 1`
+        )) === true,
+        "New Gathering — dialog opens"
       )
+      report(
+        (await evaluate(cdp, hasText("/Dates and times/i"))) === true,
+        "New Gathering — form renders"
+      )
+      await shoot(cdp, "new-gathering-dialog")
+    }
+
+    const phonePages = [
+      ["home", "/home", buttonMatching("/call a gathering/i")],
+      ["event", `/e/${EVENT_ID}`, buttonMatching("/^Discussion/")],
+    ].filter(([label]) => selected(`${label} phone`))
+
+    if (phonePages.length > 0) {
+      console.log("\n--- phone (390x844) ---")
+      await setViewport(cdp, PHONE)
+      for (const [label, routePath, ready] of phonePages) {
+        await visit(cdp, events, BASE + routePath, `${label} @390px`, { ready })
+        report(
+          (await evaluate(cdp, noHorizontalScroll)) === true,
+          `${label} @390px — no horizontal scroll`
+        )
+      }
     }
   } finally {
     close()
   }
 
   if (SHOTS) console.log(`\n${shotSeq} screenshot(s) in ${path.resolve(SHOTS)}`)
-  console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`)
+
+  // The filter is repeated on the verdict line, not just announced at the top.
+  // "ALL PASS" is the string that gets pasted into a commit message or read off
+  // a scrollback hours later, and one that checked a single route has to be
+  // unable to pass for the real thing.
+  const partial = ONLY
+    ? ` (PARTIAL: --only /${ONLY_SOURCE}/i, ${skipped} section(s) skipped)`
+    : ""
+
+  // A pattern matching nothing would otherwise print a perfectly green "ALL
+  // PASS" over zero assertions, which is the single worst thing this option
+  // could do. Exit 2 — the harness-error code, not the assertion-failure one.
+  if (ran === 0) {
+    console.error(
+      `\n--only /${ONLY_SOURCE}/i matched no section, so NOTHING was checked.` +
+        `\nThe sections are:\n  ${sectionNames.join("\n  ")}`
+    )
+    process.exit(2)
+  }
+
+  console.log(
+    failures === 0
+      ? `\nALL PASS${partial}`
+      : `\n${failures} FAILURE(S)${partial}`
+  )
   process.exit(failures === 0 ? 0 : 1)
 }
 
