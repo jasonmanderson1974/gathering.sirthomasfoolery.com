@@ -15,7 +15,7 @@ upon the hour that suits the whole Order.
 
 It is a hardened, rebranded derivative of [Timeful](https://github.com/schej-it/timeful.app)
 (formerly Schej.it), an open-source availability/scheduling app. Built with
-[Vue 2](https://github.com/vuejs/vue), [Go](https://github.com/golang/go),
+[Vue 3](https://github.com/vuejs/core), [Go](https://github.com/golang/go),
 [MongoDB](https://github.com/mongodb/mongo), and
 [TailwindCSS](https://github.com/tailwindlabs/tailwindcss).
 

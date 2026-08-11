@@ -27,7 +27,7 @@ This repo is developed from **more than one machine**, all pushing directly to `
 
 Monorepo for Timeful (formerly Schej.it), a group availability/scheduling app.
 
-- `frontend/` — Vue 2 + Vuetify + Tailwind single-page app (Vue CLI). Built output lands in `frontend/dist`.
+- `frontend/` — Vue 3 + Vuetify 3 + Tailwind single-page app (Vue CLI 5 / webpack). Built output lands in `frontend/dist`. Migrated from Vue 2 on 2026-08-11 (TODO3 Part K). **Stay on Vue CLI / webpack — do not migrate to Vite**: its asset hashes (`index-DiwrgTda.js`, base64url, dash-separated) never match the immutable-cache regex J4 added for Vue CLI's `app.457eeeac.js`, so the caching would silently switch off with no error and no warning (TODO3 K, Phase 0).
 - `server/` — Go (Gin) HTTP API backed by MongoDB. Also serves the built frontend as static files at the root.
 - `deploy/` — the production host's configuration, version-controlled so the host is reproducible rather than remembered: systemd units, `mongod.conf`, logrotate, and the `install.sh` / `mongo-bootstrap.sh` bootstrap scripts. See `DEPLOYMENT.md`.
 - `compose.dev.yaml` — the **local dev** stack (Mongo + a built frontend + the server). Docker is used *only* here; production runs no containers. The old Docker production stack (`compose.yaml`) was deleted on 2026-08-05 after the migration; recover it from git history if you ever need it.
@@ -76,7 +76,7 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
 ## Architecture
 
 ### Backend (Gin + MongoDB)
-`server/main.go` wires everything: CORS, cookie sessions, Mongo init (`db.Init`), the email scheduler (`services/reminders.StartReminderScheduler`), then mounts API groups under `/api` via `routes.Init*`. After API routes, it walks `frontend/dist` and registers each file as a static route, loads `index.html` as a template, and falls back to a `NoRoute` handler that injects per-route OG meta tags (e.g. for `/e/:eventId` it looks up the event to set the title and OG image).
+`server/main.go` wires everything: CORS, cookie sessions, Mongo init (`db.Init`), the email scheduler (`services/reminders.StartReminderScheduler`), then mounts API groups under `/api` via `routes.Init*`. After API routes, it walks `frontend/dist` and registers each file as a static route, loads `index.html` as a template, and falls back to a `NoRoute` handler (`noRouteHandler`, `server/main.go:327`) that serves that shell. **It does no DB lookup and injects no per-route meta tags** — it used to set per-event OG titles, and E3 deleted that on purpose, because it served gathering names to anyone who guessed a short id, with no session. Don't reintroduce it. The handler also sends `Cache-Control: no-cache, no-store, must-revalidate` on the shell, so a returning browser can't hold an `index.html` pointing at hashed chunks a later deploy removed.
 
 - `routes/` — HTTP handlers grouped by domain, one file per area rather than one per model: `auth.go`, `user.go`, `users.go`, `admin.go`/`admin_profile.go`, `display_names.go`, `avatars.go`, `images.go`, `events.go`, `event_responses.go`, `event_emails.go`, `event_import.go`, `event_lists.go`, `personal_lists.go`, `personal_notes.go`, `expenses.go`, `expense_receipts.go`, `comments.go`, `mentions.go`, `mention_emails.go`, `polls.go`, `chronicle.go`, `folders.go`, `health.go`, `text.go`. Route comments use Swag annotations; regenerate `docs/` with the full `swag init` command above, flags included.
 - `models/` — Mongo document structs. Core: `Event` (with `Rsvp`, `Poll`, `EventList`, `GatheringRecurrence`, `Remindee` nested in it), `User`, `Response`, `Folder`/`FolderEvent`, `CalendarAccount`, `Comment`, `Chronicle`, `Allowlist`, `Avatar`, `Otp`, `Location`, `DailyUserLog`, `Personal*` (My Lists / My Notes), `Expense`/`ExpenseSplit`/`ExpenseReceipt`, plus `Role` (`roles.go`), `EncryptedString` and the generic `Set[T]`.
@@ -87,12 +87,31 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
 - `utils/` — generic helpers (`array_utils`, `mail_utils`, `email_layout`, `request_utils`, `response_utils`, `ratelimit`, `http`, `utils`).
 - `logger/` — wraps log file (`logs.log`) + stdout via `gin.DefaultWriter`.
 
-### Frontend (Vue 2 SPA)
+### Frontend (Vue 3 SPA)
 - `src/router/index.js` — routes: `landing`, `home`, `event`, `settings`, `admin` (`MemberAdmin.vue`), `fellowship` (the member roll/directory), `chronicle`, `responded`, `sign-in`, `sign-up` (also `SignIn.vue`, with `initialIsSignUp`), `auth`, `privacy-policy`, `404`. Every route except the landing/auth surfaces is behind the guard — see `src/views/`.
 - `src/store/index.js` — single (non-modular) Vuex store holding auth user, events, folders, the two remaining feature flags (`daysOnlyEnabled`, `overlayAvailabilitiesEnabled`), and dialog/snackbar state. The paywall and sign-up-sheet flags are gone with their features; don't reintroduce a flag for a feature that no longer exists.
 - `src/components/` — organized by feature folder (`event/`, `home/`, `landing/`, `settings/`, `schedule_overlap/`, `calendar_permission_dialogs/`, `general/`) plus top-level shared components.
 - `src/utils/` — date math (`date_utils.js`, **dayjs only** — `moment` and `spacetime` are long gone from `package.json` and from every import; it is 946 lines / 32 exports and **splitting it was closed won't-do on 2026-08-10**, TODO2 G2 — its size is not a defect, and a blind split has already been shown to break live behaviour), `fetch_utils.js` (API client), `plugin_utils.js` (handles the postMessage plugin API — see `PLUGIN_API_README.md`), `sign_in_utils.js`, `location_utils.js`, `markdown.js`, `services/` (`EventService.js`, `FolderService.js`, `ExpenseService.js`, `PersonalService.js` — thin wrappers over `fetch_utils`).
 - Tailwind + Vuetify coexist; `tailwind.config.js` purges `src/**/*.{vue,js,...}`.
+- **Vue 3 discards an unrecognised prop on a component silently** — no warning in dev, none in the
+  build. That is the general rule the next three bullets are instances of, and it is why a Vuetify 2
+  leftover renders at the wrong size, variant or position with lint, the unit suite, the build and
+  `check:routes` all green. `npm run check:vuetify-props` is the only check that sees it (L2/L3/L4;
+  75 real leftovers were found this way, not the 6 a read-through named). On a plain HTML tag the
+  unknown prop is worse than dropped — it becomes a literal DOM attribute.
+- **Vuetify 3's `@change` gives the native DOM event, not the new value** (Vuetify 2 gave the value).
+  Use `@update:model-value` on Vuetify components; keep `@change` only where the element really is
+  native (`<input type="file">` in `AvatarEditorDialog` / `ExpenseDialog`). K5 shipped this to
+  production: a toggle POSTed an `Event` object where a `*bool` was bound, and four availability
+  switches took `!!val` — `!!someEvent` is always `true`, so they could be turned on but never off.
+  The wider lesson: on a framework bump, sweeping *one* event name is not sweeping the class.
+- **`VForm.validate()` returns `Promise<{ valid, errors }>`**, and a Promise is always truthy, so
+  `if (!this.$refs.form.validate()) return` is dead code (L1). Write
+  `const { valid } = await this.$refs.form.validate(); if (!valid) return` and make the caller
+  `async`. Don't "fix" it by adding `validate-on="submit"` — that installs neither the input nor the
+  blur watcher, a pristine field reports `isValid === null`, and the `:disabled="!formValid"` both
+  submit buttons carry would latch disabled forever. Note a rules change does not itself trigger
+  validation, which is what makes GuestDialog's "install strict rules, then validate" pattern valid.
 - **`tailwind.config.js` sets `important: true`, which breaks `v-show`.** `tw-flex`/`tw-block`/
   `tw-grid` compile to `display: … !important` and beat the inline `display: none` that `v-show`
   sets, so the element stays visible with no error anywhere. Use `v-if` on any element that both

@@ -1089,7 +1089,7 @@ Make CI do it: `docker compose -f compose.dev.yaml up -d --build`, mint a superA
 one event, run `check:routes` against it. The two halves are complementary and both are needed —
 `check:routes` catches "it did not render", L4 catches "it rendered wrong".
 
-### L6 — the docs still describe a Vue 2 app · **P1 · S**
+### L6 — the docs still describe a Vue 2 app · **P1 · S** — DONE 2026-08-11
 
 Same class as J9, and it matters more than usual because `CLAUDE.md` is what the next session
 reads before touching anything.
@@ -1105,6 +1105,25 @@ reads before touching anything.
   event now (K5), `VForm.validate()` is async (L1), and **an unknown prop on a Vuetify component
   is silently discarded** (L2/L3) — that last one is the general rule the other two are instances
   of.
+
+All three done. `CLAUDE.md` now reads "Vue 3 + Vuetify 3 + Tailwind (Vue CLI 5 / webpack)" and
+"### Frontend (Vue 3 SPA)"; `README.md` links `vuejs/core`. `DEVELOPMENT.md` needed nothing — it
+was written after the migration and already refers to Vue 3.
+
+Two things were added beyond the item as filed, both because they are decisions a future session
+would otherwise re-litigate from scratch:
+
+- **Don't migrate to Vite**, with the reason (its base64url dash-separated hashes never match the
+  immutable-cache regex J4 added for Vue CLI's `app.<hash>.js`, so caching switches off silently).
+  That was reasoned out in Part K's Phase 0 and lived only in the backlog.
+- The `noRouteHandler` correction records the **`Cache-Control: no-cache` on the shell** as well as
+  E3's deletion of the OG lookup — same handler, and it is the fix for the stale-`index.html`
+  breakage that once took out the OTP login after a run of deploys.
+
+The gotchas list leads with the general rule (**Vue 3 discards an unrecognised prop silently, and
+on a plain HTML tag it becomes a literal DOM attribute**), then K5 and L1 under it, each with the
+trap that makes the naive fix wrong: for K5, `<input type="file">` must keep `@change`; for L1,
+`validate-on="submit"` would latch every submit button disabled forever.
 
 ### L7 — 111 emits are undeclared, which in Vue 3 also makes them DOM listeners · **P2 · S**
 
