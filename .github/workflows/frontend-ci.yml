@@ -40,6 +40,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Vue 3 turns an unrecognised prop into a DOM attribute without a word, so
+      # a Vuetify 2 prop that no longer exists survives lint, the unit suite and
+      # the build (TODO3 L2/L3). This diffs every prop we bind against Vuetify's
+      # own shipped type declarations — the only check in the repo that reads
+      # them.
+      - name: Check Vuetify props
+        run: npm run check:vuetify-props
+
       - name: Run unit tests
         run: npm run test:unit
 

@@ -8,6 +8,7 @@
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "lint": "eslint . --ext .js,.vue --max-warnings 0",
+    "check:vuetify-props": "node scripts/check-vuetify-props.js",
     "check:signed-out": "node scripts/check-signed-out.js",
     "check:signed-in": "node scripts/check-signed-in.js",
     "check:routes": "node scripts/check-routes.js"

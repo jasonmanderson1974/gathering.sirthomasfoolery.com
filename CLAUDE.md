@@ -44,6 +44,11 @@ The Go module is `sirtom/server` (renamed from `schej.it/server`, 2026-07-23). T
 - `npm run test:unit` — Vitest (config in `vitest.config.mjs`, matches `src/**/*.test.js`, alias `@` → `src/`).
 - `npm run test:unit:watch` — Vitest watch mode.
 - Run a single test: `npx vitest run src/utils/date_utils.test.js` (or `-t "test name"`).
+- `npm run check:vuetify-props` — diffs every prop bound on a `v-*` tag against Vuetify's own
+  shipped `.d.ts` declarations, and fails on any that no longer exists. Runs in CI. **Vue 3 turns
+  an unrecognised prop into a plain DOM attribute silently**, so a Vuetify 2 leftover renders at
+  the wrong size, variant or position with lint, the unit suite, the build and `check:routes` all
+  green — this is the only check that sees them (TODO3 L2/L3/L4).
 
 ### Backend (`cd server`)
 - `air` — live-reload dev (install: `go install github.com/cosmtrek/air@latest`). Runs `main.go`, listens on `:3002` (`:3003` if `NODE_ENV=staging`).
