@@ -30,6 +30,29 @@ KEEP_RELEASES=5
 say() { printf '==> %s\n' "$1"; }
 die() { printf '!! %s\n' "$1" >&2; exit 1; }
 
+# Where the quiet steps put their output. Deliberately NOT a mktemp dir under
+# the EXIT trap: the whole point is that the file still exists after `die` has
+# exited, so the path printed below can actually be opened. One file per step,
+# overwritten each run.
+LOG_DIR=${TMPDIR:-/tmp}/thegathering-deploy
+mkdir -p "$LOG_DIR"
+
+# Fail with the output, not just a verdict. The test gate used to
+# run under `>/dev/null 2>&1`, so a stale node_modules and a genuine regression
+# both printed the identical line — "Frontend tests failed." — and the only way
+# to tell them apart was to re-run the suite by hand.
+#   $1 the headline   $2 the log file   $3.. optional hint lines
+die_with_log() {
+  local msg=$1 log=$2; shift 2
+  printf '!! %s\n' "$msg" >&2
+  printf '!! ---- last 40 lines ----\n' >&2
+  tail -n 40 "$log" >&2 || true
+  printf '!! ---- full output: %s ----\n' "$log" >&2
+  local hint
+  for hint in "$@"; do printf '!! %s\n' "$hint" >&2; done
+  exit 1
+}
+
 # ---------------------------------------------------------------- preflight --
 
 # Two machines push to main, so a deploy from a stale checkout would quietly
@@ -59,10 +82,17 @@ if [ "${SKIP_TESTS:-}" != "1" ]; then
   # of production, and the db/ encryption sweep test WRITES to what it finds.
   # Pointing a deploy gate at real member data is not a trade worth making.
   # shellcheck disable=SC2046
-  (cd server && go test $(go list ./... | grep -v '/scripts') >/dev/null) \
-    || die "Backend tests failed."
-  (cd frontend && npm run test:unit --silent >/dev/null 2>&1) \
-    || die "Frontend tests failed."
+  (cd server && go test $(go list ./... | grep -v '/scripts')) \
+    >"$LOG_DIR/backend-tests.log" 2>&1 \
+    || die_with_log "Backend tests failed." "$LOG_DIR/backend-tests.log"
+  # npm run test:unit is both vitest projects (node + dom). The dom tier is the
+  # one with devDependencies a stale node_modules won't have, so name the
+  # doctor here: an unresolved import reads exactly like a broken test.
+  (cd frontend && npm run test:unit --silent) \
+    >"$LOG_DIR/frontend-tests.log" 2>&1 \
+    || die_with_log "Frontend tests failed." "$LOG_DIR/frontend-tests.log" \
+         "If that looks like an unresolved import rather than a failed" \
+         "assertion, node_modules is stale: scripts/dev-doctor.sh --deps"
 fi
 
 # ------------------------------------------------------------------- build --
@@ -80,7 +110,9 @@ say "Building the frontend"
 (cd frontend && VUE_APP_GOOGLE_CLIENT_ID="${CLIENT_ID:-}" \
                 VUE_APP_MICROSOFT_CLIENT_ID="${MICROSOFT_CLIENT_ID:-}" \
                 VUE_APP_GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-}" \
-                npm run build >/dev/null 2>&1) || die "Frontend build failed."
+                npm run build) \
+  >"$LOG_DIR/frontend-build.log" 2>&1 \
+  || die_with_log "Frontend build failed." "$LOG_DIR/frontend-build.log"
 cp -r frontend/dist "$STAGING/dist"
 
 # Prove the client ID actually made it into the bundle rather than trusting that
