@@ -7,7 +7,7 @@
     <v-switch
       id="buffer-time-switch"
       :input-value="bufferTime.enabled"
-      @change="(val) => updateCalendarOption('enabled', val)"
+      @update:model-value="(val) => updateCalendarOption('enabled', val)"
       inset
       class="tw-flex tw-items-center"
       hide-details

@@ -647,7 +647,7 @@
                     id="overlay-availabilities-toggle"
                     inset
                     :input-value="overlayAvailability"
-                    @change="updateOverlayAvailability"
+                    @update:model-value="updateOverlayAvailability"
                     hide-details
                   >
                     <template v-slot:label>

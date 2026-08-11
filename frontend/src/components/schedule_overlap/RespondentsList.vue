@@ -242,7 +242,7 @@
           inset
           id="show-best-times-toggle"
           :input-value="showBestTimes"
-          @change="(val) => $emit('update:showBestTimes', !!val)"
+          @update:model-value="(val) => $emit('update:showBestTimes', !!val)"
           hide-details
         >
           <template v-slot:label>

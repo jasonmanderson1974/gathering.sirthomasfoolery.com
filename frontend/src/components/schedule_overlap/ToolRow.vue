@@ -173,7 +173,7 @@
                   density="compact"
                   hide-details
                   label="Send reminder"
-                  @change="(v) => $emit('update:reminderLeadTimeHours', v)"
+                  @update:model-value="(v) => $emit('update:reminderLeadTimeHours', v)"
                 />
               </v-list-item>
               <!-- Recurrence (C5): repeat this gathering on a cadence -->
@@ -185,7 +185,7 @@
                   density="compact"
                   hide-details
                   label="Repeat"
-                  @change="(v) => $emit('update:recurrenceFrequency', v)"
+                  @update:model-value="(v) => $emit('update:recurrenceFrequency', v)"
                 />
               </v-list-item>
               <!-- Venue for the confirmed gathering (optional) -->

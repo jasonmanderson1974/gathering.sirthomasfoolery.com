@@ -11,7 +11,7 @@
         inset
         id="show-best-times-toggle"
         :input-value="showBestTimes"
-        @change="(val) => $emit('update:showBestTimes', !!val)"
+        @update:model-value="(val) => $emit('update:showBestTimes', !!val)"
         hide-details
       >
         <template v-slot:label>
@@ -25,7 +25,7 @@
         inset
         id="hide-if-needed-toggle"
         :input-value="hideIfNeeded"
-        @change="(val) => $emit('update:hideIfNeeded', !!val)"
+        @update:model-value="(val) => $emit('update:hideIfNeeded', !!val)"
         hide-details
       >
         <template v-slot:label>
@@ -39,7 +39,7 @@
         inset
         id="show-response-counts-toggle"
         :input-value="showResponseCounts"
-        @change="(val) => $emit('update:showResponseCounts', !!val)"
+        @update:model-value="(val) => $emit('update:showResponseCounts', !!val)"
         hide-details
       >
         <template v-slot:label>
@@ -53,7 +53,7 @@
         inset
         id="start-calendar-on-monday-toggle"
         :input-value="startCalendarOnMonday"
-        @change="(val) => $emit('update:startCalendarOnMonday', !!val)"
+        @update:model-value="(val) => $emit('update:startCalendarOnMonday', !!val)"
         hide-details
       >
         <template v-slot:label>

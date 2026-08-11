@@ -133,7 +133,7 @@
             :loading="busyEmail === member.email"
             :disabled="busyEmail === member.email"
             class="tw-max-w-[9rem] tw-shrink-0"
-            @change="changeRole(member, $event)"
+            @update:model-value="changeRole(member, $event)"
           />
           <span
             v-else

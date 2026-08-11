@@ -18,7 +18,7 @@
           <!-- eslint-disable vue/no-mutating-props -->
           <v-checkbox
             v-model="account.enabled"
-            @change="(enabled) => toggleCalendarAccount(enabled)"
+            @update:model-value="(enabled) => toggleCalendarAccount(enabled)"
             hide-details
           />
           <!-- eslint-enable vue/no-mutating-props -->
@@ -86,7 +86,7 @@
         >
           <v-checkbox
             v-model="subCalendar.enabled"
-            @change="(enabled) => toggleSubCalendarAccount(enabled, id)"
+            @update:model-value="(enabled) => toggleSubCalendarAccount(enabled, id)"
             class="-tw-mt-px"
             hide-details
           />

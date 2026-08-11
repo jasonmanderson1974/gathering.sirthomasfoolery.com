@@ -148,7 +148,7 @@
                 dense
                 hide-details
                 class="tw-mt-0 tw-flex-grow tw-pt-0"
-                @change="setSelected(person.id, $event)"
+                @update:model-value="setSelected(person.id, $event)"
               />
 
               <!-- Even mode shows the computed share, read-only; by-amount
