@@ -95,12 +95,25 @@ const noHorizontalScroll =
  * console error, no failed assertion, a build and a unit suite both green.
  * `document.fonts.check()` is the obvious API and the wrong one: with no
  * matching `@font-face` at all it reports *true* (system fonts are assumed
- * available), so it passes in exactly the case worth catching. Reading the face
- * out of `document.fonts` distinguishes "declared but never loaded" from "not
- * declared".
+ * available), so it passes in exactly the case worth catching.
+ *
+ * So: the face is declared and did not error, and the woff2 arrived whole.
+ * Asserting `status === 'loaded'` instead looks tighter and is flaky — on the
+ * second navigation of a session the font comes from cache and the face was
+ * observed still reporting `unloaded` while the glyphs painted. The response
+ * size is the signal that survives caching: a hit reports `transferSize` 0 but
+ * still reports `decodedBodySize`, and the SPA fallback serving `index.html` in
+ * place of a missing font decodes to a couple of KB, not 400.
  */
-const iconFontLoaded = `[...document.fonts]
-  .some((f) => /Material Design Icons/.test(f.family) && f.status === 'loaded')`
+const iconFontLoaded = `(() => {
+  const faces = [...document.fonts]
+    .filter((f) => /Material Design Icons/.test(f.family))
+  if (faces.length === 0 || faces.some((f) => f.status === 'error')) return false
+  return performance.getEntriesByType('resource').some(
+    (r) => /materialdesignicons-webfont\\.[0-9a-f]{8}\\.woff2$/.test(r.name) &&
+      r.decodedBodySize > 100000
+  )
+})()`
 
 /**
  * ...and arrived from us, content-hashed, rather than from a CDN.

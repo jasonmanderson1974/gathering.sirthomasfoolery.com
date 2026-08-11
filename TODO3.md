@@ -1264,15 +1264,28 @@ Two things worth knowing before touching this again:
   them exactly once.
 
 `check:routes` now asserts both halves of this on `/home`, because the failure mode is silent —
-every `mdi-*` name renders as a blank square with nothing logged: **the icon webfont loaded** (read
-out of `document.fonts`; note `document.fonts.check()` is the wrong API here — with no matching
-`@font-face` at all it returns *true*) and **the icon webfont is self-hosted** (every
-`materialdesignicons` resource entry is same-origin, and one of them is a content-hashed woff2 — so
-a regression to any CDN fails, not just to jsdelivr).
+every `mdi-*` name renders as a blank square with nothing logged: **the icon webfont loaded** and
+**the icon webfont is self-hosted** (every `materialdesignicons` resource entry is same-origin, and
+one of them is a content-hashed woff2 — so a regression to *any* CDN fails, not just to jsdelivr).
+
+Writing the first of those is the part with a lesson in it. `document.fonts.check()` is the obvious
+API and the wrong one: with no matching `@font-face` at all it returns **true**, so it passes in
+exactly the case worth catching. Reading the face out of `document.fonts` and asserting
+`status === 'loaded'` is the next thing you'd write, and it is **flaky** — the live verification
+caught it failing on `/home` while the glyphs were plainly painting: on the second navigation of a
+session the font comes from cache and the face was still reporting `unloaded`. What survives
+caching is the response size — a cache hit reports `transferSize` 0 but still reports
+`decodedBodySize` — and it is diagnostic too, since a missing font hits the SPA fallback and
+"decodes" to a couple of KB of `index.html` rather than 400. So the assertion is: the face is
+declared, none errored, and the hashed woff2 decoded to >100 KB.
 
 Verified with the full local gate — eslint, `check:vuetify-props` (153 components, no unknown
-props), 395 unit tests, the production build — plus `scripts/browser-check.sh`: 46 assertions, all
-pass, the two new ones included.
+props), 395 unit tests, the production build — plus `scripts/browser-check.sh`: 63 assertions, all
+pass, the two new ones included. Shipped on `946d825` and verified live
+(`tools/browser/verify_L8_prod.js`, off-repo, twice): on landing and `/home` the font loads from
+our origin, an icon paints, and no request to jsdelivr/unpkg/cdnjs is made at all. `curl` agrees —
+`/fonts/materialdesignicons-webfont.fbaef2a9.woff2` comes back `200 font/woff2`, 403,216 bytes,
+`cache-control: public, max-age=31536000, immutable`.
 
 ### L9 — three Google Fonts families on the critical path · **P3 · S**
 
