@@ -1314,7 +1314,7 @@ of an invite-only, self-hosted club app sends every member's IP and UA to Google
 paint on a third party. Self-hosting the woff2 files is mechanical and removes both. Lower
 priority than L8 only because the version is not floating.
 
-### L10 — four build-toolchain vulnerabilities, none shipped · **P2 · S**
+### L10 — four build-toolchain vulnerabilities, none shipped · **P2 · S** — DONE 2026-08-11
 
 `npm audit`: 3 moderate, 1 high — webpack's `AutoPublicPathRuntimeModule` DOM-clobbering XSS, two
 `buildHttp` allowlist-bypass SSRF advisories, and `serialize-javascript` RCE/CPU-exhaustion
@@ -1326,6 +1326,68 @@ expected module-level GO-2026-5932).
 
 While here: add `npm audit` and `govulncheck` to CI as a scheduled job, so J12 and L10 are not
 both "someone remembered to look".
+
+**DONE 2026-08-11 — and the count above was wrong by an order of magnitude.**
+
+`npm audit` reported **48** (6 low, 21 moderate, 18 high, 3 critical), not "3 moderate, 1 high".
+The item was written against a stale reading. The *conclusion* survived — every one of the 48 is
+build- or dev-time (webpack, babel, vitest/vite dev server, webpack-dev-server's
+express/http-proxy-middleware, svgo, postcss) and none of it is in `dist` — but "S" was sized
+against four advisories and the real tree had twelve times that.
+
+`npm audit fix` (no `--force`), run to convergence, takes **48 → 14** and **changes no line of
+`package.json`**: it is a lockfile-only change, 2,194 insertions / 2,993 deletions. All three
+criticals and 16 of the 18 highs are gone. Trialled first on a copy of `package.json` +
+`package-lock.json` under `--package-lock-only`, so the shape was known before anything in the
+repo moved.
+
+**The remaining 14 must not be "fixed", and this is the part worth keeping.** All of them are
+rooted in `@vue/cli-service` and its plugins — Vue CLI 5, unmaintained upstream. npm's offered
+remediation for nearly every one of them is `@vue/cli-plugin-babel@3.12.1`: a **downgrade to Vue
+CLI 3**, flagged `isSemVerMajor`. `npm audit fix --force` here is not a fix, it is an outage — it
+would take the build with it, and K2 already settled that this app stays on Vue CLI / webpack
+(repo layout, TODO3 K Phase 0). Anyone who runs `--force` on a red audit and pushes the result
+will find out in CI at best.
+
+So the gate is not "zero advisories". `scripts/dependency-audit.sh` blocks on the three things
+that can actually reach a user, and prints the fourth as information:
+
+- **a vulnerability in a SHIPPED frontend dependency** — `npm audit --omit=dev --audit-level=low`,
+  which drops the entire Vue CLI toolchain and leaves what ends up in `dist`. Currently **0**. This
+  is the assertion with real signal, and it is stable: it does not churn every time a new
+  webpack-dev-server advisory lands.
+- **a Go vulnerability our code CALLS** — govulncheck's own exit code, which is non-zero only for
+  called symbols.
+- **a change to the module-level Go findings** — govulncheck exits 0 for these, so a new one would
+  otherwise arrive silently. J12's "expect exactly one finding, anything beyond that is new" is now
+  the `GO_ALLOWLIST` in that script, with the reason for the entry sitting next to it rather than
+  in prose in CLAUDE.md.
+- **the dev-toolchain total**, printed every run, failing never.
+
+Both blocking assertions were shown capable of failing before being trusted — the M2 lesson, and
+it earned its keep immediately. Perturbing `GO_ALLOWLIST` fails as intended. Moving
+`@vue/cli-service` into `dependencies` fires the shipped-dependency gate with the full postcss
+chain printed. And running the script from outside the repo revealed that a failed `cd server` (or
+any package-load abort — **exactly how J12's bare `./...` fails**) came back as *"our code CALLS a
+vulnerable symbol"*, sending the reader after a CVE that does not exist. The script now separates
+"the scan found something" from "the scan never ran".
+
+CI: `.github/workflows/dependency-audit.yml` — **weekly cron** (Mondays 07:00 UTC),
+`workflow_dispatch`, plus push/PR on the four dependency files and the script itself. The cron is
+the load-bearing trigger: a new advisory is published against code that has not changed, so a
+push-triggered job would have caught neither J12 nor L10. One job runs the same script you run
+locally, so the pass/fail policy lives in the script rather than in the workflow file where nobody
+running it by hand would see it.
+
+Verified with the full local gate on the new lockfile: eslint clean, `check:vuetify-props` clean
+(153 components), **411** unit tests green across both tiers, the production build clean (asset
+hashes still Vue CLI's `app.193e6bbb.css` shape, so J4's immutable-cache regex still matches), and
+`scripts/browser-check.sh` **ALL PASS**.
+
+Left open deliberately: the 14 dev-tree advisories, which close when Vue CLI does — not a task,
+a consequence. `vue-template-compiler` (Vue 2's compiler, pulled in by `vue-loader` under
+`@vue/cli-service`) is among them and is not used by anything: this app compiles through
+`@vue/compiler-sfc`.
 
 ### L11 — two collections' indexes exist only in migration scripts · **P3 · S**
 

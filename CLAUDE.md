@@ -136,7 +136,20 @@ The Go module is `sirtom/server` (renamed from `schej.it/server`, 2026-07-23). T
   failure mode is loud but misleading: a bare `govulncheck ./...` aborts in package loading on the
   `scripts/` migrations and looks like a broken checkout. **Expect exactly one finding** —
   GO-2026-5932, `x/crypto/openpgp` "unmaintained by design", which has no fixed version and is not
-  imported by our code. Anything beyond that is new (TODO J12).
+  imported by our code. Anything beyond that is new (TODO J12). That expectation is now enforced
+  rather than remembered — see `scripts/dependency-audit.sh` below.
+
+### Dependency audit (repo root)
+- `scripts/dependency-audit.sh [--npm|--go]` — both ecosystems, one verdict. Runs weekly in CI
+  (`dependency-audit.yml`); the **cron is the point**, since a new advisory lands against code that
+  has not changed (L10).
+- **It does not block on "any advisory", and that is deliberate.** The ~14 remaining `npm audit`
+  findings are all rooted in **Vue CLI 5, which is unmaintained**, and npm's offered remediation for
+  nearly all of them is `@vue/cli-plugin-babel@3.12.1` — a **downgrade to Vue CLI 3**. `npm audit
+  fix --force` here is not a fix, it is an outage. Plain `npm audit fix` is safe and lockfile-only.
+- What blocks: a vulnerability in a **shipped** dependency (`npm audit --omit=dev`, currently 0), a
+  Go vulnerability our code **calls**, and any change to the module-level Go findings against
+  `GO_ALLOWLIST` in the script. The dev-toolchain total prints every run and never fails.
 - `swag init --parseDependency --parseInternal` (in `server/`) — regenerate Swagger docs in `server/docs/` after editing route comments. **The two flags are required** — a bare `swag init` aborts with `cannot find type definition: primitive.DateTime` (swag can't introspect the Mongo driver types the allowlist models use); `--parseDependency` resolves them. Pin the CLI to the go.mod version (`go install github.com/swaggo/swag/cmd/swag@v1.16.1`; note its `--version` misreports as v1.8.12). Swagger UI is served at `http://localhost:3002/swagger/index.html`.
 - MongoDB backup/restore: `mongodump --host=localhost:27017 --db=schej-it` / `mongorestore --uri mongodb://localhost:27017 ./dump --drop`.
 

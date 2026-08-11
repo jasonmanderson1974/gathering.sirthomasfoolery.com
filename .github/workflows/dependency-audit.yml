@@ -1,0 +1,77 @@
+name: Dependency Audit
+
+# WHY THIS IS SCHEDULED AND NOT JUST ON PUSH (TODO3 L10): a new advisory is
+# published against code that has not changed. J12's six reachable Go
+# vulnerabilities and L10's npm pile were both found because a human happened to
+# run the scanners, on a commit that touched neither dependency file. A
+# push-triggered job would not have found either one. The cron is the point; the
+# push triggers are a bonus for the case where we change a dependency ourselves.
+on:
+  schedule:
+    # Mondays, 07:00 UTC. Cron on GitHub is best-effort and can be delayed by
+    # tens of minutes under load — fine for a weekly scan, not something to
+    # tighten in the hope of precision.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+      - "server/go.mod"
+      - "server/go.sum"
+      - "scripts/dependency-audit.sh"
+      - ".github/workflows/dependency-audit.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+      - "server/go.mod"
+      - "server/go.sum"
+      - "scripts/dependency-audit.sh"
+      - ".github/workflows/dependency-audit.yml"
+
+jobs:
+  # One job, both ecosystems, because the verdict is one verdict: the script
+  # decides what blocks, and it is the same script you can run locally
+  # (`scripts/dependency-audit.sh`). Splitting this into an npm job and a Go job
+  # would put the pass/fail policy in the workflow file, where nobody running it
+  # by hand would see it.
+  dependency-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: server/go.sum
+
+      # npm audit reads package-lock.json and does not need node_modules, but
+      # govulncheck needs the module cache, so the install is cheap insurance
+      # against a future check in this script wanting a real tree.
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      # Blocks on: a vulnerability in a SHIPPED frontend dependency, a Go
+      # vulnerability our code actually calls, or a change to the module-level
+      # Go findings. Does NOT block on the Vue CLI 5 dev-toolchain advisories —
+      # the reasoning, including why `npm audit fix --force` is an outage rather
+      # than a fix, is in the script's header comment.
+      - name: Audit dependencies
+        run: ./scripts/dependency-audit.sh
