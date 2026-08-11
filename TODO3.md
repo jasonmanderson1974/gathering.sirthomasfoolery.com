@@ -13,7 +13,13 @@
 > pass, because all three prior waves audited *our* code and nobody had ever audited what we depend
 > on. **Nothing in Part J is open.**
 >
-> **The backlog is the Vue 3 migration (Part K).** The three inherited `P3` items (`TODO2.md` G2, G3, G4) were **closed
+> **Part K is complete as of 2026-08-11 — every item shipped and deployed, and nothing in this file
+> is open.** Production serves the Vue 3 stack. **The one outstanding thing in the whole backlog is
+> not a code item: K5's calendar-linking check, which needs a human with a real OAuth consent flow.**
+> Nothing in the migration has ever exercised linking a Google/Microsoft/Apple calendar or importing
+> availability from one.
+>
+> **The backlog was the Vue 3 migration (Part K).** The three inherited `P3` items (`TODO2.md` G2, G3, G4) were **closed
 > won't-do on 2026-08-10** by user decision — see the section below for the reasoning, which is
 > what a future review pass needs to read before re-filing any of them. Nothing else is open in any
 > of the three backlog files.
@@ -681,7 +687,7 @@ than during it. The three direct `$vuetify.breakpoint` reads moved behind `viewp
 `isLgAndUp()` in `general_utils.js`, so Vuetify 3's rename to `$vuetify.display` — where
 `thresholds` also flip from upper bounds to lower — is one file.
 
-### K1 — two dead components · **P2 · S** — OPEN
+### K1 — two dead components · **P2 · S** — DONE 2026-08-10 (`d8a4fa8`)
 
 Surfaced while verifying J17, confirmed by a sweep over all 86 components (no others):
 
@@ -700,6 +706,20 @@ Absence from the built bundle is the decisive evidence: webpack never reached th
 exists anywhere, dynamic or otherwise (there is no `require.context` or `<component :is>` in the
 app). Unlike J13's `/ids` endpoint there is no external-contract argument — a Vue component is not
 API surface.
+
+**Shipped as `d8a4fa8` on 2026-08-10** — 425 deletions across three files: both components plus the
+five `isLgAndUp` lines in `general_utils.js`, exactly as the entry called for. Lint, 395 unit tests,
+the production build and `check:routes` were all green, and the work went out with the Part K deploys
+(`d8a4fa8` is an ancestor of the live build). So it landed *before* the cutover, which is the point
+of the item: neither component's ~15 Vuetify-2 constructs were ever migrated.
+
+**This heading nevertheless read `OPEN` until 2026-08-11 — the commit shipped, the record didn't
+move.** Recorded because of how it fails on re-reading: a stale `OPEN` on completed work does not
+look stale. Checking it out the obvious way — grep `src/` for referrers, grep `dist/` — returns
+*exactly* the emptiness the entry predicts, because the files are already gone; the verification
+that was supposed to confirm the item is actionable confirms it just as well when the item is
+finished. **`git log -- <the paths>` is the check that distinguishes the two**, and for a deletion
+item it is the only one that does.
 
 ### K2 — the cutover · **P0 · L** — DONE on branch `vue3` (2026-08-11), not yet merged
 
