@@ -19,6 +19,7 @@
           <v-checkbox
             v-model="account.enabled"
             @update:model-value="(enabled) => toggleCalendarAccount(enabled)"
+            color="primary"
             hide-details
           />
           <!-- eslint-enable vue/no-mutating-props -->
@@ -75,9 +76,14 @@
     <!-- Sub-calendar accounts -->
 
     <v-expand-transition>
+      <!-- Inset a shade darker than the panel's leather, so the sub-calendars
+           read as nested under the account. This was `tw-bg-[#EBF7EF]` — a pale
+           mint left over from the pre-Fellowship light theme, which put
+           parchment text on a near-white background and made the list
+           effectively unreadable. -->
       <div
         v-if="hasSubCalendars && showSubCalendars"
-        class="tw-space-y-2 tw-bg-[#EBF7EF] tw-py-2"
+        class="tw-space-y-2 tw-rounded tw-bg-wood-deep tw-py-2 tw-text-parchment"
       >
         <div
           v-for="(subCalendar, id) in account.subCalendars"
@@ -86,7 +92,10 @@
         >
           <v-checkbox
             v-model="subCalendar.enabled"
-            @update:model-value="(enabled) => toggleSubCalendarAccount(enabled, id)"
+            @update:model-value="
+              (enabled) => toggleSubCalendarAccount(enabled, id)
+            "
+            color="primary"
             class="-tw-mt-px"
             hide-details
           />

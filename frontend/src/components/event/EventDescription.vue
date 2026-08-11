@@ -1,8 +1,12 @@
 <template>
   <div class="tw-mt-1 tw-max-w-full sm:tw-mt-2 sm:tw-max-w-[calc(100%-236px)]">
+    <!-- hover was `tw-bg-[#eeeeee]`, the same light-theme leftover as the
+         sub-calendar list: hovering the description turned the card near-white
+         behind parchment-dim text. `hover:tw-bg-brass/10` is the idiom the
+         lists already use. -->
     <div
       v-if="showDescription"
-      class="tw-flex tw-w-full tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-brass-dim tw-bg-leather tw-p-2 tw-text-xs tw-font-normal tw-text-parchment-dim hover:tw-bg-[#eeeeee] sm:tw-text-sm"
+      class="tw-flex tw-w-full tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-brass-dim tw-bg-leather tw-p-2 tw-text-xs tw-font-normal tw-text-parchment-dim hover:tw-bg-brass/10 sm:tw-text-sm"
     >
       <div class="tw-grow tw-space-y-1">
         <div
