@@ -88,8 +88,13 @@
           </div>
         </div>
         <div v-show="folderOpenState[folder.id]">
+          <!-- vuedraggable 4 renders its rows through an `#item` scoped slot
+               and keys them itself from `item-key`; the v2 form (a v-for in the
+               default slot) throws "draggable element must have an item slot"
+               at runtime. -->
           <draggable
             :list="eventsByFolder[folder.id].events"
+            item-key="_id"
             group="events"
             @end="onEnd"
             :data-folder-id="
@@ -116,14 +121,14 @@
                 {{ folder.emptyMessage }}
               </div>
             </template>
-            <EventItem
-              v-for="event in eventsByFolder[folder.id].events"
-              :key="event._id"
-              :id="event._id"
-              :event="event"
-              :folder-id="folder.id"
-              class="item"
-            />
+            <template #item="{ element: event }">
+              <EventItem
+                :id="event._id"
+                :event="event"
+                :folder-id="folder.id"
+                class="item"
+              />
+            </template>
           </draggable>
         </div>
       </div>

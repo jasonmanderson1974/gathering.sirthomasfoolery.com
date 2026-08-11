@@ -293,10 +293,16 @@ async function main() {
     const opened = await evaluate(cdp, clickButton("/call a gathering/i"))
     report(opened === "ok", "New Gathering — activator present")
     await sleep(2500)
+    // Asserted on the ARIA role rather than a Vuetify class. This line
+    // originally read `.v-dialog--active`, which Vuetify 3 does not emit — so
+    // the check failed on the framework upgrade while the dialog itself was
+    // opening perfectly well. `[role=dialog]` is the app's contract with
+    // assistive technology and survives the next upgrade too.
     report(
       (await evaluate(
         cdp,
-        "document.querySelectorAll('.v-dialog--active').length === 1"
+        `[...document.querySelectorAll('[role=dialog]')]
+           .filter((e) => e.getBoundingClientRect().height > 0).length === 1`
       )) === true,
       "New Gathering — dialog opens"
     )

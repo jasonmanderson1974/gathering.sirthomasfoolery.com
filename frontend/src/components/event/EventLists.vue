@@ -107,9 +107,15 @@
         <!-- Entries (only while the list is open). Rendered from a flat list of
              precomputed rows rather than a recursive component, so the tree
              building itself is a pure function with tests. -->
+        <!-- vuedraggable 4 renders rows through an `#item` scoped slot and keys
+             them from `item-key`; the v2 form (a v-for in the default slot)
+             throws "draggable element must have an item slot" at runtime. A row
+             here is `{ item, depth, ... }`, not the entry itself, so `item-key`
+             has to be the function form rather than a field name. -->
         <draggable
           v-if="isExpanded(list._id)"
           :list="rowsOf(list)"
+          :item-key="(row) => row.item._id"
           :group="dragGroup"
           draggable=".list-row"
           :delay="200"
@@ -130,201 +136,209 @@
               Nothing here yet — add the first.
             </div>
           </template>
-          <div
-            v-for="row in rowsOf(list)"
-            :key="row.item._id"
-            :data-item-id="row.item._id"
-            :class="`list-row tw-rounded tw-px-2 tw-py-1 hover:tw-bg-brass/10 ${indentClass(
-              row.depth
-            )}`"
-          >
-            <!-- Inline edit of one's own entry -->
-            <template v-if="editingItemId === row.item._id">
-              <LocationInput
-                v-if="isLocationList(list)"
-                v-model="editText"
-                dense
-                hide-details
-                hide-icon
-                autofocus
-                @enter="submitEdit(list, row.item)"
-              />
-              <v-text-field
-                v-else
-                v-model="editText"
-                dense
-                hide-details
-                autofocus
-                :maxlength="maxItemLength"
-                @keyup.enter="submitEdit(list, row.item)"
-                @keyup.esc="cancelEdit"
-              />
-              <div class="tw-mt-2 tw-flex tw-gap-2">
-                <v-btn small text @click="cancelEdit">Cancel</v-btn>
-                <v-btn
-                  small
-                  class="tw-bg-brass tw-text-wood-deep"
-                  :disabled="!editText.trim()"
-                  @click="submitEdit(list, row.item)"
-                  >Save</v-btn
-                >
-              </div>
-            </template>
-
-            <div v-else class="tw-flex tw-items-start tw-gap-2">
-              <!-- Collapse toggle, in a fixed-width slot that stays empty on an
-                   entry with no children, so text lines up down the column. -->
-              <div class="tw-mt-0.5 tw-w-4 tw-flex-none">
-                <v-icon
-                  v-if="row.hasChildren"
-                  small
-                  class="tw-cursor-pointer tw-text-parchment-dim"
-                  :title="
-                    row.collapsed ? 'Show sub-entries' : 'Hide sub-entries'
-                  "
-                  @click="toggleItem(row.item._id)"
-                >
-                  {{ row.collapsed ? "mdi-chevron-right" : "mdi-chevron-down" }}
-                </v-icon>
-              </div>
-
-              <!-- The entry's own marker: a checkbox anyone may tick, a map pin,
-                   or a plain bullet. -->
-              <v-icon
-                v-if="isChecklist(list)"
-                small
-                class="tw-mt-0.5 tw-flex-none tw-cursor-pointer tw-text-brass"
-                :title="row.item.checked ? 'Uncheck' : 'Check off'"
-                @click="toggleChecked(list, row.item)"
-              >
-                {{
-                  row.item.checked
-                    ? "mdi-checkbox-marked"
-                    : "mdi-checkbox-blank-outline"
-                }}
-              </v-icon>
-              <v-icon
-                v-else
-                small
-                class="tw-mt-0.5 tw-flex-none tw-text-parchment-dim"
-              >
-                {{
-                  isLocationList(list) ? "mdi-map-marker" : "mdi-circle-small"
-                }}
-              </v-icon>
-
-              <div class="tw-min-w-0 tw-flex-grow">
-                <a
+          <template #item="{ element: row }">
+            <div
+              :data-item-id="row.item._id"
+              :class="`list-row tw-rounded tw-px-2 tw-py-1 hover:tw-bg-brass/10 ${indentClass(
+                row.depth
+              )}`"
+            >
+              <!-- Inline edit of one's own entry -->
+              <template v-if="editingItemId === row.item._id">
+                <LocationInput
                   v-if="isLocationList(list)"
-                  :href="mapsUrl(row.item.text)"
-                  target="_blank"
-                  rel="noopener"
-                  class="tw-break-words tw-text-sm tw-text-brass"
-                  >{{ row.item.text }}</a
-                >
-                <span
+                  v-model="editText"
+                  dense
+                  hide-details
+                  hide-icon
+                  autofocus
+                  @enter="submitEdit(list, row.item)"
+                />
+                <v-text-field
                   v-else
-                  :class="`tw-break-words tw-text-sm ${
-                    row.item.checked
-                      ? 'tw-text-parchment-dim tw-line-through'
-                      : ''
-                  }`"
+                  v-model="editText"
+                  dense
+                  hide-details
+                  autofocus
+                  :maxlength="maxItemLength"
+                  @keyup.enter="submitEdit(list, row.item)"
+                  @keyup.esc="cancelEdit"
+                />
+                <div class="tw-mt-2 tw-flex tw-gap-2">
+                  <v-btn small text @click="cancelEdit">Cancel</v-btn>
+                  <v-btn
+                    small
+                    class="tw-bg-brass tw-text-wood-deep"
+                    :disabled="!editText.trim()"
+                    @click="submitEdit(list, row.item)"
+                    >Save</v-btn
+                  >
+                </div>
+              </template>
+
+              <div v-else class="tw-flex tw-items-start tw-gap-2">
+                <!-- Collapse toggle, in a fixed-width slot that stays empty on an
+                   entry with no children, so text lines up down the column. -->
+                <div class="tw-mt-0.5 tw-w-4 tw-flex-none">
+                  <v-icon
+                    v-if="row.hasChildren"
+                    small
+                    class="tw-cursor-pointer tw-text-parchment-dim"
+                    :title="
+                      row.collapsed ? 'Show sub-entries' : 'Hide sub-entries'
+                    "
+                    @click="toggleItem(row.item._id)"
+                  >
+                    {{
+                      row.collapsed ? "mdi-chevron-right" : "mdi-chevron-down"
+                    }}
+                  </v-icon>
+                </div>
+
+                <!-- The entry's own marker: a checkbox anyone may tick, a map pin,
+                   or a plain bullet. -->
+                <v-icon
+                  v-if="isChecklist(list)"
+                  small
+                  class="tw-mt-0.5 tw-flex-none tw-cursor-pointer tw-text-brass"
+                  :title="row.item.checked ? 'Uncheck' : 'Check off'"
+                  @click="toggleChecked(list, row.item)"
                 >
-                  {{ row.item.text }}
-                </span>
-                <!-- Conditional on the DATA, not on a prop. A private entry
+                  {{
+                    row.item.checked
+                      ? "mdi-checkbox-marked"
+                      : "mdi-checkbox-blank-outline"
+                  }}
+                </v-icon>
+                <v-icon
+                  v-else
+                  small
+                  class="tw-mt-0.5 tw-flex-none tw-text-parchment-dim"
+                >
+                  {{
+                    isLocationList(list) ? "mdi-map-marker" : "mdi-circle-small"
+                  }}
+                </v-icon>
+
+                <div class="tw-min-w-0 tw-flex-grow">
+                  <a
+                    v-if="isLocationList(list)"
+                    :href="mapsUrl(row.item.text)"
+                    target="_blank"
+                    rel="noopener"
+                    class="tw-break-words tw-text-sm tw-text-brass"
+                    >{{ row.item.text }}</a
+                  >
+                  <span
+                    v-else
+                    :class="`tw-break-words tw-text-sm ${
+                      row.item.checked
+                        ? 'tw-text-parchment-dim tw-line-through'
+                        : ''
+                    }`"
+                  >
+                    {{ row.item.text }}
+                  </span>
+                  <!-- Conditional on the DATA, not on a prop. A private entry
                      carries no authorName and no checker, so an unconditional
                      line would leave an empty row of whitespace under every
                      one of them — and this also tidies a shared entry whose
                      author no longer resolves. -->
+                  <div
+                    v-if="row.item.authorName || checkLabel(row.item)"
+                    class="tw-text-xs tw-text-parchment-dim"
+                  >
+                    {{ row.item.authorName
+                    }}<span v-if="checkLabel(row.item)">
+                      · {{ checkLabel(row.item) }}</span
+                    >
+                  </div>
+                </div>
                 <div
-                  v-if="row.item.authorName || checkLabel(row.item)"
-                  class="tw-text-xs tw-text-parchment-dim"
+                  class="tw-flex tw-flex-none"
+                  :class="{ 'tw-gap-2': phone }"
                 >
-                  {{ row.item.authorName
-                  }}<span v-if="checkLabel(row.item)">
-                    · {{ checkLabel(row.item) }}</span
+                  <v-btn
+                    v-if="canNest(row)"
+                    icon
+                    :x-small="!phone"
+                    :small="phone"
+                    class="tw-text-parchment-dim"
+                    title="Add sub-entry"
+                    @click="startChild(row.item)"
+                  >
+                    <v-icon small>mdi-plus</v-icon>
+                  </v-btn>
+                  <v-btn
+                    v-if="isMine(row.item)"
+                    icon
+                    :x-small="!phone"
+                    :small="phone"
+                    class="tw-text-parchment-dim"
+                    title="Edit entry"
+                    @click="startEdit(row.item)"
+                  >
+                    <v-icon small>mdi-pencil</v-icon>
+                  </v-btn>
+                  <v-btn
+                    v-if="canDelete(row.item)"
+                    icon
+                    :x-small="!phone"
+                    :small="phone"
+                    class="tw-text-parchment-dim"
+                    :title="
+                      row.hasChildren
+                        ? 'Remove entry and its sub-entries'
+                        : 'Remove entry'
+                    "
+                    @click="askDeleteItem(list, row.item)"
+                  >
+                    <v-icon small>mdi-close</v-icon>
+                  </v-btn>
+                </div>
+              </div>
+
+              <!-- Sub-entry composer, one at a time, directly under its parent -->
+              <div
+                v-if="addingChildOf === row.item._id"
+                class="tw-mt-1 tw-pl-6"
+              >
+                <LocationInput
+                  v-if="isLocationList(list)"
+                  ref="childInput"
+                  v-model="childText"
+                  dense
+                  hide-details
+                  hide-icon
+                  autofocus
+                  placeholder="Add a place…"
+                  @enter="submitChild(list)"
+                />
+                <v-text-field
+                  v-else
+                  ref="childInput"
+                  v-model="childText"
+                  dense
+                  hide-details
+                  autofocus
+                  placeholder="Add a sub-entry…"
+                  :maxlength="maxItemLength"
+                  @keyup.enter="submitChild(list)"
+                  @keyup.esc="cancelChild"
+                />
+                <div class="tw-mt-2 tw-flex tw-gap-2">
+                  <v-btn small text @click="cancelChild">Cancel</v-btn>
+                  <v-btn
+                    small
+                    class="tw-bg-brass tw-text-wood-deep"
+                    :disabled="!childText.trim()"
+                    @click="submitChild(list)"
+                    >Add</v-btn
                   >
                 </div>
               </div>
-              <div class="tw-flex tw-flex-none" :class="{ 'tw-gap-2': phone }">
-                <v-btn
-                  v-if="canNest(row)"
-                  icon
-                  :x-small="!phone"
-                  :small="phone"
-                  class="tw-text-parchment-dim"
-                  title="Add sub-entry"
-                  @click="startChild(row.item)"
-                >
-                  <v-icon small>mdi-plus</v-icon>
-                </v-btn>
-                <v-btn
-                  v-if="isMine(row.item)"
-                  icon
-                  :x-small="!phone"
-                  :small="phone"
-                  class="tw-text-parchment-dim"
-                  title="Edit entry"
-                  @click="startEdit(row.item)"
-                >
-                  <v-icon small>mdi-pencil</v-icon>
-                </v-btn>
-                <v-btn
-                  v-if="canDelete(row.item)"
-                  icon
-                  :x-small="!phone"
-                  :small="phone"
-                  class="tw-text-parchment-dim"
-                  :title="
-                    row.hasChildren
-                      ? 'Remove entry and its sub-entries'
-                      : 'Remove entry'
-                  "
-                  @click="askDeleteItem(list, row.item)"
-                >
-                  <v-icon small>mdi-close</v-icon>
-                </v-btn>
-              </div>
             </div>
-
-            <!-- Sub-entry composer, one at a time, directly under its parent -->
-            <div v-if="addingChildOf === row.item._id" class="tw-mt-1 tw-pl-6">
-              <LocationInput
-                v-if="isLocationList(list)"
-                ref="childInput"
-                v-model="childText"
-                dense
-                hide-details
-                hide-icon
-                autofocus
-                placeholder="Add a place…"
-                @enter="submitChild(list)"
-              />
-              <v-text-field
-                v-else
-                ref="childInput"
-                v-model="childText"
-                dense
-                hide-details
-                autofocus
-                placeholder="Add a sub-entry…"
-                :maxlength="maxItemLength"
-                @keyup.enter="submitChild(list)"
-                @keyup.esc="cancelChild"
-              />
-              <div class="tw-mt-2 tw-flex tw-gap-2">
-                <v-btn small text @click="cancelChild">Cancel</v-btn>
-                <v-btn
-                  small
-                  class="tw-bg-brass tw-text-wood-deep"
-                  :disabled="!childText.trim()"
-                  @click="submitChild(list)"
-                  >Add</v-btn
-                >
-              </div>
-            </div>
-          </div>
+          </template>
         </draggable>
 
         <!-- Add an entry: open to everyone -->

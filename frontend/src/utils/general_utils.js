@@ -64,15 +64,21 @@ export const clamp = (value, lower, upper) => {
 
 /*
  * Viewport helpers. Every one of them takes `$vuetify` rather than reaching for
- * it, and every read of `vuetify.breakpoint` in the app goes through this
- * block — deliberately, because Vuetify 3 renames `$vuetify.breakpoint` to
- * `$vuetify.display` (with `thresholds` becoming lower bounds rather than
- * upper). Keeping the reads here makes that rename one file instead of a sweep
- * through views and components.
+ * it, and every read of the breakpoint state in the app goes through this
+ * block. That was set up on Vue 2 (J17) precisely so this rename would be one
+ * file, and it was: Vuetify 3 calls it `$vuetify.display`, not
+ * `$vuetify.breakpoint`.
+ *
+ * Worth knowing how it failed before the rename landed, because it is the
+ * shape of thing to expect elsewhere in this migration: `vuetify.breakpoint`
+ * is simply `undefined` on Vuetify 3, so `.name` threw inside a *computed*.
+ * Vue 3 does not unmount the app for that — it logs and leaves the subtree
+ * blank, so three whole routes rendered nothing while the harness reported no
+ * console errors at all, because production builds strip framework warnings.
  */
 
 export const isPhone = (vuetify) => {
-  return vuetify.breakpoint.name === "xs"
+  return vuetify.display.name === "xs"
 }
 
 export const isIOS = () => {
@@ -80,7 +86,7 @@ export const isIOS = () => {
 }
 
 export const br = (vuetify, breakpoint) => {
-  return vuetify.breakpoint.name === breakpoint
+  return vuetify.display.name === breakpoint
 }
 
 /**
@@ -88,7 +94,7 @@ export const br = (vuetify, breakpoint) => {
  * Tailwind breakpoint rather than a Vuetify one — the two scales don't line up.
  */
 export const viewportWidth = (vuetify) => {
-  return vuetify.breakpoint.width
+  return vuetify.display.width
 }
 
 /** convert base64 to raw binary data held in a string */
