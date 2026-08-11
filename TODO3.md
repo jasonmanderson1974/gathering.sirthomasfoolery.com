@@ -760,11 +760,38 @@ per-route `expectConsoleErrors` regexp with its reason; anything not matching st
 
 Dev-build framework warnings are now **zero** (21 at the start of K2c).
 
-Still open before this merges:
+### K4 — merged, pushed and DEPLOYED · 2026-08-11
 
-- **Nothing has been exercised against real Google/Microsoft calendar accounts**, which
-  `compose.dev.yaml` cannot do — same gap J8 had, and it needs the same post-deploy check.
-- Neither `main` nor `vue3` has been pushed.
+`vue3` fast-forwarded into `main`, pushed (`2612696..d263f10`), and deployed with `./deploy.sh`.
+Production serves **`d263f10`**; the previous release `2612696` is still on disk, so a rollback is
+the symlink flip `deploy.sh` already documents.
+
+**Verified against live production**, not just locally — `/root/tools/browser/verify_vue3_prod.js`,
+33 assertions, all passing: every route, all five band tabs (exactly one panel each), the New
+Gathering dialog, the date picker rendering a month, no `[object Object]` anywhere, no horizontal
+scroll at 390px, and a clean console throughout. `check:signed-out` is ALL PASS against the live
+URL too, so the E3 redirect-loop class is clear.
+
+**J4's immutable caching survived the migration** — `/js/app.5db61c86.js` still comes back
+`public, max-age=31536000, immutable`, which is the check that would have caught a bundler change
+silently defeating `contentHashedAsset`.
+
+Two things worth knowing for the next post-deploy run:
+
+- **`git fetch` on the dev box failed with `server certificate verification failed. CAfile: none`**
+  — git was not finding the system CA bundle, while curl was fine. Fixed with
+  `git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt`. `deploy.sh` runs its own
+  `git fetch` in preflight, so nothing could deploy until this was sorted.
+- **The deploy health gate cannot see a broken frontend.** It pings `/api/health` and matches the
+  version string, and the Go side is untouched by all of Part K — so it would have passed with
+  every page blank. The browser check is the gate that matters for a frontend release.
+
+**STILL UNVERIFIED: the Google/Microsoft/Apple calendar paths.** `compose.dev.yaml` has no OAuth,
+and the account used for the live check has no calendar linked, so nothing in this migration has
+ever exercised calendar linking or availability import — despite `ScheduleOverlap` carrying 39 of
+the 56 `.sync` conversions and J8's toggle→refetch chain. Linking a calendar needs a real consent
+flow, i.e. a human. **That is the one outstanding risk from Part K**: link a calendar on the live
+site and confirm events still appear on the availability grid.
 
 ---
 
