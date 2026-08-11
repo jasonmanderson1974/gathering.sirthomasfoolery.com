@@ -125,6 +125,12 @@ export default {
     skipCalendarFetch: { type: Boolean, default: false }, // Skip the eager live calendar-events fetch (e.g. on Settings, where it's just account management — avoids a slow Google round-trip on mount)
   },
 
+  emits: [
+    "toggleCalendarAccount",
+    "toggleSubCalendarAccount",
+    "calendarsChanged",
+  ],
+
   data: () => ({
     removeDialog: false,
     removePayload: {},

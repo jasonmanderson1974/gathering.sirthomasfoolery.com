@@ -1,6 +1,15 @@
 <template>
   <!-- Google sign in not supported dialog -->
-  <v-dialog :model-value="modelValue" width="400" content-class="tw-m-0">
+  <!-- The dismiss handler is explicit because `emits` is declared (L7): a
+  declared event no longer falls through `$attrs` onto this root `v-dialog`, so
+  without it, Esc and a click on the scrim would stop closing the dialog — the
+  "Ok" button's `$emit` was never the only way out. -->
+  <v-dialog
+    :model-value="modelValue"
+    @update:model-value="(e) => $emit('update:modelValue', e)"
+    width="400"
+    content-class="tw-m-0"
+  >
     <v-card>
       <v-card-title>Google sign in not supported</v-card-title>
       <v-card-text>
@@ -34,5 +43,7 @@ export default {
   props: {
     modelValue: { type: Boolean, required: true },
   },
+
+  emits: ["update:modelValue"],
 }
 </script>

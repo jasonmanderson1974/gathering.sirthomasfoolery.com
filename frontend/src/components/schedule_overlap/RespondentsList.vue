@@ -380,6 +380,21 @@ export default {
     addingAvailabilityAsGuest: { type: Boolean, required: true },
   },
 
+  emits: [
+    "mouseOverRespondent",
+    "mouseLeaveRespondent",
+    "clickRespondent",
+    "editGuestAvailability",
+    "addAvailabilityAsGuest",
+    "update:showBestTimes",
+    "toggleShowEventOptions",
+    "update:hideIfNeeded",
+    "update:showResponseCounts",
+    "update:startCalendarOnMonday",
+    "update:showCalendarEvents",
+    "refreshEvent",
+  ],
+
   data() {
     return {
       deleteAvailabilityDialog: false,

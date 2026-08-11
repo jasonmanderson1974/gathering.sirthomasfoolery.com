@@ -54,6 +54,8 @@ export default {
     authRequired: { type: Boolean, default: false },
   },
 
+  emits: ["signIn"],
+
   data: () => ({
     toggled: false,
   }),

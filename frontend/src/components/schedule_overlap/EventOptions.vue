@@ -111,6 +111,15 @@ export default {
     hasCalendarEvents: { type: Boolean, default: false },
   },
 
+  emits: [
+    "toggleShowEventOptions",
+    "update:showBestTimes",
+    "update:hideIfNeeded",
+    "update:showResponseCounts",
+    "update:showCalendarEvents",
+    "update:startCalendarOnMonday",
+  ],
+
   computed: {
     isPhone() {
       return isPhone(this.$vuetify)

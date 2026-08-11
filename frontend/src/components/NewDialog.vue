@@ -35,7 +35,7 @@ import UnsavedChangesDialog from "@/components/general/UnsavedChangesDialog.vue"
 export default {
   name: "NewDialog",
 
-  emits: ["update:modelValue"],
+  emits: ["update:modelValue", "signIn"],
 
   props: {
     modelValue: { type: Boolean, required: true },

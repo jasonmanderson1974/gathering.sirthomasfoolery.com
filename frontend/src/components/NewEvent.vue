@@ -374,7 +374,7 @@ import { newEventFormMixin } from "@/mixins/newEventForm"
 export default {
   name: "NewEvent",
 
-  emits: ["input"],
+  emits: ["input", "signIn"],
 
   mixins: [newEventFormMixin],
 

@@ -52,6 +52,8 @@ import { urlRegex } from "@/constants"
 export default {
   name: "ICSCredentials",
 
+  emits: ["back", "addedCalendar"],
+
   data() {
     return {
       feedUrl: "",

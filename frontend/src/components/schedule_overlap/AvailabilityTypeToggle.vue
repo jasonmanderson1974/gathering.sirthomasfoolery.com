@@ -17,6 +17,8 @@ export default {
     modelValue: { type: String, required: true },
   },
 
+  emits: ["update:modelValue"],
+
   components: { SlideToggle },
 
   data() {

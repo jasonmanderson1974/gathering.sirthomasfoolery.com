@@ -32,6 +32,8 @@ export default {
       required: true,
     },
   },
+
+  emits: ["saveTempTimes"],
   methods: {
     saveTempTimes() {
       this.$emit("saveTempTimes")

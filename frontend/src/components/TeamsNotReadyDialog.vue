@@ -29,6 +29,8 @@ export default {
   props: {
     modelValue: Boolean,
   },
+
+  emits: ["update:modelValue"],
   computed: {
     dialog: {
       get() {

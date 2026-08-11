@@ -65,6 +65,8 @@ export default {
     referenceDate: { type: Date, default: null },
   },
 
+  emits: ["update:modelValue"],
+
   created() {
     if (localStorage["timezone"]) {
       this.timezoneModified = true

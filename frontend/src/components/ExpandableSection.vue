@@ -38,6 +38,8 @@ export default {
     autoScroll: { type: Boolean, default: false },
   },
 
+  emits: ["update:modelValue"],
+
   methods: {
     toggle() {
       this.$emit("update:modelValue", !this.modelValue)

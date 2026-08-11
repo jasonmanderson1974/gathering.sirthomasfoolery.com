@@ -63,6 +63,8 @@ export default {
     SignInGoogleBtn,
   },
 
+  emits: ["signInLinkApple", "back", "continue"],
+
   computed: {
     ...mapState(["authUser"]),
   },

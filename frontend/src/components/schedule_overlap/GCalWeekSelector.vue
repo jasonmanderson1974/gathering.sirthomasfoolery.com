@@ -23,6 +23,8 @@ export default {
     event: { type: Object, required: true },
   },
 
+  emits: ["update:weekOffset"],
+
   data() {
     return {}
   },

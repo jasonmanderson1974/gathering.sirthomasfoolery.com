@@ -128,6 +128,16 @@ export default {
     initialState: { type: String, default: "choices" },
   },
 
+  emits: [
+    "update:modelValue",
+    "allowGoogleCalendar",
+    "signInLinkApple",
+    "addedAppleCalendar",
+    "addedICSCalendar",
+    "setAvailabilityManually",
+    "allowOutlookCalendar",
+  ],
+
   components: {
     CalendarPermissionsCard,
     CreateAccount,

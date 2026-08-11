@@ -888,8 +888,9 @@ site and confirm events still appear on the availability grid.
 >
 > Findings are ordered by what they cost a user, not by effort.
 >
-> **Status 2026-08-11: L1–L4 are closed.** The check L4 asked for exists and is in CI; running it
-> for real turned L3's six props into **75 across 25 files**, all swept. L5–L15 are untouched.
+> **Status 2026-08-11: L1–L7 are closed.** The check L4 asked for exists and is in CI; running it
+> for real turned L3's six props into **75 across 25 files**, all swept. L5 put `check:routes` in
+> CI against a booted stack, L6 fixed the docs, L7 declared all 111 emits. L8–L15 are untouched.
 
 ### L1 — `VForm.validate()` returns a Promise, so the submit guard never fires · **P0 · S** — DONE 2026-08-11
 
@@ -1174,7 +1175,7 @@ on a plain HTML tag it becomes a literal DOM attribute**), then K5 and L1 under 
 trap that makes the naive fix wrong: for K5, `<input type="file">` must keep `@change`; for L1,
 `validate-on="submit"` would latch every submit button disabled forever.
 
-### L7 — 111 emits are undeclared, which in Vue 3 also makes them DOM listeners · **P2 · S**
+### L7 — 111 emits are undeclared, which in Vue 3 also makes them DOM listeners · **P2 · S** — DONE 2026-08-11
 
 `vue/require-explicit-emits` reports 111 sites. This is not style: in Vue 3 an event that is not
 in `emits` stays in `$attrs` and is **additionally** bound as a native listener on the
@@ -1185,6 +1186,35 @@ its parent's handler twice.
 `input`, `GuestDialog` emits `submit`) both declare `emits`, and every other emit uses a custom
 name that no DOM element listens for. It is a trap rather than a bug: the next `$emit("click")`
 written without a declaration double-fires, and nothing warns. Turn the rule on and clear it.
+
+Done: 111 events declared across **30 components**, and `vue/require-explicit-emits` is now
+`"error"` in `.eslintrc.cjs` (cherry-picked out of `vue3-recommended` exactly as L13 recommends,
+so the rule that closes this item is what keeps it closed). No behaviour was expected to change —
+`$emit` finds the parent's handler in `$attrs` whether or not the event is declared, so the
+declaration only removes the *extra* native binding.
+
+**One did change, and it is the finding.** `SignInNotSupportedDialog`'s root is a bare
+`<v-dialog :model-value="modelValue">` with no `@update:model-value` — its only `$emit` is on the
+"Ok" button. Esc and a click on the scrim closed it **through the fallthrough**: the parent's
+`v-model` listener sat in `$attrs`, landed on the root `v-dialog`, and its dismiss went straight
+to the parent. Declaring `emits` takes that listener out of `$attrs`, and because the dialog is
+prop-controlled it cannot close itself — so both dismiss gestures would have died silently, with
+lint, the unit suite, the build and `check:routes` all green. The root now forwards explicitly
+(`@update:model-value="(e) => $emit('update:modelValue', e)"`), which is what every other dialog
+in the tree already did.
+
+So the general shape to check when declaring an event on any component: **is the root a component
+that emits the same event, and does the template forward it?** If it doesn't, the declaration is
+what breaks it. Roots audited: the other nine `update:modelValue` emitters all either forward
+explicitly (`UnsavedChangesDialog`, `MarkAvailabilityDialog`, `AvailabilityTypeToggle`,
+`LocationInput`), route through a local `computed` setter (`FeatureNotReadyDialog`,
+`TeamsNotReadyDialog`), or have a plain-element root where the fallthrough was never live
+(`DatePicker`, `ExpandableSection`, `SlideToggle`, `TimezoneSelector`).
+
+Verified with the full local gate plus `scripts/browser-check.sh` — 44 assertions, all pass,
+which is the only check that would have caught the dialog. Note it needs a Chrome: on this box
+there is none on `PATH`, so it wants
+`CHROME_PATH=/root/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome`.
 
 ### L8 — the icon font is `@latest`, from a CDN, unpinned and unverified · **P2 · S**
 

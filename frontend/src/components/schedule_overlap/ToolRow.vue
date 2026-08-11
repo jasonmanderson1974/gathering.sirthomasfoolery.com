@@ -260,6 +260,25 @@ export default {
     location: { type: String, default: "" },
   },
 
+  emits: [
+    "update:curTimezone",
+    "update:timeType",
+    "update:mobileNumDays",
+    "update:showBestTimes",
+    "update:hideIfNeeded",
+    "toggleShowEventOptions",
+    "update:startCalendarOnMonday",
+    "update:weekOffset",
+    "scheduleEvent",
+    "cancelGathering",
+    "cancelScheduleEvent",
+    "update:reminderLeadTimeHours",
+    "update:recurrenceFrequency",
+    "update:location",
+    "saveScheduleEvent",
+    "update:reminderEnabled",
+  ],
+
   components: {
     TimezoneSelector,
     LocationInput,

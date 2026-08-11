@@ -75,6 +75,8 @@ export default {
     },
   },
 
+  emits: ["requestContactsAccess", "update:emails"],
+
   data: () => ({
     remindees: [], // Currently displayed emails
     searchedContacts: [], // Contacts that match the search query

@@ -89,6 +89,8 @@ export default {
     },
   },
 
+  emits: ["update:event"],
+
   data() {
     return {
       isEditing: false,

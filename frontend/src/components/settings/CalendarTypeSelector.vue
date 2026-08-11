@@ -96,6 +96,8 @@ export default {
     },
   },
 
+  emits: ["addGoogleCalendar", "addOutlookCalendar", "addedCalendar"],
+
   data() {
     return {
       states: {

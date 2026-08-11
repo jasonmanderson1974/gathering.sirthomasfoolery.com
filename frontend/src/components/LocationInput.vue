@@ -55,6 +55,8 @@ export default {
     hideIcon: { type: Boolean, default: false },
   },
 
+  emits: ["enter", "update:modelValue"],
+
   data() {
     return {
       items: [],

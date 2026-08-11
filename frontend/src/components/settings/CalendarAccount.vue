@@ -131,6 +131,8 @@ export default {
     fillSpace: { type: Boolean, default: false },
   },
 
+  emits: ["calendarsChanged", "openRemoveDialog"],
+
   components: {
     UserAvatarContent,
   },

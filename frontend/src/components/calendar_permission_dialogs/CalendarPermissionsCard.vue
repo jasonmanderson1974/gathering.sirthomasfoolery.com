@@ -61,5 +61,7 @@ export default {
     cancelLabel: { type: String, default: "Cancel" },
     allowLabel: { type: String, default: "Allow" },
   },
+
+  emits: ["cancel", "allow"],
 }
 </script>

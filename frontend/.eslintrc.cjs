@@ -36,5 +36,11 @@ module.exports = {
     // View components are intentionally single-word (Home, Group, Friends…) —
     // this project doesn't follow the multi-word convention, so it's pure noise.
     "vue/multi-word-component-names": "off",
+    // Cherry-picked out of `vue3-recommended` (L7/L13). Not style: in Vue 3 an
+    // event that isn't in `emits` stays in `$attrs` and is *additionally* bound
+    // as a native listener on the component's root element, so the first
+    // `$emit("click")` written without a declaration fires the parent's handler
+    // twice, silently. L7 declared all 111 undeclared emits; this keeps it so.
+    "vue/require-explicit-emits": "error",
   },
 };

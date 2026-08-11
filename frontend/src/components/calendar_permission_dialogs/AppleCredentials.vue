@@ -73,6 +73,8 @@ import { errors } from "@/constants"
 export default {
   name: "AppleCredentials",
 
+  emits: ["back", "addedCalendar"],
+
   data() {
     return {
       email: "",

@@ -86,6 +86,8 @@ export default {
     canEdit: { type: Boolean, required: true },
   },
 
+  emits: ["update:event"],
+
   data() {
     return {
       isEditing: false,

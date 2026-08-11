@@ -55,6 +55,8 @@ export default {
     startCalendarOnMonday: { type: Boolean, default: false },
   },
 
+  emits: ["update:modelValue"],
+
   data() {
     const today = new Date()
     return {

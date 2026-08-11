@@ -54,6 +54,8 @@ export default {
     wrap: { type: Boolean, default: false },
   },
 
+  emits: ["update:modelValue"],
+
   data() {
     return {
       index: 0,

@@ -1072,6 +1072,17 @@ export default {
 
     initialTimezone: { type: Object, default: () => ({}) },
   },
+
+  emits: [
+    "update:weekOffset",
+    "calendarsChanged",
+    "addAvailability",
+    "addAvailabilityAsGuest",
+    "deleteAvailability",
+    "highlightAvailabilityBtn",
+    "setCurGuestId",
+    "refreshEvent",
+  ],
   data() {
     return {
       states: {
