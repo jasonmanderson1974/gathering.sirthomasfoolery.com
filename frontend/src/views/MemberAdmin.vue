@@ -31,7 +31,7 @@
             class="tw-flex-1"
             placeholder="name@example.com"
             type="email"
-            solo
+            variant="solo"
             hide-details="auto"
             :error-messages="emailError"
             :disabled="adding"
@@ -41,7 +41,8 @@
             v-if="canManageUsers"
             v-model="inviteRole"
             :items="grantableRoleOptions"
-            solo
+            item-title="text"
+            variant="solo"
             hide-details
             :disabled="adding"
             class="sm:tw-max-w-[10rem]"
@@ -125,8 +126,9 @@
             v-if="isEditable(member)"
             :model-value="member.role"
             :items="grantableRoleOptions"
-            solo
-            dense
+            item-title="text"
+            variant="solo"
+            density="compact"
             hide-details
             :loading="busyEmail === member.email"
             :disabled="busyEmail === member.email"
@@ -145,24 +147,24 @@
           <v-btn
             v-if="canEditProfile(member)"
             icon
-            small
+            size="small"
             :disabled="busyEmail === member.email"
             title="Edit name, nickname and photo"
             @click="openEditor(member)"
           >
-            <v-icon small color="brass">mdi-pencil</v-icon>
+            <v-icon size="small" color="brass">mdi-pencil</v-icon>
           </v-btn>
 
           <!-- Strike (admins only) -->
           <v-btn
             v-if="canManageUsers"
             icon
-            small
+            size="small"
             :disabled="!canStrike(member) || busyEmail === member.email"
             :title="strikeTitle(member)"
             @click="remove(member)"
           >
-            <v-icon small color="oxblood">mdi-close</v-icon>
+            <v-icon size="small" color="oxblood">mdi-close</v-icon>
           </v-btn>
         </div>
       </div>
@@ -187,8 +189,8 @@
               <UserAvatarContent :user="editingMember" :size="72" />
               <div class="tw-flex tw-flex-col tw-items-start tw-gap-1">
                 <v-btn
-                  text
-                  small
+                  variant="text"
+                  size="small"
                   class="tw-text-brass"
                   :loading="savingAvatar"
                   @click="$refs.avatarEditor.pickFile()"
@@ -199,8 +201,8 @@
                 </v-btn>
                 <v-btn
                   v-if="editingMember.avatarUpdatedAt"
-                  text
-                  small
+                  variant="text"
+                  size="small"
                   :loading="removingAvatar"
                   @click="removeMemberAvatar"
                 >
@@ -220,7 +222,7 @@
             </div>
             <v-text-field
               v-model="editFirstName"
-              solo
+              variant="solo"
               hide-details="auto"
               class="tw-mb-3"
               :disabled="savingProfile"
@@ -230,7 +232,7 @@
             </div>
             <v-text-field
               v-model="editLastName"
-              solo
+              variant="solo"
               hide-details="auto"
               class="tw-mb-3"
               :disabled="savingProfile"
@@ -241,7 +243,7 @@
             <v-text-field
               v-model="editNickname"
               placeholder="What the club actually calls them"
-              solo
+              variant="solo"
               hide-details="auto"
               :disabled="savingProfile"
             />
@@ -253,10 +255,14 @@
 
           <v-card-actions>
             <v-spacer />
-            <v-btn text class="tw-text-brass" @click="editDialog = false">
+            <v-btn
+              variant="text"
+              class="tw-text-brass"
+              @click="editDialog = false"
+            >
               Cancel
             </v-btn>
-            <v-btn text :loading="savingProfile" @click="saveProfile">
+            <v-btn variant="text" :loading="savingProfile" @click="saveProfile">
               Save
             </v-btn>
           </v-card-actions>
@@ -329,7 +335,9 @@
                   :key="j"
                   class="tw-p-3 tw-text-center"
                 >
-                  <v-icon v-if="cap" small color="brass">mdi-check</v-icon>
+                  <v-icon v-if="cap" size="small" color="brass"
+                    >mdi-check</v-icon
+                  >
                   <span v-else class="tw-text-parchment-dim">—</span>
                 </td>
               </tr>

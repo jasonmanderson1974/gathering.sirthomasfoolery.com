@@ -5,7 +5,7 @@
       v-if="showLocation"
       class="tw-flex tw-w-full tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-brass-dim tw-bg-leather tw-p-2 tw-text-xs tw-font-normal tw-text-parchment-dim sm:tw-text-sm"
     >
-      <v-icon small class="tw-text-brass">mdi-map-marker</v-icon>
+      <v-icon size="small" class="tw-text-brass">mdi-map-marker</v-icon>
       <a
         :href="mapsUrl"
         target="_blank"
@@ -18,17 +18,17 @@
         key="edit-location-btn"
         class="-tw-my-1"
         icon
-        small
+        size="small"
         @click="startEditing"
       >
-        <v-icon small>mdi-pencil</v-icon>
+        <v-icon size="small">mdi-pencil</v-icon>
       </v-btn>
     </div>
 
     <!-- Add (owner, empty) -->
     <v-btn
       v-else-if="canEdit && !isEditing"
-      text
+      variant="text"
       class="-tw-ml-2 tw-mt-0 tw-w-min tw-whitespace-nowrap tw-px-2 tw-text-parchment-dim"
       @click="startEditing"
     >

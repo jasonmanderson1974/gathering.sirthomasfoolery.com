@@ -46,11 +46,31 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
  * upload path here either way.
  */
 const ALLOWED_TAGS = [
-  "p", "br", "hr", "strong", "em", "del", "code", "pre", "blockquote",
-  "h1", "h2", "h3", "h4", "h5", "h6",
-  "ul", "ol", "li",
+  "p",
+  "br",
+  "hr",
+  "strong",
+  "em",
+  "del",
+  "code",
+  "pre",
+  "blockquote",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "ul",
+  "ol",
+  "li",
   "a",
-  "table", "thead", "tbody", "tr", "th", "td",
+  "table",
+  "thead",
+  "tbody",
+  "tr",
+  "th",
+  "td",
 ]
 
 // `target` and `rel` are here because the hook above adds them; DOMPurify runs

@@ -18,7 +18,6 @@
         <v-menu
           v-model="dateMenu"
           :close-on-content-click="false"
-          offset-y
           min-width="auto"
         >
           <template #activator="{ props }">
@@ -26,7 +25,7 @@
               :model-value="dateLabel"
               label="Date"
               readonly
-              dense
+              density="compact"
               hide-details
               prepend-inner-icon="mdi-calendar"
               class="tw-mb-3"
@@ -38,12 +37,16 @@
             the picker happily navigates to a year the API rejects, and the
             person gets a save failure with no hint that the date is the reason.
           -->
+          <!-- Vuetify 3's picker speaks Date objects where v2 took ISO
+               strings, so the conversion happens on this binding alone —
+               `date`, `dateMin` and `dateMax` stay ISO, which is what the API
+               and expenseForm's unit tests expect. -->
           <v-date-picker
-            v-model="date"
-            :min="dateMin"
-            :max="dateMax"
-            no-title
-            @input="dateMenu = false"
+            :model-value="dateAsDate"
+            :min="dateMinAsDate"
+            :max="dateMaxAsDate"
+            hide-header
+            @update:model-value="onDatePicked"
           />
         </v-menu>
 
@@ -51,7 +54,7 @@
           v-model="title"
           label="What was it?"
           placeholder="Dinner at the club"
-          dense
+          density="compact"
           hide-details
           :maxlength="titleMaxLength"
           class="tw-mb-3"
@@ -60,7 +63,7 @@
         <v-textarea
           v-model="description"
           label="Notes (optional)"
-          dense
+          density="compact"
           hide-details
           auto-grow
           rows="2"
@@ -78,7 +81,7 @@
           prefix="$"
           inputmode="decimal"
           placeholder="0.00"
-          dense
+          density="compact"
           :hide-details="!amountError"
           :error-messages="amountError"
           class="tw-mb-3"
@@ -90,7 +93,7 @@
           item-title="name"
           item-value="id"
           label="Paid by"
-          dense
+          density="compact"
           hide-details
           class="tw-mb-4"
         />
@@ -166,10 +169,10 @@
                 :disabled="!isSelected(person.id)"
                 prefix="$"
                 inputmode="decimal"
-                dense
+                density="compact"
                 hide-details
                 class="tw-w-24 tw-flex-none tw-pt-0 tw-text-sm"
-                @input="setTypedAmount(person.id, $event)"
+                @update:model-value="setTypedAmount(person.id, $event)"
               />
             </div>
 
@@ -189,14 +192,14 @@
           <div class="tw-mb-1 tw-flex tw-items-center tw-justify-between">
             <span class="tw-text-sm tw-font-medium">Receipts</span>
             <v-btn
-              small
-              text
+              size="small"
+              variant="text"
               class="tw-text-brass"
               :disabled="!canAddPhoto"
               :loading="processingPhoto"
               @click="pickFile"
             >
-              <v-icon small left>mdi-camera-plus-outline</v-icon>
+              <v-icon size="small" left>mdi-camera-plus-outline</v-icon>
               Add photo
             </v-btn>
           </div>
@@ -229,12 +232,12 @@
               />
               <v-btn
                 icon
-                x-small
+                size="x-small"
                 class="tw-absolute tw-right-0 tw-top-0 tw-bg-wood-deep/80 tw-text-parchment"
                 title="Remove"
                 @click="pendingPhotos.splice(i, 1)"
               >
-                <v-icon x-small>mdi-close</v-icon>
+                <v-icon size="x-small">mdi-close</v-icon>
               </v-btn>
             </div>
           </div>
@@ -250,9 +253,9 @@
 
       <v-card-actions>
         <v-spacer />
-        <v-btn text @click="close">Cancel</v-btn>
+        <v-btn variant="text" @click="close">Cancel</v-btn>
         <v-btn
-          text
+          variant="text"
           class="tw-text-brass"
           :disabled="!canSave"
           :loading="saving"
@@ -277,6 +280,8 @@ import {
   expenseDateMax,
   isoToMillis,
   millisToIso,
+  isoToDate,
+  dateToIso,
   formatExpenseDate,
   receiptFileError,
   fitWithin,
@@ -364,6 +369,17 @@ export default {
     },
     dateMax() {
       return expenseDateMax()
+    },
+
+    // ISO -> Date, for Vuetify 3's picker only.
+    dateAsDate() {
+      return isoToDate(this.date)
+    },
+    dateMinAsDate() {
+      return isoToDate(this.dateMin)
+    },
+    dateMaxAsDate() {
+      return isoToDate(this.dateMax)
     },
 
     amountCents() {
@@ -481,6 +497,12 @@ export default {
 
   methods: {
     formatCents,
+
+    /** Picker gave us a Date; the form and the API want `YYYY-MM-DD`. */
+    onDatePicked(picked) {
+      if (picked) this.date = dateToIso(picked)
+      this.dateMenu = false
+    },
 
     /**
      * Reset the form to the row being edited, or to a blank one.

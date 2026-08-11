@@ -15,15 +15,22 @@
     </div>
     <div class="tw-flex tw-flex-col tw-gap-3">
       <v-text-field
-        solo
+        variant="solo"
         placeholder="Feed URL"
         v-model="feedUrl"
         hide-details="auto"
         :error-messages="feedUrlError"
       />
-      <v-text-field solo placeholder="Label" hide-details v-model="label" />
+      <v-text-field
+        variant="solo"
+        placeholder="Label"
+        hide-details
+        v-model="label"
+      />
       <div class="tw-flex tw-items-center tw-gap-2">
-        <v-btn text class="tw-grow" @click="$emit('back')">Back</v-btn>
+        <v-btn variant="text" class="tw-grow" @click="$emit('back')"
+          >Back</v-btn
+        >
         <v-btn
           :disabled="!enableSubmit"
           color="primary"

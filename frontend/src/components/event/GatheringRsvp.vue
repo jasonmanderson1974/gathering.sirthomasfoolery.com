@@ -16,7 +16,7 @@
       <v-btn
         v-for="opt in options"
         :key="opt.value"
-        small
+        size="small"
         :outlined="myStatus !== opt.value"
         :class="
           myStatus === opt.value
@@ -25,7 +25,7 @@
         "
         @click="choose(opt.value)"
       >
-        <v-icon small left>{{ opt.icon }}</v-icon>
+        <v-icon size="small" left>{{ opt.icon }}</v-icon>
         {{ opt.label }}
       </v-btn>
     </div>
@@ -38,26 +38,26 @@
       <span class="tw-text-parchment-dim">Bringing guests:</span>
       <v-btn
         icon
-        x-small
-        outlined
+        size="x-small"
+        variant="outlined"
         class="tw-text-brass"
         :disabled="localGuestCount <= 0"
         @click="changeGuests(-1)"
       >
-        <v-icon small>mdi-minus</v-icon>
+        <v-icon size="small">mdi-minus</v-icon>
       </v-btn>
       <span class="tw-w-4 tw-text-center tw-font-medium">{{
         localGuestCount
       }}</span>
       <v-btn
         icon
-        x-small
-        outlined
+        size="x-small"
+        variant="outlined"
         class="tw-text-brass"
         :disabled="localGuestCount >= 20"
         @click="changeGuests(1)"
       >
-        <v-icon small>mdi-plus</v-icon>
+        <v-icon size="small">mdi-plus</v-icon>
       </v-btn>
     </div>
 

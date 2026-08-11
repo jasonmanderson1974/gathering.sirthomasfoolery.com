@@ -16,23 +16,23 @@
       <div v-if="editing" class="tw-mt-1 tw-flex tw-items-center tw-gap-2">
         <v-textarea
           v-model="text"
-          dense
+          density="compact"
           hide-details
           auto-grow
           :rows="1"
           class="tw-flex-grow tw-text-sm"
           autofocus
         ></v-textarea>
-        <v-btn icon x-small @click="$emit('cancel-edit')">
-          <v-icon small>mdi-close</v-icon>
+        <v-btn icon size="x-small" @click="$emit('cancel-edit')">
+          <v-icon size="small">mdi-close</v-icon>
         </v-btn>
         <v-btn
           icon
-          x-small
+          size="x-small"
           color="primary"
           @click="$emit('save-edit', comment)"
         >
-          <v-icon small>mdi-check</v-icon>
+          <v-icon size="small">mdi-check</v-icon>
         </v-btn>
       </div>
 

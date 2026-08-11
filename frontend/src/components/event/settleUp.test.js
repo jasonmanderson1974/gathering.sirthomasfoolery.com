@@ -318,10 +318,7 @@ describe("personTotals", () => {
   })
 
   it("agrees with netBalances, which the settlement is built from", () => {
-    const rows = [
-      evenExpense(A, 9000, [A, B, C]),
-      evenExpense(B, 4500, [B, C]),
-    ]
+    const rows = [evenExpense(A, 9000, [A, B, C]), evenExpense(B, 4500, [B, C])]
     const balances = netBalances(rows)
 
     for (const person of personTotals(rows)) {
@@ -358,7 +355,11 @@ describe("personTotals", () => {
       splits: [{ userId: id, name: label, amountCents: 100 }],
     })
 
-    const totals = personTotals([named(C, "Zoe"), named(A, "adam"), named(B, "Mel")])
+    const totals = personTotals([
+      named(C, "Zoe"),
+      named(A, "adam"),
+      named(B, "Mel"),
+    ])
     expect(totals.map((t) => t.name)).toEqual(["adam", "Mel", "Zoe"])
   })
 
@@ -378,7 +379,13 @@ describe("personBreakdown", () => {
     const breakdown = personBreakdown(rows, A)
 
     expect(breakdown).toEqual([
-      { expenseId: "x1", title: "Dinner", date: undefined, paidCents: 9000, shareCents: 4500 },
+      {
+        expenseId: "x1",
+        title: "Dinner",
+        date: undefined,
+        paidCents: 9000,
+        shareCents: 4500,
+      },
     ])
   })
 
@@ -398,13 +405,20 @@ describe("personBreakdown", () => {
   it("adds up to that person's row in the totals", () => {
     for (const person of personTotals(rows)) {
       const breakdown = personBreakdown(rows, person.userId)
-      expect(breakdown.reduce((s, r) => s + r.paidCents, 0)).toBe(person.paidCents)
-      expect(breakdown.reduce((s, r) => s + r.shareCents, 0)).toBe(person.shareCents)
+      expect(breakdown.reduce((s, r) => s + r.paidCents, 0)).toBe(
+        person.paidCents
+      )
+      expect(breakdown.reduce((s, r) => s + r.shareCents, 0)).toBe(
+        person.shareCents
+      )
     }
   })
 
   it("preserves ledger order", () => {
-    expect(personBreakdown(rows, B).map((r) => r.expenseId)).toEqual(["x1", "x2"])
+    expect(personBreakdown(rows, B).map((r) => r.expenseId)).toEqual([
+      "x1",
+      "x2",
+    ])
   })
 
   it("is empty for somebody with no id, or nobody", () => {

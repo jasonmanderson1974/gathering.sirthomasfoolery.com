@@ -91,7 +91,8 @@ const formatter = new Intl.NumberFormat("en-US", {
   currency: "USD",
 })
 
-export const formatCents = (cents) => formatter.format((cents ?? 0) / CENTS_PER_UNIT)
+export const formatCents = (cents) =>
+  formatter.format((cents ?? 0) / CENTS_PER_UNIT)
 
 /**
  * How far a by-amount split is from reconciling.
@@ -147,6 +148,29 @@ export const expenseDateMax = (now = new Date()) =>
 export const todayIso = (now = new Date()) => {
   const pad = (n) => String(n).padStart(2, "0")
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+/**
+ * `YYYY-MM-DD` <-> `Date`, for Vuetify 3's date picker, which works in Date
+ * objects where Vuetify 2 took ISO strings.
+ *
+ * Deliberately LOCAL-time (not the UTC-noon trick `isoToMillis` uses): the
+ * picker compares against a locally-constructed "today" when applying `min` and
+ * `max`, so a UTC date would land a day out either side of the window for
+ * anyone west of Greenwich.
+ */
+export const isoToDate = (iso) => {
+  const [year, month, day] = String(iso ?? "")
+    .split("-")
+    .map(Number)
+  if (!year || !month || !day) return undefined
+  return new Date(year, month - 1, day)
+}
+
+export const dateToIso = (date) => {
+  const at = Array.isArray(date) ? date[0] : date
+  if (!(at instanceof Date) || isNaN(at)) return todayIso()
+  return todayIso(at)
 }
 
 export const isoToMillis = (iso) => {

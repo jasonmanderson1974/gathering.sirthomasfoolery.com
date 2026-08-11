@@ -4,11 +4,12 @@
       <div class="tw-text-sm tw-text-parchment">Time increment:</div>
       <v-select
         v-model="timeIncrementProxy"
-        dense
+        density="compact"
         class="-tw-mt-[2px] tw-w-24 tw-grow-0 tw-text-sm"
         :menu-props="{ auto: true }"
         hide-details
         :items="timeIncrementItems"
+        item-title="text"
       ></v-select>
     </div>
     <v-checkbox
@@ -104,7 +105,7 @@
               }
             "
             :disabled="!sendEmailAfterXResponsesEnabled"
-            dense
+            density="compact"
             class="email-me-after-text-field -tw-mt-[2px] tw-w-10"
             :menu-props="{ auto: true }"
             hide-details
@@ -118,7 +119,7 @@
     <TimezoneSelector
       v-model="timezoneProxy"
       label="Timezone"
-      @input="$emit('timezone-input', $event)"
+      @update:model-value="$emit('timezone-input', $event)"
     />
   </div>
 </template>

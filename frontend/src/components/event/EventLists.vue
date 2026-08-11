@@ -13,13 +13,13 @@
       <v-btn
         v-if="collaborative"
         icon
-        x-small
+        size="x-small"
         class="tw-text-parchment-dim"
         title="Refresh lists"
         :disabled="refreshing"
         @click="$emit('refresh')"
       >
-        <v-icon small>mdi-refresh</v-icon>
+        <v-icon size="small">mdi-refresh</v-icon>
       </v-btn>
     </div>
 
@@ -35,7 +35,7 @@
           <div v-if="renamingId === list._id" class="tw-flex-grow">
             <v-text-field
               v-model="renameText"
-              dense
+              density="compact"
               hide-details
               autofocus
               :maxlength="maxNameLength"
@@ -43,9 +43,11 @@
               @keyup.esc="cancelRename"
             />
             <div class="tw-mt-2 tw-flex tw-gap-2">
-              <v-btn small text @click="cancelRename">Cancel</v-btn>
+              <v-btn size="small" variant="text" @click="cancelRename"
+                >Cancel</v-btn
+              >
               <v-btn
-                small
+                size="small"
                 class="tw-bg-brass tw-text-wood-deep"
                 :disabled="!renameText.trim()"
                 @click="submitRename(list)"
@@ -58,7 +60,7 @@
               class="tw-flex tw-min-w-0 tw-flex-grow tw-cursor-pointer tw-items-start tw-gap-2"
               @click="toggleList(list._id)"
             >
-              <v-icon small class="tw-mt-0.5 tw-flex-none">
+              <v-icon size="small" class="tw-mt-0.5 tw-flex-none">
                 {{
                   isExpanded(list._id)
                     ? "mdi-chevron-down"
@@ -88,7 +90,7 @@
                 title="Rename list"
                 @click.stop="startRename(list)"
               >
-                <v-icon small>mdi-pencil</v-icon>
+                <v-icon size="small">mdi-pencil</v-icon>
               </v-btn>
               <v-btn
                 icon
@@ -98,7 +100,7 @@
                 title="Delete list"
                 @click.stop="askDeleteList(list)"
               >
-                <v-icon small>mdi-delete</v-icon>
+                <v-icon size="small">mdi-delete</v-icon>
               </v-btn>
             </div>
           </template>
@@ -157,7 +159,7 @@
                 <v-text-field
                   v-else
                   v-model="editText"
-                  dense
+                  density="compact"
                   hide-details
                   autofocus
                   :maxlength="maxItemLength"
@@ -165,9 +167,11 @@
                   @keyup.esc="cancelEdit"
                 />
                 <div class="tw-mt-2 tw-flex tw-gap-2">
-                  <v-btn small text @click="cancelEdit">Cancel</v-btn>
+                  <v-btn size="small" variant="text" @click="cancelEdit"
+                    >Cancel</v-btn
+                  >
                   <v-btn
-                    small
+                    size="small"
                     class="tw-bg-brass tw-text-wood-deep"
                     :disabled="!editText.trim()"
                     @click="submitEdit(list, row.item)"
@@ -182,7 +186,7 @@
                 <div class="tw-mt-0.5 tw-w-4 tw-flex-none">
                   <v-icon
                     v-if="row.hasChildren"
-                    small
+                    size="small"
                     class="tw-cursor-pointer tw-text-parchment-dim"
                     :title="
                       row.collapsed ? 'Show sub-entries' : 'Hide sub-entries'
@@ -199,7 +203,7 @@
                    or a plain bullet. -->
                 <v-icon
                   v-if="isChecklist(list)"
-                  small
+                  size="small"
                   class="tw-mt-0.5 tw-flex-none tw-cursor-pointer tw-text-brass"
                   :title="row.item.checked ? 'Uncheck' : 'Check off'"
                   @click="toggleChecked(list, row.item)"
@@ -212,7 +216,7 @@
                 </v-icon>
                 <v-icon
                   v-else
-                  small
+                  size="small"
                   class="tw-mt-0.5 tw-flex-none tw-text-parchment-dim"
                 >
                   {{
@@ -267,7 +271,7 @@
                     title="Add sub-entry"
                     @click="startChild(row.item)"
                   >
-                    <v-icon small>mdi-plus</v-icon>
+                    <v-icon size="small">mdi-plus</v-icon>
                   </v-btn>
                   <v-btn
                     v-if="isMine(row.item)"
@@ -278,7 +282,7 @@
                     title="Edit entry"
                     @click="startEdit(row.item)"
                   >
-                    <v-icon small>mdi-pencil</v-icon>
+                    <v-icon size="small">mdi-pencil</v-icon>
                   </v-btn>
                   <v-btn
                     v-if="canDelete(row.item)"
@@ -293,7 +297,7 @@
                     "
                     @click="askDeleteItem(list, row.item)"
                   >
-                    <v-icon small>mdi-close</v-icon>
+                    <v-icon size="small">mdi-close</v-icon>
                   </v-btn>
                 </div>
               </div>
@@ -318,7 +322,7 @@
                   v-else
                   ref="childInput"
                   v-model="childText"
-                  dense
+                  density="compact"
                   hide-details
                   autofocus
                   placeholder="Add a sub-entry…"
@@ -327,9 +331,11 @@
                   @keyup.esc="cancelChild"
                 />
                 <div class="tw-mt-2 tw-flex tw-gap-2">
-                  <v-btn small text @click="cancelChild">Cancel</v-btn>
+                  <v-btn size="small" variant="text" @click="cancelChild"
+                    >Cancel</v-btn
+                  >
                   <v-btn
-                    small
+                    size="small"
                     class="tw-bg-brass tw-text-wood-deep"
                     :disabled="!childText.trim()"
                     @click="submitChild(list)"
@@ -353,29 +359,29 @@
             dense
             hide-details
             placeholder="Add a place…"
-            @input="setNewItemText(list._id, $event)"
+            @update:model-value="setNewItemText(list._id, $event)"
             @enter="submitItem(list)"
           />
           <v-text-field
             v-else
             :ref="`addInput-${list._id}`"
             :model-value="newItemText[list._id] || ''"
-            dense
+            density="compact"
             hide-details
             placeholder="Add an entry…"
             :maxlength="maxItemLength"
-            @input="setNewItemText(list._id, $event)"
+            @update:model-value="setNewItemText(list._id, $event)"
             @keyup.enter="submitItem(list)"
           />
           <div class="tw-mt-2 tw-flex tw-justify-end">
             <v-btn
-              small
-              outlined
+              size="small"
+              variant="outlined"
               class="tw-text-brass"
               :disabled="!(newItemText[list._id] || '').trim()"
               @click="submitItem(list)"
             >
-              <v-icon small left>mdi-plus</v-icon>
+              <v-icon size="small" left>mdi-plus</v-icon>
               Add
             </v-btn>
           </div>
@@ -395,7 +401,7 @@
         <v-text-field
           v-model="newName"
           label="List name (e.g. Menu)"
-          dense
+          density="compact"
           hide-details
           :maxlength="maxNameLength"
           class="tw-mb-2"
@@ -410,9 +416,11 @@
           {{ kindHint }}
         </div>
         <div class="tw-mt-3 tw-flex tw-gap-2">
-          <v-btn small text @click="cancelNewList">Cancel</v-btn>
+          <v-btn size="small" variant="text" @click="cancelNewList"
+            >Cancel</v-btn
+          >
           <v-btn
-            small
+            size="small"
             class="tw-bg-brass tw-text-wood-deep"
             :disabled="!newName.trim()"
             @click="createList"
@@ -422,12 +430,12 @@
       </div>
       <v-btn
         v-else
-        small
-        outlined
+        size="small"
+        variant="outlined"
         class="tw-mt-3 tw-text-brass"
         @click="showNewList = true"
       >
-        <v-icon small left>mdi-plus</v-icon>
+        <v-icon size="small" left>mdi-plus</v-icon>
         Add list
       </v-btn>
     </template>
@@ -436,7 +444,7 @@
       :model-value="!!pendingDelete"
       :title="pendingDelete ? pendingDelete.title : ''"
       :body="pendingDelete ? pendingDelete.body : ''"
-      @input="onConfirmDialogInput"
+      @update:model-value="onConfirmDialogInput"
       @confirm="confirmDelete"
     />
   </div>

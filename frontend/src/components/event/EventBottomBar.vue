@@ -9,7 +9,7 @@
       <template v-if="!isEditing && !isScheduling">
         <v-btn
           v-if="!event.daysOnly && numResponses > 0"
-          text
+          variant="text"
           class="tw-text-white"
           @click="$emit('schedule-event')"
           >Schedule</v-btn
@@ -25,7 +25,11 @@
         </v-btn>
       </template>
       <template v-else-if="isEditing">
-        <v-btn text class="tw-text-white" @click="$emit('cancel-editing')">
+        <v-btn
+          variant="text"
+          class="tw-text-white"
+          @click="$emit('cancel-editing')"
+        >
           Cancel
         </v-btn>
         <v-spacer />
@@ -38,7 +42,7 @@
       </template>
       <template v-else-if="isScheduling">
         <v-btn
-          text
+          variant="text"
           class="tw-text-white"
           @click="$emit('cancel-schedule-event')"
         >

@@ -52,4 +52,3 @@ export const sendPluginSuccess = (requestId, command, payload = null) => {
 export const isValidPluginMessage = (event) => {
   return event?.data?.type === "FILL_CALENDAR_EVENT"
 }
-

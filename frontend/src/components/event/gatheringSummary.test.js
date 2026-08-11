@@ -8,9 +8,9 @@ import { serverURL } from "@/constants"
 
 describe("recurrenceLabel", () => {
   it("names each supported frequency", () => {
-    expect(recurrenceLabel({ gatheringRecurrence: { frequency: "weekly" } })).toBe(
-      "Repeats weekly"
-    )
+    expect(
+      recurrenceLabel({ gatheringRecurrence: { frequency: "weekly" } })
+    ).toBe("Repeats weekly")
     expect(
       recurrenceLabel({ gatheringRecurrence: { frequency: "biweekly" } })
     ).toBe("Repeats every 2 weeks")

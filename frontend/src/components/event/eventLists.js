@@ -280,7 +280,8 @@ const resolveSiblingDrop = (rows, at, parentId) => {
 
   const parentDepth = rows[parentIndex].depth
   let blockEnd = parentIndex + 1
-  while (blockEnd < rows.length && rows[blockEnd].depth > parentDepth) blockEnd++
+  while (blockEnd < rows.length && rows[blockEnd].depth > parentDepth)
+    blockEnd++
 
   // Released above the parent, or past the end of its subtree.
   if (at <= parentIndex || at > blockEnd) return null
@@ -331,6 +332,7 @@ export const canManageEventLists = ({
 }) => {
   if (!authUser) return false
   if (canManageUsers) return true
-  if (event?.ownerId && event.ownerId !== 0) return authUser._id === event.ownerId
+  if (event?.ownerId && event.ownerId !== 0)
+    return authUser._id === event.ownerId
   return !!canInvite
 }

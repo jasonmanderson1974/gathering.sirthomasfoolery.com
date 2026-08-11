@@ -235,12 +235,15 @@
   }
 }
 
-/* Tint Vuetify's generic dark dialog/menu surfaces to the Fellowship wood tone */
-.v-application .v-dialog > .v-card,
-.v-application .v-dialog > .v-sheet,
-.v-application .v-menu__content .v-card,
-.v-application .v-menu__content .v-list,
-.v-application .v-overlay__content .v-card {
+/* Tint Vuetify's generic dark dialog/menu surfaces to the Fellowship wood tone.
+   Vuetify 3 puts every overlay — dialogs and menus alike — inside
+   `.v-overlay__content`; `.v-menu__content` no longer exists. The
+   `.v-application` prefix is here purely as a specificity booster, to win
+   against Vuetify's own theme rules. */
+.v-application .v-overlay__content > .v-card,
+.v-application .v-overlay__content > .v-sheet,
+.v-application .v-overlay__content .v-card,
+.v-application .v-overlay__content .v-list {
   background-color: #241a13 !important; /* wood */
   border: 1px solid #8a7333; /* brass-dim keyline */
 }

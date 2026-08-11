@@ -38,9 +38,9 @@ describe("DST timezone regression", () => {
       dates: ["2026-11-02T09:00:00.000Z", "2026-11-03T09:00:00.000Z"],
     }
 
-    expect(
-      getTimezoneReferenceDateForEvent(datedEvent).toISOString()
-    ).toBe("2026-11-02T09:00:00.000Z")
+    expect(getTimezoneReferenceDateForEvent(datedEvent).toISOString()).toBe(
+      "2026-11-02T09:00:00.000Z"
+    )
   })
 
   it("calculates timezone offsets from the provided reference date", () => {
@@ -68,9 +68,9 @@ describe("DST timezone regression", () => {
       offset: 60,
     }
 
-    expect(
-      getScheduleTimezoneOffset(weeklyEvent, selectedTimezone, -10)
-    ).toBe(-60)
+    expect(getScheduleTimezoneOffset(weeklyEvent, selectedTimezone, -10)).toBe(
+      -60
+    )
   })
 
   it("falls back to the stored numeric offset when no timezone name exists", () => {
@@ -97,9 +97,9 @@ describe("DST timezone regression", () => {
       offset: 60,
     }
 
-    expect(
-      getScheduleTimezoneOffset(weeklyEvent, selectedTimezone, 3)
-    ).toBe(-120)
+    expect(getScheduleTimezoneOffset(weeklyEvent, selectedTimezone, 3)).toBe(
+      -120
+    )
   })
 
   it("shows the viewed event week using the new offset after fall-back DST changes", () => {
@@ -115,9 +115,9 @@ describe("DST timezone regression", () => {
       offset: 120,
     }
 
-    expect(
-      getScheduleTimezoneOffset(weeklyEvent, selectedTimezone, 2)
-    ).toBe(-60)
+    expect(getScheduleTimezoneOffset(weeklyEvent, selectedTimezone, 2)).toBe(
+      -60
+    )
   })
 })
 

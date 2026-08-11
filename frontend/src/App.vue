@@ -32,7 +32,7 @@
         <v-btn
           v-if="$route.name === 'event' && canCreateEvents"
           id="top-right-create-btn"
-          text
+          variant="text"
           class="tw-font-display tw-tracking-widest tw-text-brass"
           @click="_createNew"
         >
@@ -52,7 +52,7 @@
         <v-btn
           v-else
           id="top-right-sign-in-btn"
-          text
+          variant="text"
           class="tw-font-display tw-tracking-widest tw-text-brass"
           @click="signIn"
         >
@@ -83,120 +83,73 @@ html {
   scroll-behavior: smooth;
 }
 
+/*
+ * Body typeface. This deliberately beats the EB Garamond that index.css sets on
+ * `.v-application`: a rule landing directly on every element wins over an
+ * inherited one regardless of specificity, so DM Sans is the body face and the
+ * serif is reached for explicitly, via Tailwind's `tw-font-display`. It reads
+ * like a conflict and isn't — leaving it undocumented is what made it look like
+ * one.
+ */
 * {
   font-family: "DM Sans", sans-serif;
-  /* touch-action: manipulation !important; */
 }
 
-.v-messages__message {
-  font-size: theme("fontSize.xs");
-  line-height: 1.25;
-}
-.v-input--selection-controls {
-  margin-top: 0px !important;
-  padding-top: 0px !important;
-}
+/*
+ * Vuetify overrides.
+ *
+ * This block used to be roughly three times this size. Vuetify 3 renders a
+ * completely different internal DOM, and most of what was here named classes it
+ * never emits — `.v-input__slot`, `.v-input__control`, `.v-menu__content`,
+ * `.v-text-field--solo`, `.v-btn--is-elevated`, `.v-size--default`,
+ * `.v-input--switch__track`, `.v-input--selection-controls`,
+ * `.v-text-field__details`, `.error--text`. Those rules were deleted rather
+ * than translated: re-deriving a pile of `!important` declarations against an
+ * internal DOM nobody has looked at yet is how you end up fighting the
+ * framework for a result no one asked for. What survives is what the theme
+ * actually needs, and it is re-expressed in Vuetify 3's own class names.
+ *
+ * If something here looks wrong, prefer a Vuetify 3 prop or a theme colour over
+ * adding another `!important` — that is the trap this block is climbing out of.
+ */
 
-/** Buttons */
+/* Vuetify still tracks and letter-spaces button labels; this app doesn't. */
 .v-btn {
   letter-spacing: unset !important;
   text-transform: unset !important;
 }
-.v-btn:not(.v-btn--round, .v-btn-toggle > .v-btn).v-size--default {
-  height: 38px !important;
-  border-radius: theme("borderRadius.md") !important;
+
+/* The squarer, slightly shorter button the rest of the layout is built around.
+   v3 renames the size class: `.v-size--default` -> `.v-btn--size-default`. */
+.v-btn.v-btn--size-default:not(.v-btn--icon) {
+  height: 38px;
+  border-radius: theme("borderRadius.md");
 }
 
-.v-btn.v-btn--is-elevated {
-  -webkit-box-shadow: 0px 2px 6px 0px rgba(0, 0, 0, 0.15) !important;
-  -moz-box-shadow: 0px 2px 6px 0px rgba(0, 0, 0, 0.15) !important;
-  box-shadow: 0px 2px 6px 0px rgba(0, 0, 0, 0.15) !important;
-  border: 1px solid theme("colors.light-gray-stroke");
-}
-
-.v-btn.v-btn--is-elevated.tw-bg-white {
-  -webkit-box-shadow: 0px 1px 4px 0px rgba(0, 0, 0, 0.25) !important;
-  -moz-box-shadow: 0px 1px 4px 0px rgba(0, 0, 0, 0.25) !important;
-  box-shadow: 0px 1px 4px 0px rgba(0, 0, 0, 0.25) !important;
-  border: 1px solid theme("colors.off-white");
-}
-
-.v-btn.v-btn--is-elevated.primary,
-.v-btn.v-btn--is-elevated.tw-bg-brass,
-.v-btn.v-btn--is-elevated.tw-bg-white.tw-text-brass {
-  -webkit-box-shadow: 0px 2px 8px 0px #c9a44c66 !important;
-  -moz-box-shadow: 0px 2px 8px 0px #c9a44c66 !important;
+/* The brass glow on brand buttons. v3 renames `.v-btn--is-elevated` to
+   `.v-btn--elevated`; the Tailwind classes it pairs with are ours and unchanged. */
+.v-btn.v-btn--elevated.tw-bg-brass,
+.v-btn.v-btn--elevated.tw-bg-white.tw-text-brass {
   box-shadow: 0px 2px 8px 0px #c9a44c66 !important;
   border: 1px solid theme("colors.brass-bright") !important;
 }
 
-.v-btn.v-btn--is-elevated.tw-bg-very-dark-gray {
-  -webkit-box-shadow: 0px 2px 6px 0px rgba(0, 0, 0, 0.25) !important;
-  -moz-box-shadow: 0px 2px 6px 0px rgba(0, 0, 0, 0.25) !important;
-  box-shadow: 0px 2px 6px 0px rgba(0, 0, 0, 0.25) !important;
-  border: 1px solid theme("colors.dark-gray") !important;
+/* Validation messages: v3 keeps `.v-messages__message` but wraps it in
+   `.v-input__details` rather than `.v-text-field__details`. */
+.v-messages__message {
+  font-size: theme("fontSize.xs");
+  line-height: 1.25;
+}
+.v-input__details {
+  padding-inline: 0;
 }
 
-.v-btn.v-btn--is-elevated.tw-bg-blue,
-.v-btn.v-btn--is-elevated.tw-bg-white.tw-text-brass {
-  -webkit-box-shadow: 0px 2px 6px 0px rgba(0, 0, 0, 0.25) !important;
-  -moz-box-shadow: 0px 2px 6px 0px rgba(0, 0, 0, 0.25) !important;
-  box-shadow: 0px 2px 6px 0px rgba(0, 0, 0, 0.25) !important;
-  border: 1px solid theme("colors.light-blue") !important;
-}
-
-/** Drop shadows */
-.v-text-field.v-text-field--solo:not(.v-text-field--solo-flat)
-  > .v-input__control
-  > .v-input__slot {
-  filter: drop-shadow(0 0.5px 2px rgba(0, 0, 0, 0.1)) !important;
-  box-shadow: inset 0 -1px 0 0 rgba(0, 0, 0, 0.1) !important;
-  border-radius: theme("borderRadius.md") !important;
-  border: 1px solid #4f4f4f1f !important;
-}
-.v-menu__content {
-  box-shadow: 0px 5px 5px -1px rgba(0, 0, 0, 0.1),
-    0px 8px 10px 0.5px rgba(0, 0, 0, 0.07), 0px 3px 14px 1px rgba(0, 0, 0, 0.06) !important;
-}
+/* Ours, not Vuetify's — the availability overlay shadows. */
 .overlay-avail-shadow-green {
   box-shadow: 0px 3px 6px 0px #1c7d454d !important;
 }
 .overlay-avail-shadow-yellow {
   box-shadow: 0px 2px 8px 0px #e5a8004d !important;
-}
-
-/** Switch  */
-.v-input--switch--inset .v-input--selection-controls__input {
-  margin-right: 0 !important;
-  transform: scale(80%) !important;
-}
-.v-input--switch__track.primary--text {
-  border: 2px theme("colors.brass") solid !important;
-}
-.v-input--switch__track {
-  border: 2px theme("colors.gray") solid !important;
-  background-color: theme("colors.gray") !important;
-  box-shadow: 0px 0.74px 4.46px 0px rgba(0, 0, 0, 0.1) !important;
-}
-.v-input--is-label-active .v-input--switch__track {
-  background-color: currentColor !important;
-  box-shadow: 0px 1.5px 4.5px 0px rgba(0, 0, 0, 0.2) !important;
-}
-.v-input--switch--inset .v-input--switch__track,
-.v-input--switch--inset .v-input--selection-controls__input {
-  opacity: 1 !important;
-}
-.v-input--switch__thumb {
-  background-color: white !important;
-}
-.v-text-field__details {
-  padding: 0 !important;
-}
-
-/** Error color */
-.error--text .v-input__slot {
-  outline: red solid;
-  border-radius: 3px;
 }
 </style>
 

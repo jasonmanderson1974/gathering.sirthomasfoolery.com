@@ -18,12 +18,13 @@
         >
           <v-select
             :menu-props="{ auto: true }"
-            dense
+            density="compact"
             hide-details
             :items="bufferTimes"
+            item-title="text"
             class="-tw-mt-0.5 tw-w-20 tw-text-xs"
             :model-value="bufferTime.time"
-            @input="(val) => updateCalendarOption('time', val)"
+            @update:model-value="(val) => updateCalendarOption('time', val)"
             @click="
               (e) => {
                 e.preventDefault()

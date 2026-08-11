@@ -137,7 +137,7 @@ export default {
 .location-input-menu {
   background-color: #2e2117; /* leather */
 }
-.location-input-menu .v-list-item__title {
+.location-input-menu .v-list-item-title {
   color: #ede4d3; /* parchment */
   font-size: 0.875rem;
 }

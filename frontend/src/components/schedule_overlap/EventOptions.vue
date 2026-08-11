@@ -3,7 +3,7 @@
     v-if="event.daysOnly || numResponses >= 1"
     label="Options"
     :model-value="showEventOptions"
-    @input="$emit('toggleShowEventOptions')"
+    @update:model-value="$emit('toggleShowEventOptions')"
   >
     <div class="tw-flex tw-flex-col tw-gap-4 tw-pt-2">
       <v-switch

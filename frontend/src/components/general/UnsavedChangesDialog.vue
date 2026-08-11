@@ -14,12 +14,12 @@
       <v-card-actions>
         <v-spacer />
         <v-btn
-          text
+          variant="text"
           @click="$emit('update:modelValue', false)"
           class="tw-text-brass"
           >Cancel</v-btn
         >
-        <v-btn text @click="$emit('leave')">Leave page</v-btn>
+        <v-btn variant="text" @click="$emit('leave')">Leave page</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

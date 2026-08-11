@@ -35,8 +35,11 @@
         </div>
       </div>
       <div class="tw-min-w-max">
-        <v-chip small class="tw-m-0.5 tw-bg-leather tw-text-parchment-dim">
-          <v-icon left small> mdi-account-multiple </v-icon>
+        <v-chip
+          size="small"
+          class="tw-m-0.5 tw-bg-leather tw-text-parchment-dim"
+        >
+          <v-icon left size="small"> mdi-account-multiple </v-icon>
           {{ event.numResponses }}
         </v-chip>
         <v-menu
@@ -46,15 +49,14 @@
           :close-on-content-click="false"
           transition="slide-x-transition"
           right
-          offset-x
         >
           <template v-slot:activator="{ props }">
-            <v-btn plain icon v-bind="props" @click.prevent>
+            <v-btn variant="plain" icon v-bind="props" @click.prevent>
               <v-icon>mdi-dots-vertical</v-icon>
             </v-btn>
           </template>
 
-          <v-list class="tw-py-1" dense>
+          <v-list class="tw-py-1" density="compact">
             <v-list-item @click="copyLink">
               <v-list-item-title>Copy link</v-list-item-title>
             </v-list-item>
@@ -74,7 +76,7 @@
                     placeholder="Name your event..."
                     :disabled="duplicateDialogOptions.loading"
                     hide-details
-                    solo
+                    variant="solo"
                   />
                   <v-checkbox
                     v-model="duplicateDialogOptions.copyAvailability"
@@ -87,13 +89,13 @@
                 <v-card-actions>
                   <v-spacer />
                   <v-btn
-                    text
+                    variant="text"
                     @click="duplicateDialog = false"
                     :disabled="duplicateDialogOptions.loading"
                     >Cancel</v-btn
                   >
                   <v-btn
-                    text
+                    variant="text"
                     color="primary"
                     @click="duplicateEvent"
                     :loading="duplicateDialogOptions.loading"
@@ -105,7 +107,6 @@
             <v-menu
               v-if="isOwner"
               right
-              offset-x
               :close-on-content-click="false"
               open-on-hover
             >
@@ -118,15 +119,15 @@
                   <!-- v-list-item-icon / -action / -content are all gone in
                        Vuetify 3; trailing adornments go in the `append` slot. -->
                   <template #append>
-                    <v-icon small>mdi-chevron-right</v-icon>
+                    <v-icon size="small">mdi-chevron-right</v-icon>
                   </template>
                 </v-list-item>
               </template>
-              <v-list dense class="tw-py-1">
+              <v-list density="compact" class="tw-py-1">
                 <v-list-item @click="moveEventToFolder(null)" class="tw-pr-1">
                   <v-list-item-title>No folder</v-list-item-title>
                   <template v-if="folderId === null" #append>
-                    <v-icon small>mdi-check</v-icon>
+                    <v-icon size="small">mdi-check</v-icon>
                   </template>
                 </v-list-item>
                 <v-list-item
@@ -137,7 +138,7 @@
                 >
                   <v-list-item-title>{{ folder.name }}</v-list-item-title>
                   <template v-if="folder._id === folderId" #append>
-                    <v-icon small>mdi-check</v-icon>
+                    <v-icon size="small">mdi-check</v-icon>
                   </template>
                 </v-list-item>
               </v-list>
@@ -152,7 +153,7 @@
               <template v-slot:activator="{ props }">
                 <v-list-item
                   id="delete-event-btn"
-                  class="red--text"
+                  class="tw-text-red"
                   v-bind="props"
                 >
                   <v-list-item-title>Delete {{ typeText }}</v-list-item-title>
@@ -166,8 +167,10 @@
                 >
                 <v-card-actions>
                   <v-spacer />
-                  <v-btn text @click="removeDialog = false">Cancel</v-btn>
-                  <v-btn text color="error" @click="removeEvent"
+                  <v-btn variant="text" @click="removeDialog = false"
+                    >Cancel</v-btn
+                  >
+                  <v-btn variant="text" color="error" @click="removeEvent"
                     >I'm sure</v-btn
                   >
                 </v-card-actions>

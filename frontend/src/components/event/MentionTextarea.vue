@@ -6,7 +6,7 @@
       ref="input"
       :model-value="modelValue"
       :placeholder="placeholder"
-      dense
+      density="compact"
       hide-details
       auto-grow
       :rows="1"

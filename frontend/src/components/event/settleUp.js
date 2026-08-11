@@ -250,6 +250,9 @@ export const settleUpSummary = (expenses) => {
   return {
     totals: personTotals(rows),
     payments,
-    totalCents: rows.reduce((sum, expense) => sum + (expense.amountCents ?? 0), 0),
+    totalCents: rows.reduce(
+      (sum, expense) => sum + (expense.amountCents ?? 0),
+      0
+    ),
   }
 }

@@ -22,7 +22,7 @@
               class="tw-flex tw-cursor-pointer tw-items-start tw-gap-2 tw-p-2"
               @click="toggleThread(comment._id)"
             >
-              <v-icon small class="tw-mt-0.5 tw-flex-none">
+              <v-icon size="small" class="tw-mt-0.5 tw-flex-none">
                 {{
                   isExpanded(comment._id)
                     ? "mdi-chevron-down"
@@ -36,7 +36,7 @@
                   </span>
                   <v-icon
                     v-if="comment.membersOnly"
-                    x-small
+                    size="x-small"
                     class="tw-flex-none"
                     title="Members only — guests can't see this thread"
                     >mdi-lock-outline</v-icon
@@ -95,7 +95,7 @@
                     :candidates="mentionables"
                   />
                   <v-btn
-                    small
+                    size="small"
                     class="tw-bg-brass tw-text-wood-deep"
                     :disabled="!canReply(comment._id)"
                     @click="submitReply(comment)"
@@ -163,7 +163,7 @@
             :candidates="mentionables"
           />
           <v-btn
-            small
+            size="small"
             class="tw-bg-brass tw-text-wood-deep"
             :disabled="!canPost"
             @click="submit"
@@ -194,8 +194,12 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text small @click="tagDialog = false">Cancel</v-btn>
-          <v-btn small color="primary" @click="confirmTag">Create thread</v-btn>
+          <v-btn variant="text" size="small" @click="tagDialog = false"
+            >Cancel</v-btn
+          >
+          <v-btn size="small" color="primary" @click="confirmTag"
+            >Create thread</v-btn
+          >
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -204,7 +208,7 @@
       :model-value="!!pendingDelete"
       :title="pendingDelete ? pendingDelete.title : ''"
       :body="pendingDelete ? pendingDelete.body : ''"
-      @input="onConfirmDialogInput"
+      @update:model-value="onConfirmDialogInput"
       @confirm="confirmDelete"
     />
   </div>

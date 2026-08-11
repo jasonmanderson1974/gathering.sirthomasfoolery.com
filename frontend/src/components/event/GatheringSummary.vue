@@ -4,7 +4,9 @@
     class="tw-mt-3 tw-rounded-md tw-border tw-border-brass-dim tw-bg-leather tw-p-3 tw-text-parchment sm:tw-p-4"
   >
     <div class="tw-flex tw-items-start tw-gap-2">
-      <v-icon small class="tw-mt-0.5 tw-text-brass">mdi-calendar-check</v-icon>
+      <v-icon size="small" class="tw-mt-0.5 tw-text-brass"
+        >mdi-calendar-check</v-icon
+      >
       <div class="tw-min-w-0 tw-flex-1">
         <div class="tw-text-xs tw-uppercase tw-tracking-wide tw-text-brass">
           Gathering set
@@ -19,13 +21,18 @@
 
       <!-- Changing or calling off the gathering is the organiser's business,
            so the menu only exists for them. Everyone else still sees the card. -->
-      <v-menu v-if="canEdit" offset-y left>
+      <v-menu v-if="canEdit" left>
         <template v-slot:activator="{ props }">
-          <v-btn icon small v-bind="props" aria-label="Gathering options">
-            <v-icon small>mdi-dots-vertical</v-icon>
+          <v-btn
+            icon
+            size="small"
+            v-bind="props"
+            aria-label="Gathering options"
+          >
+            <v-icon size="small">mdi-dots-vertical</v-icon>
           </v-btn>
         </template>
-        <v-list dense>
+        <v-list density="compact">
           <v-list-item @click="$emit('reschedule')">
             <v-list-item-title>Reschedule</v-list-item-title>
           </v-list-item>
@@ -40,11 +47,11 @@
 
     <v-btn
       :href="icsHref"
-      small
-      outlined
+      size="small"
+      variant="outlined"
       class="tw-mt-3 tw-w-full tw-text-brass"
     >
-      <v-icon small left>mdi-calendar-plus</v-icon>
+      <v-icon size="small" left>mdi-calendar-plus</v-icon>
       Add to calendar
     </v-btn>
   </div>

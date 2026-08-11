@@ -53,7 +53,7 @@
 
         <v-card-actions>
           <v-btn
-            text
+            variant="text"
             :disabled="!ready"
             @click="rotate(-90)"
             title="Rotate left"
@@ -61,7 +61,7 @@
             <v-icon>mdi-rotate-left</v-icon>
           </v-btn>
           <v-btn
-            text
+            variant="text"
             :disabled="!ready"
             @click="rotate(90)"
             title="Rotate right"
@@ -69,8 +69,15 @@
             <v-icon>mdi-rotate-right</v-icon>
           </v-btn>
           <v-spacer />
-          <v-btn text class="tw-text-brass" @click="close">Cancel</v-btn>
-          <v-btn text :disabled="!ready" :loading="saving" @click="save">
+          <v-btn variant="text" class="tw-text-brass" @click="close"
+            >Cancel</v-btn
+          >
+          <v-btn
+            variant="text"
+            :disabled="!ready"
+            :loading="saving"
+            @click="save"
+          >
             Save photo
           </v-btn>
         </v-card-actions>

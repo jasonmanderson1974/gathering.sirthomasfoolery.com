@@ -6,7 +6,11 @@
           Dashboard
         </div>
       </div>
-      <v-btn text @click="openCreateFolderDialog" class="tw-text-parchment-dim">
+      <v-btn
+        variant="text"
+        @click="openCreateFolderDialog"
+        class="tw-text-parchment-dim"
+      >
         <v-icon class="tw-text-lg">mdi-folder-plus</v-icon>
         <span class="tw-ml-2">New folder</span>
       </v-btn>
@@ -19,7 +23,7 @@
         class="tw-group tw-mb-2"
       >
         <div class="tw-flex tw-items-center">
-          <v-btn icon small @click="toggleFolder(folder.id)">
+          <v-btn icon size="small" @click="toggleFolder(folder.id)">
             <v-icon>{{
               folderOpenState[folder.id] ? "mdi-menu-down" : "mdi-menu-right"
             }}</v-icon>
@@ -27,7 +31,7 @@
           <v-chip
             v-if="folder.type === 'regular'"
             :color="folder.color || '#D3D3D3'"
-            small
+            size="small"
             class="tw-mr-2 tw-cursor-pointer tw-rounded tw-border tw-border-brass-dim tw-px-2 tw-text-sm tw-font-medium"
             @click="openEditFolderDialog(folder)"
           >
@@ -39,7 +43,7 @@
           >
             <v-icon
               v-if="folder.icon"
-              small
+              size="small"
               class="tw-mr-1 tw-text-parchment-dim"
               >{{ folder.icon }}</v-icon
             >
@@ -49,13 +53,13 @@
             v-if="folder.type === 'regular'"
             class="tw-invisible tw-flex tw-items-center group-hover:tw-visible"
           >
-            <v-menu offset-y>
+            <v-menu>
               <template v-slot:activator="{ props }">
-                <v-btn icon small v-bind="props" @click.stop.prevent>
-                  <v-icon small>mdi-dots-horizontal</v-icon>
+                <v-btn icon size="small" v-bind="props" @click.stop.prevent>
+                  <v-icon size="small">mdi-dots-horizontal</v-icon>
                 </v-btn>
               </template>
-              <v-list dense class="tw-py-1">
+              <v-list density="compact" class="tw-py-1">
                 <v-list-item @click.stop.prevent="openEditFolderDialog(folder)">
                   <v-list-item-title>Edit</v-list-item-title>
                 </v-list-item>
@@ -68,10 +72,10 @@
             </v-menu>
             <v-btn
               icon
-              small
+              size="small"
               @click.stop.prevent="createEventInFolder(folder.id)"
             >
-              <v-icon small>mdi-plus</v-icon>
+              <v-icon size="small">mdi-plus</v-icon>
             </v-btn>
           </div>
           <div
@@ -80,10 +84,10 @@
           >
             <v-btn
               icon
-              small
+              size="small"
               @click.stop.prevent="createEventInFolder(folder.id)"
             >
-              <v-icon small>mdi-plus</v-icon>
+              <v-icon size="small">mdi-plus</v-icon>
             </v-btn>
           </div>
         </div>
@@ -150,8 +154,10 @@
         >
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="deleteDialog = false">Cancel</v-btn>
-          <v-btn color="red darken-1" text @click="confirmDelete">Delete</v-btn>
+          <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
+          <v-btn color="red" variant="text" @click="confirmDelete"
+            >Delete</v-btn
+          >
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -186,8 +192,8 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="closeFolderDialog">Cancel</v-btn>
-          <v-btn color="primary" text @click="confirmFolderDialog">{{
+          <v-btn variant="text" @click="closeFolderDialog">Cancel</v-btn>
+          <v-btn color="primary" variant="text" @click="confirmFolderDialog">{{
             folderDialogConfirmText
           }}</v-btn>
         </v-card-actions>

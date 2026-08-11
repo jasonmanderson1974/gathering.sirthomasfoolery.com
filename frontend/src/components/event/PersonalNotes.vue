@@ -11,8 +11,8 @@
         <v-btn
           v-for="mode in modes"
           :key="mode.value"
-          text
-          small
+          variant="text"
+          size="small"
           :class="`tw-text-xs ${
             view === mode.value
               ? 'tw-bg-brass/10 tw-text-brass'
@@ -52,7 +52,7 @@
           :title="action.title"
           @click="format(action.id)"
         >
-          <v-icon small>{{ action.icon }}</v-icon>
+          <v-icon size="small">{{ action.icon }}</v-icon>
         </v-btn>
       </div>
 
@@ -63,13 +63,13 @@
         ref="input"
         :model-value="draft"
         placeholder="Anything you want to remember about this gathering — only you can see it."
-        dense
+        density="compact"
         hide-details
         auto-grow
         :rows="10"
         :maxlength="maxLength"
         class="tw-text-sm"
-        @input="onInput"
+        @update:model-value="onInput"
         @blur="flush"
       />
 
@@ -86,8 +86,8 @@
             {{ draft.length }} / {{ maxLength }}
           </div>
           <v-btn
-            small
-            text
+            size="small"
+            variant="text"
             class="tw-text-brass"
             :disabled="!dirty || saving"
             @click="save"

@@ -41,7 +41,7 @@
       <v-btn
         v-if="cancelLabel != ''"
         @click="$emit('cancel')"
-        text
+        variant="text"
         class="tw-mr-2 tw-flex-1"
       >
         {{ cancelLabel }}

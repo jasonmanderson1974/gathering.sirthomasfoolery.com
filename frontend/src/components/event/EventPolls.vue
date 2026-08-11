@@ -22,12 +22,12 @@
           <v-btn
             v-if="isEventOwner"
             icon
-            x-small
+            size="x-small"
             class="tw-flex-none tw-text-red"
             title="Delete poll"
             @click="askDeletePoll(poll)"
           >
-            <v-icon small>mdi-delete</v-icon>
+            <v-icon size="small">mdi-delete</v-icon>
           </v-btn>
         </div>
 
@@ -46,7 +46,7 @@
             @click="toggle(poll, option._id)"
           >
             <v-icon
-              small
+              size="small"
               :class="
                 isChosen(poll, option._id)
                   ? 'tw-text-brass'
@@ -93,7 +93,7 @@
         <v-text-field
           v-model="newTitle"
           label="Poll question (e.g. Where should we meet?)"
-          dense
+          density="compact"
           hide-details
           class="tw-mb-2"
         />
@@ -105,17 +105,17 @@
           <v-text-field
             v-model="newOptions[i]"
             :label="`Option ${i + 1}`"
-            dense
+            density="compact"
             hide-details
           />
           <v-btn
             icon
-            x-small
+            size="x-small"
             class="tw-text-parchment-dim"
             :disabled="newOptions.length <= 2"
             @click="removeOption(i)"
           >
-            <v-icon small>mdi-close</v-icon>
+            <v-icon size="small">mdi-close</v-icon>
           </v-btn>
         </div>
         <div class="tw-mt-1 tw-flex tw-flex-wrap tw-items-center tw-gap-3">
@@ -131,9 +131,11 @@
           />
         </div>
         <div class="tw-mt-3 tw-flex tw-gap-2">
-          <v-btn small text @click="cancelNewPoll">Cancel</v-btn>
+          <v-btn size="small" variant="text" @click="cancelNewPoll"
+            >Cancel</v-btn
+          >
           <v-btn
-            small
+            size="small"
             class="tw-bg-brass tw-text-wood-deep"
             :disabled="!canCreate"
             @click="createPoll"
@@ -143,12 +145,12 @@
       </div>
       <v-btn
         v-else
-        small
-        outlined
+        size="small"
+        variant="outlined"
         class="tw-mt-3 tw-text-brass"
         @click="showNewPoll = true"
       >
-        <v-icon small left>mdi-plus</v-icon>
+        <v-icon size="small" left>mdi-plus</v-icon>
         Add poll
       </v-btn>
     </template>
@@ -157,7 +159,7 @@
       :model-value="!!pendingDelete"
       :title="pendingDelete ? pendingDelete.title : ''"
       :body="pendingDelete ? pendingDelete.body : ''"
-      @input="onConfirmDialogInput"
+      @update:model-value="onConfirmDialogInput"
       @confirm="confirmDelete"
     />
   </div>

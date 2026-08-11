@@ -35,7 +35,7 @@
           v-model="name"
           placeholder="Name your event..."
           hide-details="auto"
-          solo
+          variant="solo"
           @keyup.enter="blurNameField"
           :rules="nameRules"
           autofocus
@@ -89,22 +89,24 @@
                     >
                       <v-select
                         :model-value="startTime"
-                        @input="(t) => (startTime = t.time)"
+                        @update:model-value="(t) => (startTime = t.time)"
                         :menu-props="{ auto: true }"
                         :items="times"
+                        item-title="text"
                         return-object
                         hide-details
-                        solo
+                        variant="solo"
                       ></v-select>
                       <div>to</div>
                       <v-select
                         :model-value="endTime"
-                        @input="(t) => (endTime = t.time)"
+                        @update:model-value="(t) => (endTime = t.time)"
                         :menu-props="{ auto: true }"
                         :items="times"
+                        item-title="text"
                         return-object
                         hide-details
-                        solo
+                        variant="solo"
                       ></v-select>
                     </div>
                   </div>
@@ -152,7 +154,7 @@
             v-if="!edit && !daysOnly"
             v-model="selectedDateOption"
             :items="Object.values(dateOptions)"
-            solo
+            variant="solo"
             hide-details
             class="tw-mb-4"
           />
@@ -189,14 +191,14 @@
                   solo
                   color="primary"
                 >
-                  <v-btn depressed v-show="!startOnMonday"> Sun </v-btn>
-                  <v-btn depressed> Mon </v-btn>
-                  <v-btn depressed> Tue </v-btn>
-                  <v-btn depressed> Wed </v-btn>
-                  <v-btn depressed> Thu </v-btn>
-                  <v-btn depressed> Fri </v-btn>
-                  <v-btn depressed> Sat </v-btn>
-                  <v-btn depressed v-show="startOnMonday"> Sun </v-btn>
+                  <v-btn variant="flat" v-show="!startOnMonday"> Sun </v-btn>
+                  <v-btn variant="flat"> Mon </v-btn>
+                  <v-btn variant="flat"> Tue </v-btn>
+                  <v-btn variant="flat"> Wed </v-btn>
+                  <v-btn variant="flat"> Thu </v-btn>
+                  <v-btn variant="flat"> Fri </v-btn>
+                  <v-btn variant="flat"> Sat </v-btn>
+                  <v-btn variant="flat" v-show="startOnMonday"> Sun </v-btn>
                 </v-btn-toggle>
               </v-input>
               <v-checkbox class="tw-mt-2" v-model="startOnMonday" hide-details>
@@ -273,7 +275,7 @@
                       content-class="tw-bg-very-dark-gray tw-shadow-lg tw-opacity-100 tw-py-4"
                     >
                       <template v-slot:activator="{ props }">
-                        <v-icon small v-bind="props"
+                        <v-icon size="small" v-bind="props"
                           >mdi-information-outline
                         </v-icon>
                       </template>

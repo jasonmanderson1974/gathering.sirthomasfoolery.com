@@ -9,8 +9,10 @@
       <v-card-text v-if="body">{{ body }}</v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn text @click="$emit('update:modelValue', false)">Cancel</v-btn>
-        <v-btn color="red darken-1" text @click="$emit('confirm')">
+        <v-btn variant="text" @click="$emit('update:modelValue', false)"
+          >Cancel</v-btn
+        >
+        <v-btn color="red" variant="text" @click="$emit('confirm')">
           {{ confirmLabel }}
         </v-btn>
       </v-card-actions>

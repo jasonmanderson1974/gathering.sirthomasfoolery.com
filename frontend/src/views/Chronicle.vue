@@ -51,7 +51,7 @@
             v-if="entry.location"
             class="tw-mt-1 tw-text-sm tw-text-parchment-dim"
           >
-            <v-icon x-small class="tw-mr-1 tw-text-parchment-dim"
+            <v-icon size="x-small" class="tw-mr-1 tw-text-parchment-dim"
               >mdi-map-marker</v-icon
             >
             {{ entry.location }}

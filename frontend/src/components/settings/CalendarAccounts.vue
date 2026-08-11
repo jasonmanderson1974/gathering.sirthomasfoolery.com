@@ -7,7 +7,7 @@
       v-if="toggleState"
       class="-tw-ml-2 tw-w-[calc(100%+1rem)] tw-justify-between tw-px-2"
       block
-      text
+      variant="text"
       @click="toggleShowCalendars"
     >
       <span class="tw-mr-1 tw-text-base tw-font-medium">My calendars</span>
@@ -53,7 +53,7 @@
             <template v-slot:activator="{ props }">
               <div>
                 <v-btn
-                  text
+                  variant="text"
                   color="primary"
                   :class="
                     toggleState
@@ -88,8 +88,10 @@
         >
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="removeDialog = false">Cancel</v-btn>
-          <v-btn text color="error" @click="removeAccount">Remove</v-btn>
+          <v-btn variant="text" @click="removeDialog = false">Cancel</v-btn>
+          <v-btn variant="text" color="error" @click="removeAccount"
+            >Remove</v-btn
+          >
         </v-card-actions>
       </v-card>
     </v-dialog>

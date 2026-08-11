@@ -42,7 +42,8 @@ export const groupComments = (comments) => {
   const repliesByThreadId = {}
   for (const comment of list) {
     if (!comment.threadId || !rootIds.has(comment.threadId)) continue
-    if (!repliesByThreadId[comment.threadId]) repliesByThreadId[comment.threadId] = []
+    if (!repliesByThreadId[comment.threadId])
+      repliesByThreadId[comment.threadId] = []
     repliesByThreadId[comment.threadId].push(comment)
   }
 

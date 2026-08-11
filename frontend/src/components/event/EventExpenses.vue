@@ -21,12 +21,12 @@
           />
           <v-btn
             v-if="canAdd"
-            small
-            outlined
+            size="small"
+            variant="outlined"
             class="tw-text-brass"
             @click="openNew"
           >
-            <v-icon small left>mdi-plus</v-icon>
+            <v-icon size="small" left>mdi-plus</v-icon>
             Add expense
           </v-btn>
         </div>
@@ -90,22 +90,22 @@
               <v-btn
                 v-if="expense.canEdit"
                 icon
-                x-small
+                size="x-small"
                 class="tw-text-parchment-dim"
                 title="Edit expense"
                 @click="openEdit(expense)"
               >
-                <v-icon small>mdi-pencil</v-icon>
+                <v-icon size="small">mdi-pencil</v-icon>
               </v-btn>
               <v-btn
                 v-if="expense.canEdit"
                 icon
-                x-small
+                size="x-small"
                 class="tw-text-red"
                 title="Delete expense"
                 @click="askDelete(expense)"
               >
-                <v-icon small>mdi-delete</v-icon>
+                <v-icon size="small">mdi-delete</v-icon>
               </v-btn>
             </div>
           </div>
@@ -138,12 +138,12 @@
               <v-btn
                 v-if="expense.canEdit"
                 icon
-                x-small
+                size="x-small"
                 class="tw-absolute tw-right-0 tw-top-0 tw-bg-wood-deep/80 tw-text-parchment"
                 title="Remove receipt"
                 @click="askDeleteReceipt(expense, receipt)"
               >
-                <v-icon x-small>mdi-close</v-icon>
+                <v-icon size="x-small">mdi-close</v-icon>
               </v-btn>
             </div>
           </div>
@@ -222,7 +222,7 @@
       :model-value="!!pendingDelete"
       :title="pendingDelete ? pendingDelete.title : ''"
       :body="pendingDelete ? pendingDelete.body : ''"
-      @input="(open) => !open && (pendingDelete = null)"
+      @update:model-value="(open) => !open && (pendingDelete = null)"
       @confirm="confirmDelete"
     />
   </div>

@@ -20,7 +20,7 @@
           v-model="search"
           class="tw-flex-1"
           placeholder="Search by name or email..."
-          solo
+          variant="solo"
           hide-details
           clearable
           prepend-inner-icon="mdi-magnify"
@@ -35,30 +35,30 @@
             class="tw-mt-0 tw-shrink-0 tw-pt-0"
             label="Show guests"
           />
-          <v-menu offset-y>
+          <v-menu>
             <template v-slot:activator="{ props }">
               <v-btn
                 id="roster-export-btn"
-                outlined
-                small
+                variant="outlined"
+                size="small"
                 class="tw-text-brass"
                 :disabled="filteredMembers.length === 0"
                 v-bind="props"
               >
-                <v-icon small left>mdi-download</v-icon>
+                <v-icon size="small" left>mdi-download</v-icon>
                 Export
               </v-btn>
             </template>
-            <v-list dense>
+            <v-list density="compact">
               <v-list-item id="roster-print-btn" @click="printRoster">
                 <v-list-item-title class="tw-flex tw-items-center tw-gap-2">
-                  <v-icon small>mdi-printer</v-icon>
+                  <v-icon size="small">mdi-printer</v-icon>
                   Print / PDF
                 </v-list-item-title>
               </v-list-item>
               <v-list-item id="roster-csv-btn" @click="exportCsv">
                 <v-list-item-title class="tw-flex tw-items-center tw-gap-2">
-                  <v-icon small>mdi-file-delimited-outline</v-icon>
+                  <v-icon size="small">mdi-file-delimited-outline</v-icon>
                   Download CSV
                 </v-list-item-title>
               </v-list-item>
@@ -124,7 +124,7 @@
                 :href="`mailto:${member.email}`"
                 class="tw-mt-1 tw-flex tw-items-center tw-gap-1 tw-truncate tw-text-sm tw-text-parchment-dim hover:tw-text-brass"
               >
-                <v-icon x-small color="brass">mdi-email-outline</v-icon>
+                <v-icon size="x-small" color="brass">mdi-email-outline</v-icon>
                 <span class="tw-truncate">{{ member.email }}</span>
               </a>
 
@@ -134,7 +134,7 @@
                 :href="`tel:${member.phone}`"
                 class="tw-mt-1 tw-flex tw-items-center tw-gap-1 tw-text-sm tw-text-parchment-dim hover:tw-text-brass"
               >
-                <v-icon x-small color="brass">mdi-phone-outline</v-icon>
+                <v-icon size="x-small" color="brass">mdi-phone-outline</v-icon>
                 <span>{{ formatPhone(member.phone) }}</span>
               </a>
             </div>

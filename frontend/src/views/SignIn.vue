@@ -43,7 +43,7 @@
                   class="tw-mb-2"
                   placeholder="Enter your email..."
                   type="email"
-                  solo
+                  variant="solo"
                   hide-details="auto"
                   :error-messages="emailError"
                   @keydown.enter="submitEmail"
@@ -74,7 +74,7 @@
         <!-- Onboarding: name entry for new users -->
         <template v-else-if="step === 'onboarding'">
           <v-card-title class="tw-flex tw-items-center">
-            <v-btn icon small @click="step = 'select'" class="tw-mr-1">
+            <v-btn icon size="small" @click="step = 'select'" class="tw-mr-1">
               <v-icon>mdi-arrow-left</v-icon>
             </v-btn>
             What's your name?
@@ -87,7 +87,7 @@
             <v-text-field
               v-model="firstName"
               placeholder="First name"
-              solo
+              variant="solo"
               hide-details="auto"
               autofocus
               @keydown.enter="
@@ -100,7 +100,7 @@
               ref="lastNameField"
               v-model="lastName"
               placeholder="Last name (optional)"
-              solo
+              variant="solo"
               hide-details="auto"
               @keydown.enter="submitOnboarding"
               class="tw-mb-3"
@@ -109,7 +109,7 @@
             <v-text-field
               :model-value="email"
               placeholder="Email..."
-              solo
+              variant="solo"
               hide-details="auto"
               disabled
               background-color="#2e2117"
@@ -135,7 +135,7 @@
           <v-card-title class="tw-flex tw-items-center">
             <v-btn
               icon
-              small
+              size="small"
               @click="step = isNewUser ? 'onboarding' : 'select'"
               class="tw-mr-1"
             >
@@ -154,7 +154,7 @@
             <v-text-field
               v-model="otpCode"
               placeholder="Enter 6-digit code..."
-              solo
+              variant="solo"
               hide-details="auto"
               maxlength="6"
               autocomplete="one-time-code"
@@ -174,8 +174,8 @@
             </v-btn>
             <div class="tw-mt-3 tw-text-center">
               <v-btn
-                text
-                x-small
+                variant="text"
+                size="x-small"
                 :disabled="resendCooldown > 0"
                 @click="resendOtp"
               >

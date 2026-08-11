@@ -224,7 +224,9 @@ describe("describeSaveState", () => {
   })
 
   it("reports saving before dirty", () => {
-    expect(describeSaveState({ dirty: true, saving: true }).text).toBe("Saving…")
+    expect(describeSaveState({ dirty: true, saving: true }).text).toBe(
+      "Saving…"
+    )
   })
 
   it("warns about unsaved changes", () => {
@@ -232,7 +234,9 @@ describe("describeSaveState", () => {
   })
 
   it("shows the time of the last save when settled", () => {
-    expect(describeSaveState({ savedAtLabel: "12:04" }).text).toBe("Saved 12:04")
+    expect(describeSaveState({ savedAtLabel: "12:04" }).text).toBe(
+      "Saved 12:04"
+    )
   })
 
   it("says nothing about a note that has never been saved", () => {

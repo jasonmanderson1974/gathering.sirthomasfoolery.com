@@ -54,8 +54,13 @@
           >
           <v-card-actions>
             <v-spacer />
-            <v-btn text @click="pagesNotVisitedDialog = false">Cancel</v-btn>
-            <v-btn text color="primary" @click="confirmSaveWithPagesUnvisited"
+            <v-btn variant="text" @click="pagesNotVisitedDialog = false"
+              >Cancel</v-btn
+            >
+            <v-btn
+              variant="text"
+              color="primary"
+              @click="confirmSaveWithPagesUnvisited"
               >Add anyways</v-btn
             >
           </v-card-actions>
@@ -208,12 +213,12 @@
                  way. Anyone can look; only a manager can act on it. -->
             <v-btn
               v-if="isScheduled"
-              text
-              small
+              variant="text"
+              size="small"
               class="tw-mb-1 tw-text-xs tw-text-parchment-dim"
               @click="calendarExpanded = !calendarExpanded"
             >
-              <v-icon small left>{{
+              <v-icon size="small" left>{{
                 calendarExpanded ? "mdi-chevron-up" : "mdi-chevron-down"
               }}</v-icon>
               {{ calendarExpanded ? "Hide availability" : "View availability" }}
@@ -228,8 +233,8 @@
               <v-btn
                 v-for="t in bandTabs"
                 :key="t.value"
-                text
-                small
+                variant="text"
+                size="small"
                 :class="`tw-text-xs tw-transition-all ${
                   t.value === bandTab
                     ? 'tw-bg-brass/10 tw-text-brass'

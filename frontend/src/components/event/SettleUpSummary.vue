@@ -29,7 +29,7 @@
           :class="isOpen(person) ? 'tw-bg-brass/10' : ''"
           @click="toggle(person.userId)"
         >
-          <v-icon x-small class="tw-flex-none tw-text-parchment-dim">
+          <v-icon size="x-small" class="tw-flex-none tw-text-parchment-dim">
             {{ isOpen(person) ? "mdi-chevron-down" : "mdi-chevron-right" }}
           </v-icon>
           <span class="tw-min-w-0 tw-flex-grow tw-truncate">{{

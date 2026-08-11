@@ -25,7 +25,7 @@
             </div>
             <v-btn
               v-else
-              text
+              variant="text"
               class="tw-font-display tw-tracking-widest tw-text-brass"
               :to="{ name: 'sign-in' }"
               >Enter</v-btn

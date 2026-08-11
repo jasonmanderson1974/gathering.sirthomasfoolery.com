@@ -29,7 +29,7 @@
             autofocus
             hide-details="auto"
             autocomplete="off"
-            solo
+            variant="solo"
           ></v-text-field>
           <v-text-field
             v-if="event.collectEmails"
@@ -39,7 +39,7 @@
             placeholder="Guest's email..."
             hint="The event creator has requested attendee emails. It will only be visible to them."
             persistent-hint
-            solo
+            variant="solo"
           ></v-text-field>
           <div class="tw-flex">
             <v-spacer />

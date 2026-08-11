@@ -117,7 +117,9 @@ export const fetchMethod = (method, route, body = {}) => {
           typeof returnValue === "string"
             ? returnValue.slice(0, 500)
             : JSON.stringify(returnValue).slice(0, 500)
-        const err = new Error(`HTTP ${res.status} ${res.statusText} - ${snippet}`)
+        const err = new Error(
+          `HTTP ${res.status} ${res.statusText} - ${snippet}`
+        )
         err.status = res.status
         err.parsed = returnValue
         err.error =

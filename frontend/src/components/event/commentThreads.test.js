@@ -92,7 +92,10 @@ describe("groupComments", () => {
   })
 
   it("tolerates missing or non-array input", () => {
-    expect(groupComments(undefined)).toEqual({ topLevel: [], repliesByThreadId: {} })
+    expect(groupComments(undefined)).toEqual({
+      topLevel: [],
+      repliesByThreadId: {},
+    })
     expect(groupComments(null)).toEqual({ topLevel: [], repliesByThreadId: {} })
     expect(groupComments([])).toEqual({ topLevel: [], repliesByThreadId: {} })
   })
@@ -125,7 +128,9 @@ describe("threadTitle", () => {
   })
 
   it("collapses whitespace and newlines onto one line", () => {
-    expect(threadTitle("Distilleries\n\n  to   visit")).toBe("Distilleries to visit")
+    expect(threadTitle("Distilleries\n\n  to   visit")).toBe(
+      "Distilleries to visit"
+    )
   })
 
   it("truncates long text at a word boundary", () => {
@@ -173,7 +178,9 @@ describe("describeCommentDeletion", () => {
   })
 
   it("gives a thread with no replies no body", () => {
-    expect(describeCommentDeletion({ text: "x", isThread: true }, 0).body).toBe("")
+    expect(describeCommentDeletion({ text: "x", isThread: true }, 0).body).toBe(
+      ""
+    )
   })
 
   it("falls back when the comment has no text", () => {

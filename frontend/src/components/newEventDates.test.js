@@ -31,8 +31,9 @@ describe("buildEventDates", () => {
     })
 
     it("is zero for a days-only event", () => {
-      expect(build({ daysOnly: true, selectedDays: ["2026-08-01"] }).duration)
-        .toBe(0)
+      expect(
+        build({ daysOnly: true, selectedDays: ["2026-08-01"] }).duration
+      ).toBe(0)
     })
   })
 

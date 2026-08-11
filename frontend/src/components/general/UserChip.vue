@@ -11,7 +11,7 @@
 
     <v-icon
       v-if="removable"
-      small
+      size="small"
       @click="() => removeEmail(user.email)"
       class="tw-ml-1"
       >mdi-close</v-icon

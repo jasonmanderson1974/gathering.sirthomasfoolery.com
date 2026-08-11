@@ -103,7 +103,7 @@
                     :size="16"
                   ></UserAvatarContent>
                   <v-avatar v-else :size="16">
-                    <v-icon small>mdi-account</v-icon>
+                    <v-icon size="small">mdi-account</v-icon>
                   </v-avatar>
                 </div>
 
@@ -145,19 +145,21 @@
                 :class="isPhone ? 'tw-opacity-100' : 'tw-opacity-0'"
               >
                 <template v-if="isPhone && (isGuest(user) || isOwner)">
-                  <v-menu right offset-x>
+                  <v-menu right>
                     <template v-slot:activator="{ props }">
                       <v-btn icon v-bind="props">
-                        <v-icon small color="#4F4F4F">mdi-dots-vertical</v-icon>
+                        <v-icon size="small" color="#4F4F4F"
+                          >mdi-dots-vertical</v-icon
+                        >
                       </v-btn>
                     </template>
-                    <v-list class="tw-py-1" dense>
+                    <v-list class="tw-py-1" density="compact">
                       <v-list-item
                         v-if="isGuest(user)"
                         @click="$emit('editGuestAvailability', user._id)"
                       >
                         <v-list-item-title class="tw-flex tw-items-center">
-                          <v-icon small class="tw-mr-2" color="#4F4F4F"
+                          <v-icon size="small" class="tw-mr-2" color="#4F4F4F"
                             >mdi-pencil</v-icon
                           >
                           Edit
@@ -168,7 +170,7 @@
                         @click="() => showDeleteAvailabilityDialog(user)"
                       >
                         <v-list-item-title class="tw-flex tw-items-center">
-                          <v-icon small class="tw-mr-2" color="#4F4F4F"
+                          <v-icon size="small" class="tw-mr-2" color="#4F4F4F"
                             >mdi-delete</v-icon
                           >
                           Delete
@@ -180,19 +182,24 @@
                 <template v-else>
                   <v-btn
                     v-if="isGuest(user)"
-                    small
+                    size="small"
                     icon
                     class="tw-bg-white"
                     @click="$emit('editGuestAvailability', user._id)"
-                    ><v-icon small color="#4F4F4F">mdi-pencil</v-icon></v-btn
+                    ><v-icon size="small" color="#4F4F4F"
+                      >mdi-pencil</v-icon
+                    ></v-btn
                   >
                   <v-btn
                     v-if="isOwner"
-                    small
+                    size="small"
                     icon
                     class="tw-bg-white"
                     @click="() => showDeleteAvailabilityDialog(user)"
-                    ><v-icon small class="hover:tw-text-red" color="#4F4F4F"
+                    ><v-icon
+                      size="small"
+                      class="hover:tw-text-red"
+                      color="#4F4F4F"
                       >mdi-delete</v-icon
                     ></v-btn
                   >
@@ -222,7 +229,7 @@
       <template v-if="!isPhone">
         <v-btn
           v-if="!event.blindAvailabilityEnabled || isOwner"
-          text
+          variant="text"
           color="primary"
           class="-tw-ml-2 tw-mb-4 tw-w-min tw-px-2"
           @click="$emit('addAvailabilityAsGuest')"
@@ -282,9 +289,11 @@
         >
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="deleteAvailabilityDialog = false">Cancel</v-btn>
+          <v-btn variant="text" @click="deleteAvailabilityDialog = false"
+            >Cancel</v-btn
+          >
           <v-btn
-            text
+            variant="text"
             color="error"
             @click="
               () => {
@@ -302,7 +311,7 @@
       v-if="
         !maxHeight && isPhone && (!event.blindAvailabilityEnabled || isOwner)
       "
-      text
+      variant="text"
       color="primary"
       class="-tw-ml-2 tw-mt-4 tw-w-min tw-px-2"
       @click="$emit('addAvailabilityAsGuest')"

@@ -108,11 +108,7 @@ describe("flattenListItems", () => {
   // The app cannot produce this; a hand-edited document could, and rendering
   // must not hang.
   it("terminates on a cycle, emitting each item at most once", () => {
-    const rows = flattenListItems([
-      item("a", "b"),
-      item("b", "a"),
-      item("top"),
-    ])
+    const rows = flattenListItems([item("a", "b"), item("b", "a"), item("top")])
 
     expect(idsOf(rows)).toEqual(["top"])
   })
@@ -170,7 +166,11 @@ describe("flattenListItems ordering", () => {
   it("keeps insertion order for entries written before ordering existed", () => {
     // No order field anywhere: every entry ties at 0 and the stable sort has to
     // leave them exactly as the API returned them.
-    const rows = flattenListItems([item("first"), item("second"), item("third")])
+    const rows = flattenListItems([
+      item("first"),
+      item("second"),
+      item("third"),
+    ])
 
     expect(idsOf(rows)).toEqual(["first", "second", "third"])
   })
@@ -502,7 +502,10 @@ describe("countDescendants", () => {
 
 describe("describeListDeletion", () => {
   it("names the list and counts what goes with it", () => {
-    const got = describeListDeletion({ name: "Menu", items: [item("a"), item("b")] })
+    const got = describeListDeletion({
+      name: "Menu",
+      items: [item("a"), item("b")],
+    })
     expect(got.title).toBe('Delete "Menu"?')
     expect(got.body).toBe("This removes the list and its 2 entries.")
   })
@@ -569,14 +572,22 @@ describe("canManageEventLists", () => {
 
   it("refuses a signed-out visitor outright", () => {
     expect(
-      canManageEventLists({ authUser: null, event: owned, canManageUsers: true, canInvite: true })
+      canManageEventLists({
+        authUser: null,
+        event: owned,
+        canManageUsers: true,
+        canInvite: true,
+      })
     ).toBe(false)
   })
 
   it("lets an admin manage someone else's event", () => {
     expect(
       canManageEventLists({
-        authUser: user, event: someoneElses, canManageUsers: true, canInvite: true,
+        authUser: user,
+        event: someoneElses,
+        canManageUsers: true,
+        canInvite: true,
       })
     ).toBe(true)
   })
@@ -584,7 +595,10 @@ describe("canManageEventLists", () => {
   it("lets the planner manage their own", () => {
     expect(
       canManageEventLists({
-        authUser: user, event: owned, canManageUsers: false, canInvite: true,
+        authUser: user,
+        event: owned,
+        canManageUsers: false,
+        canInvite: true,
       })
     ).toBe(true)
   })
@@ -592,7 +606,10 @@ describe("canManageEventLists", () => {
   it("refuses a member who isn't the planner", () => {
     expect(
       canManageEventLists({
-        authUser: user, event: someoneElses, canManageUsers: false, canInvite: true,
+        authUser: user,
+        event: someoneElses,
+        canManageUsers: false,
+        canInvite: true,
       })
     ).toBe(false)
   })
@@ -600,12 +617,18 @@ describe("canManageEventLists", () => {
   it("falls back to member+ on an ownerless legacy event", () => {
     expect(
       canManageEventLists({
-        authUser: user, event: legacy, canManageUsers: false, canInvite: true,
+        authUser: user,
+        event: legacy,
+        canManageUsers: false,
+        canInvite: true,
       })
     ).toBe(true)
     expect(
       canManageEventLists({
-        authUser: user, event: legacy, canManageUsers: false, canInvite: false,
+        authUser: user,
+        event: legacy,
+        canManageUsers: false,
+        canInvite: false,
       })
     ).toBe(false)
   })
@@ -613,7 +636,10 @@ describe("canManageEventLists", () => {
   it("treats ownerId 0 as ownerless, not as a user id", () => {
     expect(
       canManageEventLists({
-        authUser: user, event: { ownerId: 0 }, canManageUsers: false, canInvite: true,
+        authUser: user,
+        event: { ownerId: 0 },
+        canManageUsers: false,
+        canInvite: true,
       })
     ).toBe(true)
   })

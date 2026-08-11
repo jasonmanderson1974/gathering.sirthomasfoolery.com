@@ -212,7 +212,9 @@ describe("receiptFileError", () => {
   })
 
   it("refuses something absurd before it is read into memory", () => {
-    expect(receiptFileError(file("image/jpeg", 40 * 1024 * 1024))).toMatch(/too large/)
+    expect(receiptFileError(file("image/jpeg", 40 * 1024 * 1024))).toMatch(
+      /too large/
+    )
   })
 
   it("refuses nothing at all", () => {

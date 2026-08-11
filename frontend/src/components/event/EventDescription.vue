@@ -18,16 +18,16 @@
         key="edit-description-btn"
         class="-tw-my-1"
         icon
-        small
+        size="small"
         @click="isEditing = true"
       >
-        <v-icon small>mdi-pencil</v-icon>
+        <v-icon size="small">mdi-pencil</v-icon>
       </v-btn>
     </div>
 
     <v-btn
       v-else-if="canEdit && !isEditing"
-      text
+      variant="text"
       class="-tw-ml-2 tw-mt-0 tw-w-min tw-px-2 tw-text-parchment-dim"
       @click="isEditing = true"
     >

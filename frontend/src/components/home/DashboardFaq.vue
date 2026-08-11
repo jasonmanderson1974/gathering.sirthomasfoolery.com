@@ -10,7 +10,7 @@
           How gatherings work
         </span>
       </div>
-      <v-btn icon small class="tw-text-parchment-dim">
+      <v-btn icon size="small" class="tw-text-parchment-dim">
         <v-icon
           :class="`tw-transition-transform ${open ? 'tw-rotate-180' : ''}`"
           >mdi-chevron-down</v-icon
@@ -29,7 +29,7 @@
         <v-expansion-panels
           v-model="openPanels"
           multiple
-          flat
+          variant="accordion"
           class="faq-panels"
         >
           <!-- 1. Overview -->
@@ -72,9 +72,9 @@
             <v-expansion-panel-text>
               <p class="tw-mb-2">
                 Press <strong>Call a Gathering</strong> (or the
-                <v-icon small class="tw-text-brass">mdi-plus</v-icon> beside a
-                folder). There are <em>two</em> separate questions to answer,
-                and they combine freely.
+                <v-icon size="small" class="tw-text-brass">mdi-plus</v-icon>
+                beside a folder). There are <em>two</em> separate questions to
+                answer, and they combine freely.
               </p>
               <p class="tw-mb-2">
                 <strong>First, how precisely people answer:</strong>
@@ -482,32 +482,32 @@ export default {
 
 <style scoped>
 /* Match the Fellowship dark theme — Vuetify panels default to a light card. */
-.faq-panels >>> .v-expansion-panel {
+.faq-panels :deep() .v-expansion-panel {
   background-color: transparent !important;
   border-bottom: 1px solid #8a7333; /* brass-dim */
 }
-.faq-panels >>> .v-expansion-panel::before {
+.faq-panels :deep() .v-expansion-panel::before {
   box-shadow: none !important;
 }
-.faq-panels >>> .v-expansion-panel-title {
+.faq-panels :deep() .v-expansion-panel-title {
   color: #ede4d3; /* parchment */
   font-weight: 500;
   padding: 14px 4px;
   min-height: 48px;
 }
-.faq-panels >>> .v-expansion-panel-title .v-icon {
+.faq-panels :deep() .v-expansion-panel-title .v-icon {
   color: #b8ad97; /* parchment-dim */
 }
-.faq-panels >>> .v-expansion-panel-text {
+.faq-panels :deep() .v-expansion-panel-text {
   color: #b8ad97; /* parchment-dim */
   font-size: 0.875rem;
   line-height: 1.5;
 }
-.faq-panels >>> .v-expansion-panel-text strong {
+.faq-panels :deep() .v-expansion-panel-text strong {
   color: #ede4d3; /* parchment */
   font-weight: 600;
 }
-.faq-panels >>> .v-expansion-panel-text code {
+.faq-panels :deep() .v-expansion-panel-text code {
   background-color: rgba(138, 115, 51, 0.2);
   color: #e3c578; /* brass-bright */
   padding: 1px 5px;

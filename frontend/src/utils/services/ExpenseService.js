@@ -70,7 +70,9 @@ export const uploadExpenseReceipt = (eventId, expenseId, image) => {
 }
 
 export const deleteExpenseReceipt = (eventId, expenseId, receiptId) => {
-  return _delete(`/events/${eventId}/expenses/${expenseId}/receipts/${receiptId}`)
+  return _delete(
+    `/events/${eventId}/expenses/${expenseId}/receipts/${receiptId}`
+  )
 }
 
 /**

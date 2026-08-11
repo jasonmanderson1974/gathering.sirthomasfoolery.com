@@ -37,7 +37,7 @@
             id="edit-event-btn"
             @click="$emit('edit-event')"
             class="tw-px-2 tw-text-sm tw-text-brass"
-            text
+            variant="text"
           >
             Edit event
           </v-btn>
@@ -77,7 +77,7 @@
           <v-btn
             class="tw-mr-1 tw-w-20 tw-text-red"
             @click="$emit('cancel-editing')"
-            outlined
+            variant="outlined"
           >
             Cancel
           </v-btn>

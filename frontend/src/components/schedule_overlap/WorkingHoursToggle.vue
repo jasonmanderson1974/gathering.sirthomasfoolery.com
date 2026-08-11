@@ -16,13 +16,16 @@
           <div class="tw-flex tw-items-center tw-gap-2">
             <v-select
               :menu-props="{ auto: true }"
-              dense
+              density="compact"
               hide-details
               return-object
               class="-tw-mt-0.5 tw-w-20 tw-text-xs"
               :items="times"
+              item-title="text"
               :model-value="workingHours.startTime"
-              @input="(val) => updateCalendarOption('startTime', val.time)"
+              @update:model-value="
+                (val) => updateCalendarOption('startTime', val.time)
+              "
               @click="
                 (e) => {
                   e.preventDefault()
@@ -33,13 +36,16 @@
             <div>to</div>
             <v-select
               :menu-props="{ auto: true }"
-              dense
+              density="compact"
               hide-details
               return-object
               class="-tw-mt-0.5 tw-w-20 tw-text-xs"
               :items="times"
+              item-title="text"
               :model-value="workingHours.endTime"
-              @input="(val) => updateCalendarOption('endTime', val.time)"
+              @update:model-value="
+                (val) => updateCalendarOption('endTime', val.time)
+              "
               @click="
                 (e) => {
                   e.preventDefault()

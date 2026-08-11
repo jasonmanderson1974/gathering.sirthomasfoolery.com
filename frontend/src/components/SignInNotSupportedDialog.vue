@@ -16,7 +16,7 @@
       <v-card-actions>
         <v-spacer />
         <v-btn
-          text
+          variant="text"
           class="tw-text-brass"
           @click="$emit('update:modelValue', false)"
         >

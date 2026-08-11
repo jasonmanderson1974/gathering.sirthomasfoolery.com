@@ -80,7 +80,8 @@ export const splitMentions = (text) => {
  * Anywhere a comment appears as plain text rather than rendered parts — the
  * thread-title previews — goes through this, or the reader sees the raw markup.
  */
-export const flattenMentions = (text) => (text ?? "").replace(mentionPattern(), "@$1")
+export const flattenMentions = (text) =>
+  (text ?? "").replace(mentionPattern(), "@$1")
 
 /**
  * Find the mention being typed immediately before the caret.
@@ -113,7 +114,11 @@ export const mentionTrigger = (textBeforeCaret) => {
  * @param {string} query the partial name, without the `@`
  * @param {number} limit
  */
-export const filterMentionables = (candidates, query, limit = maxMentionCandidates) => {
+export const filterMentionables = (
+  candidates,
+  query,
+  limit = maxMentionCandidates
+) => {
   const needle = (query ?? "").trim().toLowerCase()
 
   const prefix = []
@@ -139,7 +144,11 @@ export const filterMentionables = (candidates, query, limit = maxMentionCandidat
  * and no longer than the pattern allows.
  */
 const tokenName = (user) =>
-  displayName(user).replace(/[\]\r\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, maxTokenNameLength)
+  displayName(user)
+    .replace(/[\]\r\n]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxTokenNameLength)
 
 /**
  * Replace the partial mention before the caret with a finished token.

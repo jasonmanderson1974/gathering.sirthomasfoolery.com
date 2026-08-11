@@ -1,9 +1,9 @@
 <template>
-  <v-menu right offset-x>
+  <v-menu right>
     <template v-slot:activator="{ props }">
       <v-btn icon v-bind="props"><v-icon>mdi-dots-vertical</v-icon></v-btn>
     </template>
-    <v-list class="tw-py-1" dense>
+    <v-list class="tw-py-1" density="compact">
       <v-dialog v-model="exportCsvDialog.visible" width="400">
         <template v-slot:activator="{ props }">
           <v-list-item id="export-csv-btn" v-bind="props">
@@ -16,7 +16,7 @@
             <div class="tw-mb-1">Select CSV format:</div>
             <v-select
               v-model="exportCsvDialog.type"
-              solo
+              variant="solo"
               hide-details
               :items="exportCsvDialog.types"
               item-title="text"
@@ -26,13 +26,13 @@
           <v-card-actions>
             <v-spacer />
             <v-btn
-              text
+              variant="text"
               @click="exportCsvDialog.visible = false"
               :disabled="exportCsvDialog.loading"
               >Cancel</v-btn
             >
             <v-btn
-              text
+              variant="text"
               @click="exportCsv"
               color="primary"
               :loading="exportCsvDialog.loading"

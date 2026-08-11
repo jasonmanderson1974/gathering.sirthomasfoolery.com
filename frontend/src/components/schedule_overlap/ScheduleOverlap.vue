@@ -20,7 +20,7 @@
                   <v-btn
                     :class="hasPrevPage ? 'tw-visible' : 'tw-invisible'"
                     class="tw-border-gray"
-                    outlined
+                    variant="outlined"
                     icon
                     @click="prevPage"
                     ><v-icon>mdi-chevron-left</v-icon></v-btn
@@ -33,7 +33,7 @@
                   <v-btn
                     :class="hasNextPage ? 'tw-visible' : 'tw-invisible'"
                     class="tw-border-gray"
-                    outlined
+                    variant="outlined"
                     icon
                     @click="nextPage"
                     ><v-icon>mdi-chevron-right</v-icon></v-btn
@@ -95,10 +95,10 @@
                       class="tw-mt-2 tw-flex tw-w-full tw-items-center tw-justify-between tw-gap-1 tw-rounded-md tw-bg-leather tw-p-2 tw-px-[7px] tw-text-sm tw-text-parchment-dim"
                     >
                       <div class="tw-flex tw-items-center tw-gap-1">
-                        <v-icon small>mdi-information-outline</v-icon>
+                        <v-icon size="small">mdi-information-outline</v-icon>
                         {{ hintText }}
                       </div>
-                      <v-icon small @click="closeHint">mdi-close</v-icon>
+                      <v-icon size="small" @click="closeHint">mdi-close</v-icon>
                     </div>
                   </div>
                 </v-expand-transition>
@@ -149,7 +149,7 @@
                   >
                     <v-btn
                       class="tw-border-gray"
-                      outlined
+                      variant="outlined"
                       icon
                       @click="prevPage"
                       ><v-icon>mdi-chevron-left</v-icon></v-btn
@@ -456,10 +456,10 @@
                       class="tw-mt-2 tw-flex tw-w-full tw-items-center tw-justify-between tw-gap-1 tw-rounded-md tw-bg-leather tw-p-2 tw-px-[7px] tw-text-sm tw-text-parchment-dim"
                     >
                       <div class="tw-flex tw-items-center tw-gap-1">
-                        <v-icon small>mdi-information-outline</v-icon>
+                        <v-icon size="small">mdi-information-outline</v-icon>
                         {{ hintText }}
                       </div>
-                      <v-icon small @click="closeHint">mdi-close</v-icon>
+                      <v-icon size="small" @click="closeHint">mdi-close</v-icon>
                     </div>
                   </div>
                 </v-expand-transition>
@@ -519,7 +519,11 @@
                   :class="hasNextPage ? 'tw-visible' : 'tw-invisible'"
                   class="tw-sticky tw-top-14 -tw-mr-2 tw-self-start tw-pt-1.5 sm:tw-top-16"
                 >
-                  <v-btn class="tw-border-gray" outlined icon @click="nextPage"
+                  <v-btn
+                    class="tw-border-gray"
+                    variant="outlined"
+                    icon
+                    @click="nextPage"
                     ><v-icon>mdi-chevron-right</v-icon></v-btn
                   >
                 </div>
@@ -572,7 +576,7 @@
                     <span class="tw-font-medium group-hover:tw-underline">{{
                       curGuestId
                     }}</span>
-                    <v-icon small>mdi-pencil</v-icon>
+                    <v-icon size="small">mdi-pencil</v-icon>
                   </div>
                   <span v-else>
                     {{
@@ -601,10 +605,15 @@
                       </v-card-text>
                       <v-card-actions>
                         <v-spacer />
-                        <v-btn text @click="editGuestNameDialog = false"
+                        <v-btn
+                          variant="text"
+                          @click="editGuestNameDialog = false"
                           >Cancel</v-btn
                         >
-                        <v-btn text color="primary" @click="saveGuestName"
+                        <v-btn
+                          variant="text"
+                          color="primary"
+                          @click="saveGuestName"
                           >Save</v-btn
                         >
                       </v-card-actions>
@@ -661,7 +670,7 @@
                   <ExpandableSection
                     label="Options"
                     :model-value="showEditOptions"
-                    @input="toggleShowEditOptions"
+                    @update:model-value="toggleShowEditOptions"
                   >
                     <div class="tw-flex tw-flex-col tw-gap-5 tw-pt-2.5">
                       <v-dialog
@@ -671,7 +680,7 @@
                       >
                         <template v-slot:activator="{ props }">
                           <v-btn
-                            outlined
+                            variant="outlined"
                             class="tw-border-gray tw-text-sm"
                             v-bind="props"
                           >
@@ -732,11 +741,13 @@
                       >
                       <v-card-actions>
                         <v-spacer />
-                        <v-btn text @click="deleteAvailabilityDialog = false"
+                        <v-btn
+                          variant="text"
+                          @click="deleteAvailabilityDialog = false"
                           >Cancel</v-btn
                         >
                         <v-btn
-                          text
+                          variant="text"
                           color="error"
                           @click="confirmDeleteAvailability"
                           >Delete</v-btn
@@ -832,12 +843,12 @@
                   <div
                     :class="`tw-flex tw-gap-${hintText.length > 60 ? 2 : 1}`"
                   >
-                    <v-icon small>mdi-information-outline</v-icon>
+                    <v-icon size="small">mdi-information-outline</v-icon>
                     <div>
                       {{ hintText }}
                     </div>
                   </div>
-                  <v-icon small @click="closeHint">mdi-close</v-icon>
+                  <v-icon size="small" @click="closeHint">mdi-close</v-icon>
                 </div>
               </div>
             </template>

@@ -7,8 +7,16 @@ import {
   splitMentions,
 } from "./mentionText"
 
-const ada = { _id: "aaaaaaaaaaaaaaaaaaaaaaaa", firstName: "Ada", lastName: "Lovelace" }
-const bart = { _id: "bbbbbbbbbbbbbbbbbbbbbbbb", firstName: "Bart", lastName: "Adams" }
+const ada = {
+  _id: "aaaaaaaaaaaaaaaaaaaaaaaa",
+  firstName: "Ada",
+  lastName: "Lovelace",
+}
+const bart = {
+  _id: "bbbbbbbbbbbbbbbbbbbbbbbb",
+  firstName: "Bart",
+  lastName: "Adams",
+}
 
 /** The token the composer writes and the server parses. */
 const token = (user) => `@[${user.firstName} ${user.lastName}](${user._id})`
@@ -54,7 +62,9 @@ describe("splitMentions", () => {
     // Twice, because a module-level global regex would find the second mention
     // on the first call and the first mention on the second.
     expect(splitMentions(text)).toEqual(splitMentions(text))
-    expect(splitMentions(text).filter((p) => p.type === "mention")).toHaveLength(2)
+    expect(
+      splitMentions(text).filter((p) => p.type === "mention")
+    ).toHaveLength(2)
   })
 
   it("leaves text that only looks like a token alone", () => {
@@ -73,7 +83,9 @@ describe("splitMentions", () => {
 
 describe("flattenMentions", () => {
   it("rewrites tokens to what the author typed", () => {
-    expect(flattenMentions(`Ask ${token(ada)} about it`)).toBe("Ask @Ada Lovelace about it")
+    expect(flattenMentions(`Ask ${token(ada)} about it`)).toBe(
+      "Ask @Ada Lovelace about it"
+    )
   })
 
   it("flattens every token, not just the first", () => {
@@ -95,7 +107,10 @@ describe("mentionTrigger", () => {
 
   it("opens on an @ after whitespace, reporting where it starts", () => {
     expect(mentionTrigger("Ask @ad")).toEqual({ start: 4, query: "ad" })
-    expect(mentionTrigger("first line\n@ad")).toEqual({ start: 11, query: "ad" })
+    expect(mentionTrigger("first line\n@ad")).toEqual({
+      start: 11,
+      query: "ad",
+    })
   })
 
   it("allows spaces inside the partial so a two-word name still matches", () => {
@@ -121,14 +136,22 @@ describe("mentionTrigger", () => {
 })
 
 describe("filterMentionables", () => {
-  const roll = [ada, bart, { _id: "cccccccccccccccccccccccc", nickname: "Cadfael" }]
+  const roll = [
+    ada,
+    bart,
+    { _id: "cccccccccccccccccccccccc", nickname: "Cadfael" },
+  ]
 
   it("offers everyone, in the order given, for a bare @", () => {
-    expect(filterMentionables(roll, "").map((u) => u._id)).toEqual(roll.map((u) => u._id))
+    expect(filterMentionables(roll, "").map((u) => u._id)).toEqual(
+      roll.map((u) => u._id)
+    )
   })
 
   it("matches case-insensitively on the display name", () => {
-    expect(filterMentionables(roll, "LOVEL").map((u) => u._id)).toEqual([ada._id])
+    expect(filterMentionables(roll, "LOVEL").map((u) => u._id)).toEqual([
+      ada._id,
+    ])
   })
 
   it("matches a nickname, since that is the name shown", () => {
@@ -148,7 +171,9 @@ describe("filterMentionables", () => {
   })
 
   it("drops anyone with no display name — there is nothing to put in the token", () => {
-    expect(filterMentionables([{ _id: "dddddddddddddddddddddddd" }], "")).toEqual([])
+    expect(
+      filterMentionables([{ _id: "dddddddddddddddddddddddd" }], "")
+    ).toEqual([])
   })
 
   it("caps the list", () => {
@@ -194,9 +219,15 @@ describe("applyMention", () => {
   })
 
   it("uses the nickname, matching what the picker showed", () => {
-    const cadfael = { _id: "cccccccccccccccccccccccc", firstName: "Brother", nickname: "Cadfael" }
+    const cadfael = {
+      _id: "cccccccccccccccccccccccc",
+      firstName: "Brother",
+      nickname: "Cadfael",
+    }
 
-    expect(applyMention("@ca", 3, cadfael).text).toBe(`@[Cadfael](${cadfael._id}) `)
+    expect(applyMention("@ca", 3, cadfael).text).toBe(
+      `@[Cadfael](${cadfael._id}) `
+    )
   })
 
   it("refuses a candidate that can't be written as a token", () => {

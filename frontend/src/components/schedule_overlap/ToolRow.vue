@@ -17,17 +17,17 @@
             class="tw-w-full sm:tw-w-[unset]"
             :model-value="curTimezone"
             :reference-date="timezoneReferenceDate"
-            @input="(val) => $emit('update:curTimezone', val)"
+            @update:model-value="(val) => $emit('update:curTimezone', val)"
           />
           <v-select
             :model-value="timeType"
-            @input="$emit('update:timeType', $event)"
+            @update:model-value="$emit('update:timeType', $event)"
             :items="timeTypeOptions"
             :menu-props="{ auto: true }"
             item-title="label"
             item-value="value"
             class="tw-z-20 -tw-mt-px tw-w-16 tw-text-sm"
-            dense
+            density="compact"
             hide-details
           />
         </div>
@@ -38,13 +38,13 @@
           Show
           <v-select
             :model-value="mobileNumDays"
-            @input="$emit('update:mobileNumDays', $event)"
+            @update:model-value="$emit('update:mobileNumDays', $event)"
             :items="mobileNumDaysOptions"
             :menu-props="{ auto: true }"
             item-title="label"
             item-value="value"
             class="-tw-mt-px tw-flex-none tw-shrink tw-basis-24 tw-text-sm"
-            dense
+            density="compact"
             hide-details
           />
           at a time
@@ -90,15 +90,19 @@
       >
         <template v-if="state !== states.SCHEDULE_EVENT">
           <!-- A gathering time is already confirmed: show it + a menu to change/cancel -->
-          <v-menu v-if="event.scheduledEvent" offset-y class="tw-z-20">
+          <v-menu v-if="event.scheduledEvent" class="tw-z-20">
             <template v-slot:activator="{ props }">
-              <v-btn outlined class="tw-w-full tw-text-brass" v-bind="props">
-                <v-icon small>mdi-calendar-check</v-icon>
+              <v-btn
+                variant="outlined"
+                class="tw-w-full tw-text-brass"
+                v-bind="props"
+              >
+                <v-icon size="small">mdi-calendar-check</v-icon>
                 <span class="tw-ml-2 tw-truncate">Gathering set</span>
-                <v-icon small right>mdi-chevron-down</v-icon>
+                <v-icon size="small" right>mdi-chevron-down</v-icon>
               </v-btn>
             </template>
-            <v-list dense>
+            <v-list density="compact">
               <v-list-item two-line class="tw-pointer-events-none">
                 <v-list-item-title>{{
                   scheduledGatheringText
@@ -109,7 +113,7 @@
               </v-list-item>
               <v-divider />
               <v-list-item :href="icsUrl">
-                <v-icon small class="tw-mr-2">mdi-calendar-plus</v-icon>
+                <v-icon size="small" class="tw-mr-2">mdi-calendar-plus</v-icon>
                 <v-list-item-title>Add to calendar</v-list-item-title>
               </v-list-item>
               <v-list-item @click="(e) => $emit('scheduleEvent', e)">
@@ -124,23 +128,23 @@
           </v-menu>
           <v-btn
             v-else
-            outlined
+            variant="outlined"
             class="tw-w-full tw-text-brass"
             @click="(e) => $emit('scheduleEvent', e)"
           >
-            <v-icon small>mdi-calendar-check</v-icon>
+            <v-icon size="small">mdi-calendar-check</v-icon>
             <span class="tw-ml-2">Schedule event</span>
           </v-btn>
         </template>
         <template v-else>
           <v-btn
-            outlined
+            variant="outlined"
             class="tw-mr-1 tw-text-red"
             @click="(e) => $emit('cancelScheduleEvent', e)"
           >
             Cancel
           </v-btn>
-          <v-menu offset-y class="tw-z-20">
+          <v-menu class="tw-z-20">
             <template v-slot:activator="{ props }">
               <v-btn
                 :disabled="!allowScheduleEvent"
@@ -150,7 +154,7 @@
                 Schedule
               </v-btn>
             </template>
-            <v-list dense>
+            <v-list density="compact">
               <!-- Pre-gathering reminder options (persisted on confirm) -->
               <v-list-item @click.stop>
                 <v-checkbox
@@ -165,7 +169,8 @@
                 <v-select
                   :model-value="reminderLeadTimeHours"
                   :items="reminderLeadTimeOptions"
-                  dense
+                  item-title="text"
+                  density="compact"
                   hide-details
                   label="Send reminder"
                   @change="(v) => $emit('update:reminderLeadTimeHours', v)"
@@ -176,7 +181,8 @@
                 <v-select
                   :model-value="recurrenceFrequency"
                   :items="recurrenceOptions"
-                  dense
+                  item-title="text"
+                  density="compact"
                   hide-details
                   label="Repeat"
                   @change="(v) => $emit('update:recurrenceFrequency', v)"
@@ -190,7 +196,7 @@
                   placeholder="Where? (optional)"
                   dense
                   hide-icon
-                  @input="(v) => $emit('update:location', v)"
+                  @update:model-value="(v) => $emit('update:location', v)"
                 />
               </v-list-item>
               <v-divider />
@@ -199,7 +205,7 @@
                    "Add to calendar" (.ics) item on the confirmed gathering, which
                    carries the recurrence rule. -->
               <v-list-item @click="() => $emit('saveScheduleEvent')">
-                <v-icon small class="tw-mr-2 tw-text-brass"
+                <v-icon size="small" class="tw-mr-2 tw-text-brass"
                   >mdi-calendar-check</v-icon
                 >
                 <v-list-item-title class="tw-text-brass"

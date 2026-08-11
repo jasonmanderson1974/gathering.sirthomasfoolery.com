@@ -53,7 +53,12 @@ export const deletePersonalListItem = (eventId, listId, itemId) => {
 }
 
 /** Tick or untick a checklist entry. */
-export const setPersonalListItemChecked = (eventId, listId, itemId, checked) => {
+export const setPersonalListItemChecked = (
+  eventId,
+  listId,
+  itemId,
+  checked
+) => {
   return put(`/events/${eventId}/my-lists/${listId}/items/${itemId}/checked`, {
     checked,
   })
@@ -66,7 +71,10 @@ export const setPersonalListItemChecked = (eventId, listId, itemId, checked) => 
  * flattens it to the top level. See resolveDrop in eventLists.js.
  */
 export const movePersonalListItem = (eventId, listId, itemId, payload) => {
-  return put(`/events/${eventId}/my-lists/${listId}/items/${itemId}/move`, payload)
+  return put(
+    `/events/${eventId}/my-lists/${listId}/items/${itemId}/move`,
+    payload
+  )
 }
 
 // --- My Notes (F20) ---

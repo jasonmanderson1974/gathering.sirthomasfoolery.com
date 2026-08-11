@@ -12,11 +12,12 @@
       :items="timezones"
       :menu-props="{ auto: true }"
       class="tw-z-20 -tw-mt-px tw-w-52 tw-text-sm"
-      dense
+      density="compact"
       color="#219653"
       item-color="green"
       hide-details
       item-title="label"
+      item-value="value"
       return-object
     >
       <!-- Vuetify 3's item slot hands over a single `props` bundle instead of
@@ -29,10 +30,15 @@
           </v-list-item-title>
         </v-list-item>
       </template>
-      <template v-slot:selection="{ item }">
-        <div class="v-select__selection">
-          {{ item.raw.gmtString }} {{ item.raw.label }}
-        </div>
+      <!-- Rendered from `modelValue`, not from the slot's `item`. The
+           `timezones` computed rebuilds its objects on every evaluation, so the
+           selected object is never reference-equal to the one in `items`;
+           `item-value="value"` above is what lets Vuetify match them, and this
+           reads the source of truth directly rather than depending on that
+           match. Vuetify 3 already wraps the slot in `.v-select__selection`, so
+           there is no wrapper div here — the old one nested a second copy. -->
+      <template v-slot:selection>
+        {{ modelValue.gmtString }} {{ modelValue.label }}
       </template>
     </v-select>
     <v-btn v-if="timezoneModified" @click="resetTimezone" icon color="primary"

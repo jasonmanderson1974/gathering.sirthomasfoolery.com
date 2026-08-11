@@ -17,7 +17,7 @@
             <UserAvatarContent :user="authUser" :size="96" />
             <div class="tw-flex tw-flex-col tw-items-start tw-gap-1">
               <v-btn
-                text
+                variant="text"
                 class="tw-text-brass"
                 :loading="savingAvatar"
                 @click="$refs.avatarEditor.pickFile()"
@@ -26,7 +26,7 @@
               </v-btn>
               <v-btn
                 v-if="hasAvatar"
-                text
+                variant="text"
                 :loading="removingAvatar"
                 @click="removeAvatar"
               >
@@ -48,14 +48,14 @@
             <v-text-field
               v-model="firstName"
               hide-details
-              outlined
+              variant="outlined"
               placeholder="First name"
               :dense="isPhone"
             />
             <v-text-field
               v-model="lastName"
               hide-details
-              outlined
+              variant="outlined"
               placeholder="Last name"
               :dense="isPhone"
             />
@@ -66,7 +66,7 @@
                 <v-btn
                   @click="resetProfileChanges"
                   color="primary"
-                  outlined
+                  variant="outlined"
                   class="tw-mr-2"
                   >Cancel</v-btn
                 >
@@ -86,7 +86,7 @@
           <div class="tw-flex tw-max-w-lg tw-items-center tw-gap-2">
             <v-text-field
               v-model="nickname"
-              outlined
+              variant="outlined"
               hide-details
               placeholder="Nickname"
               :maxlength="nicknameMaxLength"
@@ -98,7 +98,7 @@
               <v-btn
                 @click="resetNickname"
                 color="primary"
-                outlined
+                variant="outlined"
                 class="tw-mr-2"
                 >Cancel</v-btn
               >
@@ -122,7 +122,7 @@
           <div v-if="emailStep === 'idle'" class="tw-max-w-lg">
             <v-text-field
               :model-value="authUser.email"
-              outlined
+              variant="outlined"
               hide-details
               disabled
               class="tw-mb-2"
@@ -131,7 +131,7 @@
             <div class="tw-flex tw-items-start tw-gap-2">
               <v-text-field
                 v-model="newEmail"
-                outlined
+                variant="outlined"
                 hide-details="auto"
                 placeholder="New email address"
                 type="email"
@@ -157,7 +157,7 @@
             <div class="tw-flex tw-items-start tw-gap-2">
               <v-text-field
                 v-model="emailCode"
-                outlined
+                variant="outlined"
                 hide-details="auto"
                 placeholder="6-digit code"
                 maxlength="6"
@@ -173,7 +173,7 @@
                 @click="verifyEmailCode"
                 >Verify &amp; update</v-btn
               >
-              <v-btn text @click="cancelEmailChange">Cancel</v-btn>
+              <v-btn variant="text" @click="cancelEmailChange">Cancel</v-btn>
             </div>
           </div>
         </div>
@@ -184,7 +184,7 @@
           <div class="tw-flex tw-max-w-lg tw-items-center tw-gap-2">
             <v-text-field
               v-model="phone"
-              outlined
+              variant="outlined"
               hide-details
               placeholder="Phone number"
               type="tel"
@@ -197,7 +197,7 @@
               <v-btn
                 @click="resetPhone"
                 color="primary"
-                outlined
+                variant="outlined"
                 class="tw-mr-2"
                 >Cancel</v-btn
               >
@@ -222,7 +222,7 @@
             availability.
           </div>
           <v-btn
-            outlined
+            variant="outlined"
             class="tw-text-red"
             href="https://myaccount.google.com/connections?filters=3,4&hl=en"
             target="_blank"
@@ -294,7 +294,7 @@
         <div class="tw-w-64">
           <v-dialog v-model="deleteDialog" width="400" persistent>
             <template v-slot:activator="{ props }">
-              <v-btn outlined class="tw-text-red" block v-bind="props"
+              <v-btn variant="outlined" class="tw-text-red" block v-bind="props"
                 >Delete account</v-btn
               >
             </template>
@@ -317,9 +317,11 @@
               </div>
               <v-card-actions>
                 <v-spacer />
-                <v-btn text @click="deleteDialog = false">Cancel</v-btn>
+                <v-btn variant="text" @click="deleteDialog = false"
+                  >Cancel</v-btn
+                >
                 <v-btn
-                  text
+                  variant="text"
                   color="error"
                   @click="deleteAccount()"
                   :disabled="authUser.email != deleteValidateEmail"

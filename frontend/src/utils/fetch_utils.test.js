@@ -60,7 +60,11 @@ describe("fetchMethod error shape (A10 standardized contract)", () => {
   })
 
   it("falls back to the raw parsed value when the error body isn't an object", async () => {
-    mockFetch({ ok: false, status: 500, body: JSON.stringify("plain string error") })
+    mockFetch({
+      ok: false,
+      status: 500,
+      body: JSON.stringify("plain string error"),
+    })
     await expect(get("/x")).rejects.toMatchObject({
       error: "plain string error",
       status: 500,
