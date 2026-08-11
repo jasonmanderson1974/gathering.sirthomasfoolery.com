@@ -157,6 +157,13 @@ const routes = (eventId) => [
   {
     name: "responded",
     path: `/e/${eventId}/responded`,
+    // The ONLY route allowed to log an error, and the reason is in the view:
+    // `Responded.vue` POSTs the confirmation with the `email` from the query
+    // string, so visiting the bare path — which is what this check does — is a
+    // request the server correctly rejects, and the component correctly reports.
+    // Reaching it the real way needs a live confirmation link from an email.
+    // Everything else about the route is still asserted below.
+    expectConsoleErrors: /HTTP 400/,
     assertions: [
       // The view POSTs a confirmation on `created` and renders one of three
       // states. Which one depends on whether this event has a response pending
@@ -218,12 +225,16 @@ async function setViewport(cdp, vp) {
 }
 
 /** Navigates, waits for the SPA to settle, and reports console noise. */
-async function visit(cdp, events, url, label) {
+async function visit(cdp, events, url, label, expected = null) {
   events.length = 0
   await cdp("Page.navigate", { url })
   await sleep(6000)
 
-  const errors = pageErrors(events)
+  // `expected` is a regexp for errors a route legitimately produces. Anything
+  // not matching it still fails — muting a whole route would defeat the point.
+  const errors = pageErrors(events).filter(
+    (e) => !(expected && expected.test(e))
+  )
   report(
     errors.length === 0,
     `${label} — no console errors`,
@@ -252,7 +263,13 @@ async function main() {
     await setViewport(cdp, DESKTOP)
 
     for (const route of routes(EVENT_ID)) {
-      await visit(cdp, events, BASE + route.path, route.name)
+      await visit(
+        cdp,
+        events,
+        BASE + route.path,
+        route.name,
+        route.expectConsoleErrors
+      )
 
       const path = await evaluate(cdp, "location.pathname")
       if (/sign-in/.test(path)) {

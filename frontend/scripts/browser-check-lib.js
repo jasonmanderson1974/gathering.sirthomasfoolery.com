@@ -148,14 +148,29 @@ async function evaluate(cdp, expression) {
   return res?.result?.value
 }
 
-/** Console errors and uncaught exceptions recorded since `events` was cleared. */
+/**
+ * Console errors and uncaught exceptions recorded since `events` was cleared.
+ *
+ * Every argument is read, and each one falls back from `value` to
+ * `description`. That fallback is the whole point: CDP only sets `value` for
+ * primitives, so `console.error(someError)` — which is exactly how Vue reports
+ * a throw from a lifecycle hook — arrives with `value` undefined and the real
+ * message in `description`. Reading `args[0].value` alone reported those as no
+ * error at all, and did: a `TypeError` thrown on every open of the New
+ * Gathering dialog passed this check for the whole Vue 3 migration.
+ */
 function pageErrors(events) {
   const consoleErrors = events
     .filter(
       (e) =>
         e.method === "Runtime.consoleAPICalled" && e.params.type === "error"
     )
-    .map((e) => (e.params.args[0] || {}).value)
+    .map((e) =>
+      (e.params.args || [])
+        .map((a) => a.value ?? a.description ?? "")
+        .join(" ")
+        .trim()
+    )
     .filter(Boolean)
   const exceptions = events
     .filter((e) => e.method === "Runtime.exceptionThrown")
