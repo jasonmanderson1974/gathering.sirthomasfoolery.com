@@ -128,6 +128,45 @@ func Init() func() {
 		Keys: bson.M{"eventId": 1},
 	})
 
+	// The discussion thread and the availability responses (L11). NOT unique,
+	// and not here for speed — at 40 comments and 24 responses in production
+	// these queries would be fine as collection scans for years.
+	//
+	// They are here because these two collections were the only ones whose
+	// queries had NO declared index anywhere: not in this function, not in a
+	// dated script under scripts/, and — checked against the live database —
+	// not in production either, which carried nothing but `_id_` on both. L11
+	// filed this as drift between a migration script and a fresh install. It
+	// wasn't drift; the indexes simply never existed, so the shape of these
+	// queries was written down in no place at all. That is what this fixes: the
+	// access pattern is now declared next to every other one, and a fresh
+	// install, the restored-dump dev box and production finally agree.
+	//
+	// Keys follow the queries exactly, and the compound orders are load-bearing:
+	//   - comments {eventId, createdAt}: GetComments filters on eventId and
+	//     sorts by createdAt (db/comments.go) — a sort served by the index
+	//     rather than in memory only if createdAt follows eventId.
+	//   - comments {threadId}: the reply count and the cascade delete
+	//     (CountCommentsInThread / DeleteCommentsInThread).
+	//   - eventResponses {eventId, userId}: serves both the by-event fetch
+	//     (db/events.go GetEventResponses) and the (eventId, userId) lookups,
+	//     the latter via the leftmost-prefix rule.
+	//   - eventResponses {userId}: the "events this person responded to" sweep
+	//     in routes/user.go. userId is NOT a prefix of the compound above, so
+	//     that index cannot serve this query — it needs its own.
+	ensureIndex("comments (eventId, createdAt)", CommentsCollection, mongo.IndexModel{
+		Keys: bson.D{{Key: "eventId", Value: 1}, {Key: "createdAt", Value: 1}},
+	})
+	ensureIndex("comments threadId", CommentsCollection, mongo.IndexModel{
+		Keys: bson.M{"threadId": 1},
+	})
+	ensureIndex("eventResponses (eventId, userId)", EventResponsesCollection, mongo.IndexModel{
+		Keys: bson.D{{Key: "eventId", Value: 1}, {Key: "userId", Value: 1}},
+	})
+	ensureIndex("eventResponses userId", EventResponsesCollection, mongo.IndexModel{
+		Keys: bson.M{"userId": 1},
+	})
+
 	// Return a function to close the connection
 	return func() {
 		if err := Client.Disconnect(ctx); err != nil {

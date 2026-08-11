@@ -1445,7 +1445,7 @@ a consequence. `vue-template-compiler` (Vue 2's compiler, pulled in by `vue-load
 `@vue/cli-service`) is among them and is not used by anything: this app compiles through
 `@vue/compiler-sfc`.
 
-### L11 — two collections' indexes exist only in migration scripts · **P3 · S**
+### L11 — two collections' indexes exist only in migration scripts · **P3 · S** — DONE 2026-08-11
 
 `server/db/init.go` creates every other invariant-bearing index at boot through `ensureIndex`,
 with a comment explaining what each one guarantees. Missing: **`comments`** (queried by `eventId`,
@@ -1456,6 +1456,64 @@ At 30–40 members this is not a performance problem and should not be filed as 
 reproducibility gap: a fresh install, or the restored-dump dev box, silently runs collection scans
 where production does not — so a query plan verified locally is not the query plan in production.
 Move them into `ensureIndex` alongside the rest.
+
+**DONE 2026-08-11 — the heading is wrong: the indexes did not exist in a migration script, and
+they did not exist in production either.**
+
+Checked three places before writing anything. No script under `server/scripts/` creates an index on
+either collection — the only `Indexes().CreateOne` calls there are on `events`
+(`20250201_optimize_event_indexes`, `20250201_event_responses_restructure`). And read off the live
+database over SSH:
+
+```
+=== comments          _id_  keys={"_id":1}          docs: 40
+=== eventResponses    _id_  keys={"_id":1}          docs: 24
+```
+
+Nothing but `_id_` on either. So the framing — local drifting from production — was backwards:
+there was no drift, because there was nothing to drift from. **Production has been running these
+queries as collection scans the whole time**, exactly like the dev box. The real defect is the one
+L11 gestured at without quite landing on: the access pattern for these two collections was written
+down *nowhere*, so nothing could be checked against anything.
+
+At 40 and 24 documents this remains, as the item says, not a performance problem, and it is not
+filed as one.
+
+**Four indexes, not two** — reading every query rather than the two the item named:
+
+| collection | keys | serves |
+| --- | --- | --- |
+| `comments` | `{eventId, createdAt}` | `GetComments` — filter + sort (`db/comments.go:23`) |
+| `comments` | `{threadId}` | `CountCommentsInThread`, `DeleteCommentsInThread` |
+| `eventResponses` | `{eventId, userId}` | by-event fetch *and* the `(eventId, userId)` lookups, via leftmost-prefix |
+| `eventResponses` | `{userId}` | "events this person responded to" (`routes/user.go:480`) |
+
+The last one is the one worth spelling out: `userId` is **not** a prefix of `{eventId, userId}`, so
+the compound index cannot serve it and it needs its own. Compound *order* is load-bearing in the
+first row too — `createdAt` must follow `eventId` or the sort is done in memory.
+
+All four are non-unique, deliberately. `{eventId, userId}` on `eventResponses` looks like it wants
+to be unique, and the write path does read-then-insert as though it were, but making it unique is a
+constraint change on live data, not a reproducibility fix — it belongs in its own item with a
+duplicate check first, not smuggled in here.
+
+**`db/indexes_test.go` asserts all thirteen declared indexes exist after `db.Init()`**, the nine
+that were already there included. Without it this fix has the same shape as the bug: a declaration
+nobody checks. It asserts on *keys*, not index names — Mongo derives a default name from the keys,
+and pinning names would fail on a pre-existing index that has the right keys under a different one.
+Decoded into `bson.D` rather than `bson.M`, because key order is the entire point of a compound
+index and a map discards it.
+
+Shown able to fail before being trusted (M2), both against a fresh throwaway Mongo: a typo'd key
+name fails with the collection's actual index list printed, and **reversing `{eventId, createdAt}`
+to `{createdAt, eventId}` also fails** — which is the check that the `bson.D` decision bought.
+
+Verified: `go build`, `go vet`, `golangci-lint` (0 issues), and the full suite
+(`go test $(go list ./... | grep -v '/scripts')`) green against a throwaway Mongo — not the dev
+one, which habitually holds a restored production dump.
+
+Production picks these up on its next boot, since `db.Init` runs at startup; no migration script is
+needed and none was written.
 
 ### L12 — Swagger UI is served publicly in production · **P3 · S**
 
