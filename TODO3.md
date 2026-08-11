@@ -13,17 +13,17 @@
 > pass, because all three prior waves audited *our* code and nobody had ever audited what we depend
 > on. **Nothing in Part J is open.**
 >
-> **The backlog is empty.** The three inherited `P3` items (`TODO2.md` G2, G3, G4) were **closed
+> **The backlog is the Vue 3 migration (Part K).** The three inherited `P3` items (`TODO2.md` G2, G3, G4) were **closed
 > won't-do on 2026-08-10** by user decision — see the section below for the reasoning, which is
 > what a future review pass needs to read before re-filing any of them. Nothing else is open in any
 > of the three backlog files.
 >
-> **The one thing not on any list**, because it is a decision rather than a task: **Vue 2 is EOL.**
-> It carries an unfixable ReDoS (no 2.x release will ever fix it — see J12), it will receive no
-> further security fixes, and Vuetify 2 and Vuex 3 are pinned behind it. `npm audit fix --force`
-> "resolves" this by installing Vue 3 and breaking the app. A migration is a project and may well
-> not be worth it for a ~30–40 person club; it is logged here so the choice stays deliberate
-> instead of drifting.
+> **Vue 2 is EOL, and as of 2026-08-11 the decision is to migrate.** It carries an unfixable ReDoS
+> (no 2.x release will ever fix it — see J12), it will receive no further security fixes, and
+> Vuetify 2, Vuex 3, vue-router 3, vue-meta 2 and vuedraggable 2 are all pinned behind it.
+> `npm audit fix --force` "resolves" this by installing Vue 3 and breaking the app. **Part K below
+> is that migration.** Phase 0 (J14–J17) is done and shipped on `main`; the cutover itself is a
+> single branch, because Vuetify 2 does not run on Vue 3 even under `@vue/compat`.
 >
 > Context unchanged: self-hosted, invite-only fork for a ~30–40 person club. Reliability and
 > small-club utility over scale. All event access requires sign-in; roles are
@@ -583,6 +583,129 @@ still works.
 **Reconfirmed the golangci-lint no-op** (already in `CLAUDE.md`, worth restating because it bit
 again): run from the repo root instead of `server/`, it prints a typechecking error **and then
 `0 issues`**, so a green-looking line can mean it linted nothing. Read the line above the count.
+
+---
+
+## PART K — the Vue 3 / Vuetify 3 migration (opened 2026-08-11)
+
+Vue 2 went EOL on 2023-12-31. The full plan, including the target versions and the reasoning
+behind each decision, is the migration plan agreed on 2026-08-11; what follows is the item record.
+
+**The shape of the thing, and the fact that drives everything else: `@vue/compat` buys nothing
+here.** The official migration build exists so Vue 2 code can run on Vue 3 while deprecations are
+fixed incrementally — but **Vuetify 2 does not run on Vue 3 in any configuration**, compat
+included. With ~800 Vuetify tags across 41 distinct components there is no meaningful subset of
+this app that renders without it. So Vue 3 and Vuetify 3 land together, in one branch, and all the
+incrementalism has to come from Phase 0 instead.
+
+Two more findings from the survey that shape the work:
+
+- **The theme survives; the overrides do not.** There are **zero** Vuetify SASS variable overrides
+  — the Fellowship identity lives in Tailwind, and `plugins/vuetify.js` is 41 lines reading its
+  colours *from* `tailwind.config.js`. But **41 selector lines override Vuetify's internal DOM with
+  `!important`, and 34 name classes Vuetify 3 does not emit** (`.v-input__slot`, `.v-menu__content`,
+  `.v-input--switch__track`, `.v-btn--is-elevated`, `.error--text`, …), across five files of which
+  only one is `<style scoped>`.
+- **The biggest template change is the activator pattern** — 21 slots, including *every* `v-menu` in
+  the app: `v-slot:activator="{ on, attrs }"` + `v-on="on" v-bind="attrs"` becomes
+  `v-slot:activator="{ props }"` + `v-bind="props"`.
+
+**Stay on Vue CLI 5 / webpack; do not migrate to Vite as part of this.** Beyond not wanting to
+change framework and bundler at once: **Vite's asset hashes would silently disable J4's immutable
+caching.** `server/main.go:52` gates `Cache-Control: … immutable` on `\.[0-9a-f]{8}\.` — eight hex
+characters between dots, which is Vue CLI's `app.457eeeac.js`. Vite emits `index-DiwrgTda.js`:
+base64url, dash-separated. It never matches, with no error and no warning. If Vite is ever wanted
+it is a separate item whose first line is "move that regex".
+
+### Phase 0 — prep on Vue 2 · DONE 2026-08-11
+
+Four items, all shipped to `main` on the existing stack. Each shrinks the cutover diff and none is
+wasted if the migration stalls.
+
+#### K/J14 — a route-level browser check to migrate over · **P0 · M** — DONE 2026-08-11
+
+`frontend/scripts/check-routes.js` + `npm run check:routes`. Every route in the router, all five
+event band tabs, the New Gathering dialog, and a 390px pass; asserts render, an identifying
+control, and a clean console for each.
+
+**Why it had to come first.** Nothing in the repo could fail on a rendering bug. All 23 unit-test
+files are pure JS deliberately extracted *out of* components — `vitest.config.mjs` sets
+`environment: "node"`, no test imports a `.vue` file, `@vue/test-utils` isn't even a dependency —
+so the suite stays green through a total rendering failure. Written against the DOM rather than
+against Vue, so it is worth the same after the migration as before it.
+
+**Found on implementation.**
+
+- **The `browser-check-lib.js` Chrome fallback list was decorative.** `spawn` reports a missing
+  binary by emitting an asynchronous `'error'` event, not by throwing, so the `try/catch` around it
+  never fired: the first name always "succeeded" and the process died later with an unhandled
+  ENOENT rather than falling through to `chromium`. Fixed.
+- `frameworkWarnings` scans **both** console levels, because Vue 2 warns through `console.error`
+  and Vue 3 through `console.warn`, and joins every argument — the component trace naming the
+  culprit is never the first one. **These warnings are stripped from production builds**, which is
+  what `compose.dev.yaml` serves, so run against `npm run serve` when the warnings are the point.
+  That will matter during the cutover, where removed APIs warn rather than throw.
+- **Validated by breaking each assertion class on purpose** and confirming it flipped to FAIL: a
+  rejected cookie, an injected `display: block !important` on the band panels, a synthetic
+  `console.error`, a `[Vue warn]` on both console levels, and an overflowing element. A check that
+  has only ever passed is worth nothing.
+
+#### K/J15 — replace `vue-worker` · **P1 · S** — DONE 2026-08-11
+
+Vue 2-only plugin (`Vue.prototype.$worker`), one call site, replaced by `src/utils/worker.js`.
+
+**Found on implementation.** The caller passes `Set`s in and gets a `Map` of `Set`s back, so the
+transport had to stay **structured clone, not JSON** — a JSON round trip would have turned all of
+them into `{}` with no error, producing an availability grid where nobody is ever free. The
+replacement also terminates the worker on the *error* path, which `simple-web-worker` did not: it
+ended with `close()` inside the worker body, which only runs when the work succeeds.
+
+#### K/J16 — drop `$set` / `$delete` (15 sites) · **P1 · S** — DONE 2026-08-11
+
+Removed in Vue 3; all 15 work identically on Vue 2 given whole-object *reassignment* rather than
+in-place mutation.
+
+**Found on implementation. `emailSuggestions` is an ARRAY, not a keyed object** — `$set(arr, i, v)`
+there was the array-index workaround, and it becomes `splice(i, 1, v)`, which stays reactive on
+both versions and keeps the array identity `respondents.map` establishes in `created`. Two loops
+were rebuilt rather than transliterated (Dashboard's `folders` watcher, RespondentsList's
+added/removed sweep) because reassigning per id would have made them quadratic.
+
+#### K/J17 — remove `.native`, funnel the breakpoint reads · **P1 · S** — DONE 2026-08-11
+
+**Found on implementation.** `.native` was dropped rather than rehomed: VTextField spreads
+`$listeners` straight onto the inner element (VTextarea reuses that `genInput` and only swaps the
+tag), so `@click`/`@keyup` now bind to the `<textarea>` itself — closer to the event, not further.
+`.native`'s failure mode is *silent*, which is why it was worth clearing before the cutover rather
+than during it. The three direct `$vuetify.breakpoint` reads moved behind `viewportWidth()` /
+`isLgAndUp()` in `general_utils.js`, so Vuetify 3's rename to `$vuetify.display` — where
+`thresholds` also flip from upper bounds to lower — is one file.
+
+### K1 — two dead components · **P2 · S** — OPEN
+
+Surfaced while verifying J17, confirmed by a sweep over all 86 components (no others):
+
+| file | lines | status |
+|---|---|---|
+| `components/EventType.vue` | 128 | no referrer in `src/`, **absent from `dist/`** |
+| `components/schedule_overlap/ConfirmDetailsDialog.vue` | 292 | no referrer in `src/`, **absent from `dist/`** |
+
+Both have been carried through at least three sweeps (the nickname display pass, the eslint backlog
+clear, a contacts fix) without anyone noticing nothing renders them. Between them they carry ~15
+Vuetify-2 constructs — `v-combobox`, `v-list-item-content`, `v-list-item-avatar`, two
+expansion-panel pairs, an activator slot — that would otherwise be migrated for nothing.
+`isLgAndUp` in `general_utils.js` exists only for `EventType.vue` and goes with it.
+
+Absence from the built bundle is the decisive evidence: webpack never reached them, so no import
+exists anywhere, dynamic or otherwise (there is no `require.context` or `<component :is>` in the
+app). Unlike J13's `/ids` endpoint there is no external-contract argument — a Vue component is not
+API surface.
+
+### K2 — the cutover · **P0 · L** — NOT STARTED
+
+Vue 3 + Vuetify 3 + Vuex 4 + Router 4 together on a `vue3` branch, then the Vuetify template sweep,
+then the styling pass, then `vue-meta` → `@unhead/vue`. See the plan for ordering and the
+per-component counts. `main` must stay free of frontend churn while that branch is open.
 
 ---
 
