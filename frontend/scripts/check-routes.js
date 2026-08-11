@@ -87,6 +87,38 @@ const visibleBandPanels = `(() => {
 const noHorizontalScroll =
   "document.documentElement.scrollWidth <= window.innerWidth + 1"
 
+/**
+ * The MDI webfont actually arrived and painted.
+ *
+ * Every `mdi-*` name in the app is a glyph in one webfont; if that font fails,
+ * all 69 of them render as blank squares with nothing logged anywhere — no
+ * console error, no failed assertion, a build and a unit suite both green.
+ * `document.fonts.check()` is the obvious API and the wrong one: with no
+ * matching `@font-face` at all it reports *true* (system fonts are assumed
+ * available), so it passes in exactly the case worth catching. Reading the face
+ * out of `document.fonts` distinguishes "declared but never loaded" from "not
+ * declared".
+ */
+const iconFontLoaded = `[...document.fonts]
+  .some((f) => /Material Design Icons/.test(f.family) && f.status === 'loaded')`
+
+/**
+ * ...and arrived from us, content-hashed, rather than from a CDN.
+ *
+ * L8: this used to be `@mdi/font@latest` on cdn.jsdelivr.net — an unpinned
+ * third party that could change what renders here with no deploy on our side.
+ * The hash in the filename is also what earns the font `immutable` caching from
+ * the Go server (`contentHashedAsset`, main.go), so asserting on it keeps both
+ * properties honest.
+ */
+const iconFontSelfHosted = `(() => {
+  const mdi = performance.getEntriesByType('resource')
+    .filter((r) => /materialdesignicons/.test(r.name))
+  return mdi.length > 0 &&
+    mdi.every((r) => new URL(r.name).origin === location.origin) &&
+    mdi.some((r) => /webfont\\.[0-9a-f]{8}\\.woff2$/.test(r.name))
+})()`
+
 /* ---------- routes ---------- */
 
 const routes = (eventId) => [
@@ -106,6 +138,8 @@ const routes = (eventId) => [
       ["renders", "document.querySelectorAll('#app *').length > 200"],
       ["offers gathering creation", buttonMatching("/call a gathering/i")],
       ["offers folder creation", buttonMatching("/new folder/i")],
+      ["the icon webfont loaded", iconFontLoaded],
+      ["the icon webfont is self-hosted", iconFontSelfHosted],
     ],
   },
   {

@@ -29,10 +29,8 @@
     <meta property="og:description" content="{{or .ogDescription $defaultDescription }}" />
     <meta property="og:image" content="{{or .ogImage $defaultOgImage }}" />
     <meta property="og:image:secure_url" content="{{or .ogImage $defaultOgImage }}" />
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/@mdi/font@latest/css/materialdesignicons.min.css"
-    />
+    <!-- The MDI webfont is bundled from the pinned @mdi/font package (see
+         src/main.js), not fetched from a CDN. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

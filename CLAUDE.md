@@ -103,6 +103,12 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
 - `src/components/` — organized by feature folder (`event/`, `home/`, `landing/`, `settings/`, `schedule_overlap/`, `calendar_permission_dialogs/`, `general/`) plus top-level shared components.
 - `src/utils/` — date math (`date_utils.js`, **dayjs only** — `moment` and `spacetime` are long gone from `package.json` and from every import; it is 946 lines / 32 exports and **splitting it was closed won't-do on 2026-08-10**, TODO2 G2 — its size is not a defect, and a blind split has already been shown to break live behaviour), `fetch_utils.js` (API client), `plugin_utils.js` (handles the postMessage plugin API — see `PLUGIN_API_README.md`), `sign_in_utils.js`, `location_utils.js`, `markdown.js`, `services/` (`EventService.js`, `FolderService.js`, `ExpenseService.js`, `PersonalService.js` — thin wrappers over `fetch_utils`).
 - Tailwind + Vuetify coexist; `tailwind.config.js` purges `src/**/*.{vue,js,...}`.
+- **Icons are the MDI *webfont*, self-hosted and pinned** — `@mdi/font` at an exact version in
+  `package.json`, imported in `src/main.js`, emitted by webpack into `dist/fonts/` (L8; it was an
+  unpinned `@latest` CDN `<link>` until 2026-08-11). Keep the version exact, don't put it back on a
+  CDN, and note `plugins/vuetify.js` selects the `mdi` icon set for this reason — `mdi-svg` wants
+  SVG paths from `@mdi/js` instead. If the font ever fails to load, all 69 `mdi-*` names render as
+  blank squares with nothing logged; `check:routes` asserts on `document.fonts` to catch that.
 - **Vue 3 discards an unrecognised prop on a component silently** — no warning in dev, none in the
   build. That is the general rule the next three bullets are instances of, and it is why a Vuetify 2
   leftover renders at the wrong size, variant or position with lint, the unit suite, the build and

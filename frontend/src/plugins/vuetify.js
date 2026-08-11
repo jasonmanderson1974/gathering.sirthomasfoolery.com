@@ -43,10 +43,11 @@ export default createVuetify({
     },
   },
 
-  // MDI arrives as a webfont from a CDN link in public/index.html, not as a
-  // package — so this is the *font* icon set (`mdi`), not `mdi-svg`. Get it
-  // wrong and all 69 `mdi-*` names in the app render as blank squares with
-  // nothing logged.
+  // MDI arrives as a *webfont* — the `@mdi/font` package, imported in main.js
+  // and emitted by webpack (it used to be a CDN `<link>`; L8). So this is the
+  // font icon set (`mdi`), not `mdi-svg`, which wants SVG paths from `@mdi/js`
+  // instead. Get it wrong and all 69 `mdi-*` names in the app render as blank
+  // squares with nothing logged.
   icons: {
     defaultSet: "mdi",
     aliases,

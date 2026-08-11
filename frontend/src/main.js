@@ -4,6 +4,14 @@ import App from "./App.vue"
 import router from "./router"
 import store from "./store"
 import vuetify from "./plugins/vuetify"
+// The MDI webfont, self-hosted. It used to be a `<link>` to
+// cdn.jsdelivr.net/npm/@mdi/font@latest — an unpinned, unverified third party
+// that could change what renders here with no deploy on our side, and whose
+// failure blanks all 69 `mdi-*` glyphs in the app with nothing logged (L8).
+// Importing the package instead pins the version in package-lock.json and lets
+// webpack emit the woff2 as a content-hashed, same-origin asset. Keep the
+// version pinned exactly (no `^`): a floating icon font is the thing this fixed.
+import "@mdi/font/css/materialdesignicons.css"
 import "./index.css"
 
 const app = createApp(App)

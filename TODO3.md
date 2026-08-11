@@ -888,9 +888,10 @@ site and confirm events still appear on the availability grid.
 >
 > Findings are ordered by what they cost a user, not by effort.
 >
-> **Status 2026-08-11: L1–L7 are closed.** The check L4 asked for exists and is in CI; running it
+> **Status 2026-08-11: L1–L8 are closed.** The check L4 asked for exists and is in CI; running it
 > for real turned L3's six props into **75 across 25 files**, all swept. L5 put `check:routes` in
-> CI against a booted stack, L6 fixed the docs, L7 declared all 111 emits. L8–L15 are untouched.
+> CI against a booted stack, L6 fixed the docs, L7 declared all 111 emits, L8 self-hosted the icon
+> font off jsdelivr. L9–L15 are untouched.
 
 ### L1 — `VForm.validate()` returns a Promise, so the submit guard never fires · **P0 · S** — DONE 2026-08-11
 
@@ -1223,7 +1224,7 @@ production. One thing that surfaced while writing it, worth knowing before someo
 `NewDialog`'s root is `persistent`, so **Escape does not close it** and is not meant to — it
 closes on a click outside, through `handleDialogInput`, so the unsaved-changes dialog gets a say.
 
-### L8 — the icon font is `@latest`, from a CDN, unpinned and unverified · **P2 · S**
+### L8 — the icon font is `@latest`, from a CDN, unpinned and unverified · **P2 · S** — DONE 2026-08-11
 
 `frontend/public/index.html:34`:
 
@@ -1239,6 +1240,39 @@ names in the app render as blank squares if the request fails, with nothing logg
 
 This sits badly beside the deliberate strip-third-party-scripts work. Pin the version as the
 minimum fix; self-hosting the woff2 removes the dependency and the request.
+
+Done: **self-hosted, which is the fix that also pins it.** `@mdi/font` is now a dependency at an
+exact version (`"7.4.47"`, no caret — a floating icon font is the thing this item was about),
+imported in `src/main.js`, and the `<link>` to jsdelivr is gone from `public/index.html`. Webpack
+emits the font as `dist/fonts/materialdesignicons-webfont.<8hex>.woff2`, which is same-origin and —
+because the hash matches `contentHashedAsset` in `server/main.go` — served `immutable` for a year,
+where the CDN copy was revalidated against a third party on every page load. One fewer DNS lookup,
+TLS handshake and off-origin request on the critical path; the app no longer renders whatever
+jsdelivr decides `@latest` means this week.
+
+Two things worth knowing before touching this again:
+
+- **The CSS is 340 KB of it** (7,447 icon classes for the 69 we use), and it landed in
+  `chunk-vendors.css`, which went 348 KB → 683 KB raw, 97.8 KB gzipped. Subsetting it is possible
+  and deliberately not done: Vuetify's own `aliases` name glyphs no grep of our source will find, so
+  a subset is the Tailwind-purge trap (`tw-pl-${n}` emitting no CSS) with blank squares instead of
+  missing padding. Cloudflare compresses it at the edge; the CDN copy cost about the same over the
+  wire.
+- **`dist` grew 7.3 MB → 12 MB** because the package's `@font-face` also lists eot, ttf and woff, so
+  webpack emits all four. Only the woff2 is ever fetched by a browser that can run this app. The
+  hashes are content-derived and so stable across builds, which is why `deploy.sh`'s rsync sends
+  them exactly once.
+
+`check:routes` now asserts both halves of this on `/home`, because the failure mode is silent —
+every `mdi-*` name renders as a blank square with nothing logged: **the icon webfont loaded** (read
+out of `document.fonts`; note `document.fonts.check()` is the wrong API here — with no matching
+`@font-face` at all it returns *true*) and **the icon webfont is self-hosted** (every
+`materialdesignicons` resource entry is same-origin, and one of them is a content-hashed woff2 — so
+a regression to any CDN fails, not just to jsdelivr).
+
+Verified with the full local gate — eslint, `check:vuetify-props` (153 components, no unknown
+props), 395 unit tests, the production build — plus `scripts/browser-check.sh`: 46 assertions, all
+pass, the two new ones included.
 
 ### L9 — three Google Fonts families on the critical path · **P3 · S**
 
