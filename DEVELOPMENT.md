@@ -53,16 +53,81 @@ to build a host from scratch, are in `DEPLOYMENT.md`.
 
 ## Local development
 
-Neither dev machine holds prod secrets, so use the self-contained dev stack:
+Neither dev machine holds prod secrets, so use the self-contained dev stack.
+**Prefer `scripts/dev-up.sh`** over driving compose by hand — it rebuilds (the
+trap that makes a harness run meaningless), waits for health, and can put a club
+in the database worth looking at:
 
 ```bash
-docker compose -f compose.dev.yaml up -d --build
+scripts/dev-up.sh --seed          # build, start, seed a populated club
+scripts/dev-up.sh --seed --force  # ...replacing a club already in there
+scripts/dev-up.sh --no-build      # start what is already built
+scripts/dev-up.sh --down          # stop, KEEPING the Mongo volume
 open http://localhost:3002
 ```
 
 It boots mongo + frontend + server with dummy secrets and exposes Mongo on
 `:27017`. Out of the box that is enough for build/boot/UI smoke tests and the
-backend integration tests, but not for anything touching Gmail SMTP or Google.
+backend integration tests, but not for anything touching Google OAuth.
+
+### A club worth looking at, and signing in to it
+
+Two things used to make "bring up the app and look at it" a five-minute setup
+nobody did, so the automated checks were the only thing that ever looked.
+
+**There was nothing in the database** (TODO3 M4). The dev stack held 0 users, 0
+events and 0 allowlist rows, while the one populated fixture this repo knows how
+to build was a heredoc inside `scripts/browser-check.sh` — in a stack deleted at
+the end of every run. It now lives in `scripts/seed-club.js` (the Mongo half:
+five members, their allowlist rows, ten Chronicle entries) driven by
+`scripts/seed-club.sh` (the API half: three gatherings and one cast
+availability, created over HTTP so the fixture cannot drift from what the app
+actually writes). Both `browser-check.sh` and `dev-up.sh --seed` call it, so the
+stack you click through is the one CI asserts against.
+
+```bash
+scripts/seed-club.sh http://localhost:3002          # host mongosh
+scripts/seed-club.sh http://localhost:3010 \
+  docker compose -f compose.dev.yaml -p timeful-check \
+  exec -T mongo mongosh --quiet mongodb://localhost:27017/schej-it
+```
+
+It prints one line, `<userId> <responderId> <eventId>`. Seeding twice refuses
+rather than colliding on the allowlist's unique index; `SEED_FORCE=1` replaces,
+and deletes only documents it can prove it created (the five `@example.test`
+users, anything owned by them, and chronicle entries carrying its marker). That
+scoping is load-bearing: this Mongo volume habitually holds a restored
+production dump. **Never `down -v` the dev stack.**
+
+**And nothing could sign in** (TODO3 M3). `utils.SendEmail` dials Gmail
+unconditionally and fails with no `GMAIL_APP_PASSWORD`, and `sendOtp`'s failure
+path *deleted the code it had just stored* — so the code was gone from Mongo
+before anyone could read it, and `otpCodes` on a dev stack was always empty.
+Everything therefore ran on `tools/mintsession`, which starts *after* auth,
+leaving `/auth/otp/*`, `SignIn.vue` in both modes and the post-sign-in redirect
+exercised nowhere but production. Now, with no SMTP configured **and** gin not
+in release mode, the code is logged and kept:
+
+```bash
+scripts/dev-up.sh --seed
+# open http://localhost:3002/sign-in, enter harness@example.test, then:
+docker compose -f compose.dev.yaml -p timeful-dev logs server | grep 'DEV: otp'
+```
+
+The seeded roll is `harness@` (superAdmin), `ambrose@` (admin), and `cornelius@`
+/ `percival@` / `reginald@` (members), all `@example.test`.
+
+> **`gin.Mode()` was silently wrong here, and that is why the server announces
+> this branch at boot.** `server/Dockerfile` ran `CMD ["./server", "-release=true"]`
+> — a leftover from the Docker production stack deleted in 2026-08, when that
+> image was production. Today `compose.dev.yaml` is its only consumer, and the
+> flag calls `gin.SetMode` and so beat `GIN_MODE: debug` in the environment:
+> the dev stack had been claiming to be production. The flag is gone from the
+> Dockerfile (production is systemd + `-release=true` in
+> `deploy/thegathering.service`, which is untouched), and `main.go` now logs
+> `DEV MODE: ... codes will be LOGGED, not emailed` at startup, so a server
+> about to log credentials says so on line one instead of leaving it to be
+> inferred.
 
 ### Testing the real calendar path locally
 

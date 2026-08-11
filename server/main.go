@@ -93,6 +93,22 @@ func main() {
 	// Load .env variables
 	loadDotEnv()
 
+	// Say so, at boot, when sign-in codes will be logged instead of mailed.
+	//
+	// `sendOtp` has a dev-only branch that prints the OTP rather than emailing
+	// it, so local sign-in is possible at all (TODO3 M3). It is gated on debug
+	// mode AND absent SMTP credentials — but the whole reason this line exists
+	// is that "am I in release mode?" turned out to be a signal that can be
+	// silently wrong: the dev image ran `-release=true`, overriding
+	// compose.dev.yaml's `GIN_MODE: debug`, and nobody knew until a branch
+	// depended on it. A server that is going to log credentials should announce
+	// that on line one of its log, not leave it to be inferred.
+	if gin.Mode() != gin.ReleaseMode && os.Getenv("GMAIL_APP_PASSWORD") == "" {
+		logger.StdErr.Println(
+			"DEV MODE: no SMTP credentials — sign-in codes will be LOGGED, not emailed",
+		)
+	}
+
 	// Init router
 	router := gin.New()
 	router.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {

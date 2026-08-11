@@ -188,160 +188,21 @@ for i in $(seq 1 90); do
   sleep 2
 done
 
-echo "--- seeding a club"
-# The fixture is a POPULATED club, not a minimal one, and that is the whole
-# point of the shape below. An empty Fellowship renders its one row and an empty
-# Chronicle renders its "nothing recorded yet" line — both perfectly, and
-# neither exercises the entry rendering, which is the code most likely to break.
-# The check's thresholds were written against a real database; seeding to match
-# keeps them meaningful instead of tuning them down to whatever an empty
-# database happens to produce.
-#
-# The signed-in user is a superAdmin because /members is gated on `canInvite`,
-# and a lesser role is redirected to /home — which surfaces as the route failing
-# rather than as a seeding mistake. The allowlist rows matter too: AuthRequired
-# enforces the roll on every request, not just at sign-in.
-SEED_JS=$(
-  cat <<'JS'
-const members = [
-  ["harness@example.test", "Harness", "Check", "superAdmin"],
-  ["ambrose@example.test", "Ambrose", "Fenwick", "admin"],
-  ["cornelius@example.test", "Cornelius", "Blackwood", "member"],
-  ["percival@example.test", "Percival", "Thorne", "member"],
-  ["reginald@example.test", "Reginald", "Ashcombe", "member"],
-]
-
-const ids = []
-for (const [email, firstName, lastName, role] of members) {
-  const uid = new ObjectId()
-  ids.push(uid)
-  db.users.insertOne({
-    _id: uid, email, firstName, lastName, role,
-    phone: "+15550100", timezoneOffset: 0,
-  })
-  db.allowlist.insertOne({
-    email, addedBy: "browser-check", role, addedAt: new Date(),
-  })
-}
-
-// Chronicle entries are inserted directly rather than produced by letting the
-// reminder scheduler archive a past gathering: that path ticks on its own
-// timer, which is not something a CI run should be waiting on. The cost is a
-// hand-built fixture — if ChronicleEntry's shape ever moves, this renders wrong
-// and reads like a regression, so check the seed before the app.
-const day = 24 * 60 * 60 * 1000
-for (let i = 1; i <= 10; i++) {
-  const start = new Date(Date.now() - i * 30 * day)
-  db.chronicle.insertOne({
-    eventId: new ObjectId(),
-    name: "Gathering the " + i,
-    location: "The Club Room",
-    startDate: start,
-    endDate: new Date(start.getTime() + 3 * 60 * 60 * 1000),
-    attendees: [
-      { name: "Ambrose Fenwick", status: "going", guestCount: 1 },
-      { name: "Cornelius Blackwood", status: "going", guestCount: 0 },
-      { name: "Percival Thorne", status: "maybe", guestCount: 0 },
-    ],
-    headCount: 4,
-    capturedAt: new Date(),
-  })
-}
-
-// The first id is who the check signs in as; the second is a fellow member, who
-// exists so the gathering can have a response by somebody OTHER than the
-// signed-in user. Both halves matter: "Schedule event" needs numResponses > 0,
-// and the "Mark availability" assertion needs the signed-in user to be the one
-// who has NOT responded (it reads "Edit availability" once they have).
-print(ids[0].toString() + " " + ids[1].toString())
-JS
-)
-SEED_OUT=$(compose exec -T mongo mongosh --quiet "mongodb://localhost:27017/schej-it" --eval "$SEED_JS" | tr -d '\r')
-read -r USER_ID RESPONDER_ID <<<"$SEED_OUT"
-
-# Checked, because mongosh reports a failed insert on stdout and still exits 0.
-# Without this the ids come through empty, every request 401s, and the first
-# thing that actually complains is a JSON parse error three steps downstream.
-if ! [[ "$USER_ID" =~ ^[0-9a-f]{24}$ && "$RESPONDER_ID" =~ ^[0-9a-f]{24}$ ]]; then
-  echo "seeding did not produce two user ids. mongosh said:" >&2
-  echo "$SEED_OUT" >&2
+# One fixture, shared with `scripts/dev-up.sh` (TODO3 M4). mongosh is given as
+# an explicit command rather than left to the default host one: the CI runner has
+# no mongosh installed, only the container does.
+SEED_OUT=$(scripts/seed-club.sh "$API_BASE" \
+  docker compose -f "$ROOT/compose.dev.yaml" -p "$PROJECT" \
+  exec -T mongo mongosh --quiet "mongodb://localhost:27017/schej-it")
+read -r USER_ID RESPONDER_ID EVENT_ID <<<"$SEED_OUT"
+if ! [[ "$EVENT_ID" =~ ^[0-9a-f]{24}$ ]]; then
+  echo "seed-club.sh did not produce an event id; it said: $SEED_OUT" >&2
   exit 1
 fi
 
-echo "    signed in as $USER_ID, responder $RESPONDER_ID"
-
-echo "--- minting a session cookie"
+# Minted here rather than returned by seed-club.sh: a session cookie is a
+# credential, and that script's stdout is echoed into a CI log.
 COOKIE=$(cd server && go run ./tools/mintsession "$USER_ID")
-
-echo "--- creating gatherings"
-# Created over the API rather than inserted into Mongo, so the fixture cannot
-# drift away from what the app actually writes — a hand-built document that no
-# longer matches the model would fail the render assertions and read exactly
-# like a real regression. The dates are relative to today for the same reason:
-# a hardcoded date eventually falls into the past and changes what renders.
-#
-# `hasSpecificTimes` is false on purpose. With it true and `times` empty,
-# ScheduleOverlap's mounted() opens SET_SPECIFIC_TIMES — the creator's
-# click-and-drag screen — instead of the normal heatmap, and the event page then
-# has no band tabs, no "Mark availability" and no "Schedule event" for the check
-# to find. That is correct app behaviour and a wrong fixture.
-DATES=$(node -e '
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() + 14);
-  d.setUTCHours(18, 0, 0, 0);
-  const out = [];
-  for (let i = 0; i < 3; i++) {
-    const day = new Date(d);
-    day.setUTCDate(d.getUTCDate() + i);
-    out.push(day.toISOString());
-  }
-  process.stdout.write(JSON.stringify(out));')
-
-jsonField() { # jsonField <field> — reads a JSON object on stdin
-  node -e '
-    let s = ""; process.stdin.on("data", (c) => (s += c)).on("end", () => {
-      const v = JSON.parse(s)[process.argv[1]];
-      if (!v) { console.error("no " + process.argv[1] + " in: " + s); process.exit(1); }
-      process.stdout.write(String(v));
-    });' "$1"
-}
-
-createEvent() { # createEvent <name>
-  curl -fsS -X POST "$API_BASE/api/events" \
-    -H 'Content-Type: application/json' \
-    -H "Cookie: session=$COOKIE" \
-    -d "{\"name\":\"$1\",\"duration\":4,\"type\":\"specific_dates\",
-         \"dates\":$DATES,\"hasSpecificTimes\":false,\"notificationsEnabled\":false,
-         \"blindAvailabilityEnabled\":false,\"daysOnly\":false,
-         \"sendEmailAfterXResponses\":-1,\"timeIncrement\":15}" | jsonField eventId
-}
-
-# Three, because the dashboard assertion is about a populated dashboard — one
-# lonely row does not exercise the list.
-EVENT_ID=$(createEvent "Harness Gathering")
-createEvent "Michaelmas Dinner" >/dev/null
-createEvent "The Quarterly Smoker" >/dev/null
-
-echo "    event $EVENT_ID"
-
-echo "--- casting one availability, as a fellow member"
-# As the responder, never as the signed-in user: numResponses > 0 is what puts
-# "Schedule event" on the page, while the signed-in user staying unresponded is
-# what keeps the action button reading "Mark availability".
-RESPONDER_COOKIE=$(cd server && go run ./tools/mintsession "$RESPONDER_ID")
-SLOTS=$(printf '%s' "$DATES" | node -e '
-  let s = ""; process.stdin.on("data", (c) => (s += c)).on("end", () => {
-    // Four 30-minute slots from the start of the first day, which is inside the
-    // 4-hour window the gathering was created with.
-    const start = new Date(JSON.parse(s)[0]).getTime();
-    const out = [];
-    for (let i = 0; i < 4; i++) out.push(new Date(start + i * 30 * 60 * 1000).toISOString());
-    process.stdout.write(JSON.stringify(out));
-  });')
-curl -fsS -X POST "$API_BASE/api/events/$EVENT_ID/response" \
-  -H 'Content-Type: application/json' \
-  -H "Cookie: session=$RESPONDER_COOKIE" \
-  -d "{\"guest\":false,\"availability\":$SLOTS,\"ifNeeded\":[]}" >/dev/null
 
 if [ -n "$DEV_BUILD" ]; then
   echo "--- starting the dev server on $CHECK_BASE (this is the slow part now)"

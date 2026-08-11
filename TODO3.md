@@ -21,15 +21,20 @@
 > **Part L (opened 2026-08-11) is the post-migration review. L1–L8 are closed; L9–L15 are open**
 > and are all P2/P3 — dependency and hardening work, nothing user-facing left in it.
 >
-> **Part M (opened 2026-08-11): M1, M2 and M5 are DONE (2026-08-11). M3, M4, M6, M7 are open.**
-> It is not a code review: it is a review of what can be verified on a dev box without a deploy,
-> run after everything in the repo was confirmed green on the WSL box (395 unit tests, lint,
-> `check:vuetify-props`, the Go suite, and `browser-check.sh` ALL PASS in 3m19s). The three that
-> are closed were the ones that changed *who* can check and *whether the check means anything*:
-> the repo can now take a screenshot (M1), the twelve framework-warning assertions can now fail
-> (M2), and a stale checkout says so instead of manufacturing a regression (M5). What is left is
-> the local sign-in hole (M3), the fixture nobody else can use (M4), the missing mount-test tier
-> (M6) and the check's one-mode-only ergonomics (M7).
+> **Part M (opened 2026-08-11): M1–M5 are DONE (2026-08-11). M6 and M7 are open.** It is not a
+> code review: it is a review of what can be verified on a dev box without a deploy, run after
+> everything in the repo was confirmed green on the WSL box (395 unit tests, lint,
+> `check:vuetify-props`, the Go suite, and `browser-check.sh` ALL PASS in 3m19s). Five items in,
+> this box can now do things it could not on the morning of the 11th: take a screenshot (M1), fail
+> on a framework warning (M2), **sign in** (M3), hold a club worth clicking through (M4), and say
+> so when it is stale (M5). Left: the missing mount-test tier (M6) and the check's
+> one-mode-only ergonomics (M7).
+>
+> Two of the five found something the item had not predicted, both by testing rather than reading:
+> M2 exposed an icon-font assertion that inferred "painted" from network shape and reported a
+> working font as missing, and **M3's proposed gate did not work at all** — the dev image ran
+> `-release=true`, so `gin.Mode()` had been silently claiming production on every dev stack for
+> months. Neither was visible from the source.
 >
 > **The backlog was the Vue 3 migration (Part K).** The three inherited `P3` items (`TODO2.md` G2, G3, G4) were **closed
 > won't-do on 2026-08-10** by user decision — see the section below for the reasoning, which is
@@ -1500,7 +1505,7 @@ icons on it, in both modes. `evaluate()` in `browser-check-lib.js` now always pa
 `awaitPromise: true`; without it an async assertion returns `"[object Promise]"` and silently
 fails its `=== true`.
 
-### M3 — nothing can sign in locally, so the real auth path is verifiable only in production · **P2 · S**
+### M3 — nothing can sign in locally, so the real auth path is verifiable only in production · **P2 · S** — DONE 2026-08-11
 
 `server/routes/auth.go:474–486`: when `utils.SendEmail` fails, `sendOtp` **deletes the code it just
 stored** and returns 500. Locally `SendEmail` always fails — no `GMAIL_APP_PASSWORD`, and
@@ -1519,7 +1524,43 @@ and log it (`logger.StdErr.Println("DEV: otp for", email, code)`) instead of mai
 both conditions, so no production configuration can reach the branch even with a broken mailbox.
 Then a local browser signs in for real, and a check that walks the OTP flow becomes writable.
 
-### M4 — the fixture is trapped inside the script that throws it away · **P2 · S**
+**DONE 2026-08-11 — and the proposed gate did not work, for a reason worth keeping.**
+
+The branch went in as specified (`server/routes/auth.go`, with `smtpConfigured()` reading exactly
+the two variables `SendEmail` reads). It did nothing: the first local sign-in attempt still 500'd
+with `gomail: invalid address ""`. **`server/Dockerfile` ran `CMD ["./server", "-release=true"]`**,
+which calls `gin.SetMode` and therefore beat `GIN_MODE: debug` in `compose.dev.yaml` — so the dev
+stack had been claiming to be production, and `gin.Mode()` was a signal that had been silently
+wrong for as long as anyone has been running it. Nothing depended on it before this, except the
+session cookie's `Secure` flag, which browsers exempt `localhost` from. So it never showed.
+
+That CMD is a leftover: it dates from when the Docker image *was* production, and the Docker
+production stack was deleted on 2026-08-05. `compose.dev.yaml` is now its only consumer — checked,
+it is the single reference in the repo — while production is systemd running the bare binary with
+`-release=true` in `deploy/thegathering.service`, untouched by this. The flag is gone from the
+Dockerfile.
+
+Because the failure mode here is *a wrong answer from a signal nobody was watching*, `main.go` now
+logs at boot when the branch is live:
+`DEV MODE: no SMTP credentials — sign-in codes will be LOGGED, not emailed`. A server about to log
+credentials should say so on line one rather than leave it to be inferred.
+
+**Verified end to end in a browser, not just at the API.** `POST /auth/otp/send` → 200, the code
+logged and *kept* in `otpCodes` (1 document, where it used to be 0) → `/auth/otp/verify` → a real
+session cookie that authenticates `GET /api/user/profile` as the superAdmin. Then the same flow
+driven through the UI on the CDP harness: `/sign-in` → type the email → Continue → the "Enter
+verification code" screen → read the code from the server log → Verify → lands on `/home` with the
+dashboard rendered, **no console errors anywhere in the flow**. That is `SignIn.vue` in its
+sign-in mode, `sendOtp`, `verifyOtp` and the post-sign-in redirect all exercised outside production
+for the first time.
+
+`server/routes/auth_dev_otp_test.go` asserts the gate in both directions across five
+configurations, the load-bearing row being **release mode with a broken mailbox must not log
+codes**. Follow-up worth having, deliberately not done here: a `check:signin` alongside
+`check:signed-out` that walks this flow on every run. It is now writable — the walk above was a
+throwaway script — but M3 asked for the capability, not the check.
+
+### M4 — the fixture is trapped inside the script that throws it away · **P2 · S** — DONE 2026-08-11
 
 The five-member club, ten Chronicle entries, three gatherings and the one cast availability live
 as a `mongosh` heredoc inside `scripts/browser-check.sh`, in a stack that is deleted at the end of
@@ -1534,6 +1575,47 @@ is why the checks are the only thing that ever looks.
 Extract the seed to `scripts/seed-club.js`, taking a Mongo URI and a base URL, and call it from
 both `browser-check.sh` and a new `scripts/dev-up.sh --seed`. One fixture with two consumers, and
 the interactive stack stops being able to drift away from the one CI asserts against.
+
+**DONE 2026-08-11**, as two files rather than one, because the fixture has two halves with
+different needs:
+
+- **`scripts/seed-club.js`** — the Mongo documents (five members, their allowlist rows, ten
+  Chronicle entries), run through mongosh, printing two user ids.
+- **`scripts/seed-club.sh`** — the orchestration: runs that JS, mints the cookies, then creates
+  the three gatherings and casts the one availability **over the API**, so the fixture cannot
+  drift from what the app actually writes. Prints one line, `<userId> <responderId> <eventId>`,
+  with everything else on stderr so a caller can `read` it.
+
+The split is forced by where mongosh lives. A pure `.js` taking a Mongo URI would need a host
+mongosh, and **the CI runner has none** — only the container does. So the mongosh invocation is a
+caller-supplied command (`seed-club.sh <baseUrl> [mongosh argv...]`), defaulting to a host mongosh
+against `$SEED_MONGO_URI`; `browser-check.sh` and `dev-up.sh` both pass a `docker compose exec`
+form. The two knobs reach the JS as prepended globals *or* env vars, because `docker compose exec`
+does not forward the environment and this script does not get to add `-e` to a command line it was
+handed.
+
+**`scripts/dev-up.sh`** is the second consumer: build, start, wait for health, optionally seed, and
+then print how to sign in — which is only useful because M3 landed in the same pass. It also
+carries `--no-build`, `--force` and `--down`.
+
+**Re-seeding is the part that needed care.** Seeding twice collides on the allowlist's unique email
+index and reports as a duplicate-key error rather than "you already have a club in here", so the JS
+detects an existing fixture and refuses, naming the fix. `SEED_FORCE=1` replaces it, deleting only
+what it can prove it created: the five `@example.test` users, everything owned by those ids, and
+chronicle entries carrying its own marker field. That scoping is load-bearing — the dev Mongo
+volume on these machines habitually holds a restored production dump, and `dev-up.sh` never runs
+`down -v`. Verified: after a forced re-seed the fixture is still exactly 5 users / 5 allowlist rows
+/ 10 chronicle entries, and **the 94 pre-existing chronicle documents from the partial dump were
+untouched**.
+
+One bug found by testing the guard rather than the happy path: the refusal exited 1 **silently**,
+because `set -e` kills the script at a failing command substitution and threw away the explanation
+mongosh had just printed. A diagnosis-free exit 1 is exactly what this script exists to prevent, so
+`set -e` is now lifted across that one assignment and stderr is captured separately, so a
+connection warning can never land on the line the ids are read from.
+
+`scripts/browser-check.sh` lost ~90 lines to the extraction and passes unchanged: ALL PASS in both
+modes.
 
 ### M5 — a stale checkout is silent, and manufactures fake regressions · **P1 · S** — DONE 2026-08-11
 

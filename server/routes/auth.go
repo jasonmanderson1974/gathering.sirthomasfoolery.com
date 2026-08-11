@@ -361,6 +361,15 @@ func generateOtpCode() string {
 	return fmt.Sprintf("%06d", n.Int64())
 }
 
+// smtpConfigured reports whether utils.SendEmail has any chance of working. It
+// reads exactly the two variables SendEmail itself reads, so the two cannot
+// disagree about what "configured" means — the failure this guards against is a
+// dev-only branch that a real deployment could fall into.
+func smtpConfigured() bool {
+	return os.Getenv("GMAIL_APP_PASSWORD") != "" &&
+		os.Getenv("SCHEJ_EMAIL_ADDRESS") != ""
+}
+
 // buildOtpEmailBody returns a Fellowship-themed HTML email containing the
 // sign-in code. Inline styles only (email clients strip <style>/<head>), and a
 // dark leather/brass palette that mirrors the sign-in screen.
@@ -463,6 +472,28 @@ func sendOtp(c *gin.Context) {
 	if err != nil {
 		logger.StdErr.Println(err)
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
+
+	// DEV ONLY: with no mailbox configured, log the code instead of mailing it.
+	//
+	// Without this, local sign-in is not inconvenient, it is IMPOSSIBLE (TODO3
+	// M3). `utils.SendEmail` dials smtp.gmail.com unconditionally and fails with
+	// no GMAIL_APP_PASSWORD, and the failure path below deletes the code it just
+	// stored — so the code is gone from Mongo before anyone could read it out,
+	// which is why `otpCodes` on a dev stack is always empty. Everything local
+	// consequently ran on `tools/mintsession`, which starts *after* auth, leaving
+	// `/auth/otp/*`, `SignIn.vue` in both its modes and the post-sign-in redirect
+	// exercised nowhere but production.
+	//
+	// Gated on BOTH conditions deliberately. Production runs `-release=true`
+	// (`deploy/thegathering.service`), which calls `gin.SetMode(ReleaseMode)`,
+	// AND has credentials — so no production configuration reaches this branch,
+	// not even one whose mailbox has broken. Either guard alone would be enough;
+	// the point of two is that neither has to be argued about.
+	if gin.Mode() != gin.ReleaseMode && !smtpConfigured() {
+		logger.StdErr.Println("DEV: otp for", email, "is", code)
+		c.JSON(http.StatusOK, gin.H{})
 		return
 	}
 

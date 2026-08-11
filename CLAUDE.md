@@ -75,6 +75,20 @@ The Go module is `sirtom/server` (renamed from `schej.it/server`, 2026-07-23). T
   [--full] [--click <text>] [--out]` shoots one page on a stack you already
   have. Both drive `browser-check-lib.js`, so they see exactly what the check
   sees. `frontend/shots/` and `/shots` are gitignored.
+- `scripts/dev-up.sh [--seed] [--force] [--no-build] [--down]` — the ordinary dev stack
+  (`timeful-dev`, :3002), optionally holding **the same club CI asserts against**: the fixture
+  lives in `scripts/seed-club.js` + `scripts/seed-club.sh` and has two consumers, so the
+  interactive stack cannot drift from the checked one (M4). Re-seeding refuses unless forced, and
+  even then only deletes documents it can prove it created — the dev Mongo volume habitually holds
+  a restored production dump. **Never `down -v` it**; `--down` keeps the volume.
+- **Local sign-in works now** (M3). With no SMTP configured *and* gin not in release mode,
+  `sendOtp` logs the code instead of mailing it and keeps it in Mongo; before, the failed send
+  deleted the code, so signing in locally was impossible and everything ran on `tools/mintsession`,
+  which starts *after* auth. Read the code with
+  `docker compose -f compose.dev.yaml -p timeful-dev logs server | grep 'DEV: otp'`. The server
+  announces the branch at boot, because **`gin.Mode()` was silently wrong here for months**: the
+  dev image ran `-release=true`, overriding `GIN_MODE: debug`. Production is systemd + `-release=true`
+  (`deploy/thegathering.service`) and has credentials, so it reaches neither condition.
 - `scripts/dev-doctor.sh` — the two stale-artifact traps on these boxes
   (`node_modules` a whole framework generation behind `package.json`; a running
   image built before the change under test), both of which fail *silently* and
