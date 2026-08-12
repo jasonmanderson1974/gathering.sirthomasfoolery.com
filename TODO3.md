@@ -1741,11 +1741,40 @@ live risk, it is making sure the legacy API **cannot be inherited** the day some
 `<style lang="scss">` or turns on Vuetify's sass theming. Left at 10, that day comes with a
 deprecated compiler attached.
 
-**Open follow-up, deliberately not taken here:** `sass` and `sass-loader` are dead weight and could
-simply be deleted (verified: the build is byte-identical without them). Keeping them preserves the
-option of scss-in-components and Vuetify sass theming; removing them means a future
-`<style lang="scss">` fails with a clear "install sass-loader" error. That is a project-direction
-call, not a dependency-hygiene one.
+**~~Open follow-up, deliberately not taken here:~~ TAKEN — both packages removed 2026-08-12.**
+`sass` and `sass-loader` were dead weight and are now deleted. The project-direction call the
+follow-up flagged has been made: **no sass**. Styling is Tailwind plus Vuetify's JS theme, and a
+future `<style lang="scss">` should fail loudly rather than quietly work, so that adding a third
+styling language is a decision someone makes on purpose.
+
+Verification, in the order that matters:
+
+- **Nothing consumed them.** Zero `.scss`/`.sass` files, zero `lang="scss"`/`lang="sass"` blocks,
+  no sass config in `vue.config.js`.
+- **The build output did not move.** All six emitted CSS files byte-identical by sha256 —
+  `app.8b6a0b0a.css` and the 708KB `chunk-vendors.03afc361.css` included — and the filenames are
+  content hashes, so identical names *are* identical content.
+- Unit suite 411/411, `check:vuetify-props` clean over 153 components, `eslint --max-warnings 0`
+  clean.
+
+**Two things to know, both counterintuitive:**
+
+- **A green build proves nothing here, and did not before either.** The loader never ran, so the
+  build was green with these packages, without them, and would have been green with them
+  half-broken. The byte-identical CSS is the real evidence; treat the build's exit code as noise
+  on any sass question.
+- **`npm ls sass` still resolves, and that is not a failed removal.** `sass` is an *optional peer
+  dependency* of `vite`, which arrives as a transitive dependency of `@unhead/vue`, so npm places
+  it under `node_modules/` on its own. Both **direct devDependencies are gone from
+  `package.json`**, and webpack has no sass-loader to reach it with. Don't "re-remove" it — the
+  only way to drop the directory would be an `overrides` entry fighting npm's peer resolution, for
+  no build effect.
+
+The re-install recipe, should that direction ever change: `sass` plus `sass-loader@^16`. **Not 17**
+— it requires Node ≥22.11 and CI runs Node 20 — and **not the 10 we used to carry**, which drives
+the legacy Dart Sass JS API that Dart Sass 2.0 removes. That is the whole reason the 10 → 16 upgrade
+above was worth doing on the way to deleting it: the next person starts from a version that already
+works instead of inheriting the landmine.
 
 ---
 
