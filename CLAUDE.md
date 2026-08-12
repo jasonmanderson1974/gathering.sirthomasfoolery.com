@@ -209,6 +209,17 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
   and it is invisible to anything scanning `<link>` tags or top-level `document.styleSheets` (an
   imported sheet is a `CSSImportRule` inside its parent). One hid in `App.vue`'s style block and
   outlived L9's own write-up.
+- **`sass` / `sass-loader` are installed but compile nothing today** (L15). `import "vuetify/styles"`
+  hits a conditional export — `{"sass": "…/main.sass", "default": "…/main.css"}` — and the `sass`
+  condition is only added when `VuetifyPlugin` gets a `styles` option. Ours is
+  `new VuetifyPlugin({ autoImport: true })`, so the **precompiled `main.css`** is used; we have no
+  `.scss`/`.sass` of our own, and the theme is plain JS in `plugins/vuetify.js`. Deleting both
+  packages produces byte-identical CSS. They are kept at **sass-loader ^16** (upgraded from 10 on
+  2026-08-12) so that the day someone adds a `<style lang="scss">` or switches on Vuetify sass
+  theming, they don't inherit the **legacy Dart Sass JS API** that 10 used and that Dart Sass 2.0
+  removes. Two consequences: don't "verify" a sass change by building the app — nothing compiles,
+  so the build is green either way; and note sass-loader 17 is *not* the upgrade target, it needs
+  Node ≥22.11 while CI runs Node 20.
 - **Vue 3 discards an unrecognised prop on a component silently** — no warning in dev, none in the
   build. That is the general rule the next three bullets are instances of, and it is why a Vuetify 2
   leftover renders at the wrong size, variant or position with lint, the unit suite, the build and

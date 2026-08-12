@@ -1638,7 +1638,7 @@ reading as an omission.
 (The general lesson is the same one L9 and L11 produced: the finding named a *file* it had not
 finished reading. Here `grep list-enter` was run and `grep list-` was not.)
 
-### L15 — dependency drift and a Go version skew · **P3 · S** — PARTLY DONE 2026-08-11; sass-loader still open
+### L15 — dependency drift and a Go version skew · **P3 · S** — DONE (2026-08-11 / 2026-08-12)
 
 - `sass-loader` is on **10.5.2** against a latest of 17 — six majors behind, and the one dep here
   whose age is likely to bite during a future toolchain change. `core-js` 3.42→3.50,
@@ -1703,8 +1703,49 @@ Shown able to fail by forcing 2.24.3 into the lockfile.
 Also worth knowing for whoever picks up the majors: **eslint 8 is EOL**, but `eslint-plugin-vue@10`
 accepts `^8.57.0`, so that upgrade is separable from the eslint 9/10 jump.
 
-**Still open, as its own item: sass-loader 10 → 16.** Not folded in here because it is the only
-change in this list that can actually break the build.
+**sass-loader 10 → 16: DONE 2026-08-12 — and the loader turns out never to run.**
+
+Upgraded to `^16.0.8`. The built CSS is **byte-identical** across all six files, the 708KB Vuetify
+vendor bundle included, so nothing about the output moved.
+
+**The landmine was real.** Proved rather than argued, by monkey-patching `sass.render` /
+`renderSync` to throw and building against real `.scss` and `.sass` fixtures:
+
+| | legacy API trapped |
+| --- | --- |
+| sass-loader **10.5.2** | **build FAILS** — `sass.render()` called |
+| sass-loader **16.0.8** | build succeeds, both syntaxes compile correctly |
+
+sass-loader 16 defaults to `api: "modern"` whenever the implementation exposes `compileStringAsync`,
+and under that path it derives `syntax` from the file extension — so Vue CLI 5's hard-coded
+`sassOptions: { indentedSyntax: true }` (a *legacy* option, and the one that looked most likely to
+break, since Vuetify's stylesheets are indented `.sass`) is simply ignored rather than fatal. No
+`vue.config.js` change was needed.
+
+**But the bigger finding is that none of this currently executes.** `import "vuetify/styles"`
+resolves through a conditional export — `{ "sass": "./lib/styles/main.sass", "default":
+"./lib/styles/main.css" }` — and the `sass` condition is only added when `VuetifyPlugin` is given a
+`styles` option. Ours is `new VuetifyPlugin({ autoImport: true })`, so the **precompiled
+`main.css`** is used. Combined with having no sass of our own and a theme defined entirely in JS
+(`plugins/vuetify.js`, colours read from `tailwind.config.js`), that means **sass-loader compiles
+nothing in this build**. Demonstrated by deleting the package outright and rebuilding: byte-identical
+CSS again.
+
+That reframes the first verification honestly: the byte-identical builds proved only that the
+upgrade doesn't break a build which ignores the loader. Everything above about the modern API was
+established with temporary `.scss`/`.sass` fixtures wired into `main.js`, then removed — otherwise
+the whole exercise would have been an assertion that cannot fail.
+
+So the upgrade is worth having for a reason other than the one the item gives: it is not fixing a
+live risk, it is making sure the legacy API **cannot be inherited** the day someone adds a
+`<style lang="scss">` or turns on Vuetify's sass theming. Left at 10, that day comes with a
+deprecated compiler attached.
+
+**Open follow-up, deliberately not taken here:** `sass` and `sass-loader` are dead weight and could
+simply be deleted (verified: the build is byte-identical without them). Keeping them preserves the
+option of scss-in-components and Vuetify sass theming; removing them means a future
+`<style lang="scss">` fails with a clear "install sass-loader" error. That is a project-direction
+call, not a dependency-hygiene one.
 
 ---
 
