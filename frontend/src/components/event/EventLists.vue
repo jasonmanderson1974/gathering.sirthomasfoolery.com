@@ -301,11 +301,7 @@
                         icon
                         :size="phone ? 'small' : 'x-small'"
                         class="tw-text-parchment-dim"
-                        :title="
-                          row.item.assigneeName
-                            ? `Assigned to ${row.item.assigneeName}`
-                            : 'Assign to a member'
-                        "
+                        :title="assignTitle(list, row.item)"
                       >
                         <UserAvatarContent
                           v-if="row.item.assigneeName"
@@ -534,6 +530,7 @@ import UserAvatarContent from "@/components/UserAvatarContent.vue"
 import {
   flattenListItems,
   canAddChild,
+  countDescendants,
   checkStateLabel,
   orderBetween,
   resolveDrop,
@@ -855,6 +852,27 @@ export default {
     },
     assigneeOptions(item) {
       return assigneeMenuOptions(this.assignees, item.assigneeId ?? null)
+    },
+    /**
+     * The control's tooltip, which is also the only warning that the action is
+     * a bulk one.
+     *
+     * Assigning an entry assigns everything under it, overwriting whoever held
+     * those — deliberately, so a branch ends up reading one name. That is a
+     * reasonable default and a nasty surprise if it is invisible, and a confirm
+     * dialog on every assign would be worse than the problem. So the count goes
+     * in the tooltip, where it is there before the click without being in the
+     * way. Read from the DATA, so it is right for any shape of tree.
+     */
+    assignTitle(list, item) {
+      const held = item.assigneeName
+        ? `Assigned to ${item.assigneeName}`
+        : "Assign to a member"
+      const below = countDescendants(this.itemsOf(list), item._id)
+      if (!below) return held
+      return `${held} — also applies to ${below} sub-${
+        below === 1 ? "entry" : "entries"
+      }`
     },
     /**
      * The account to draw for an assignee — the full record from the picker

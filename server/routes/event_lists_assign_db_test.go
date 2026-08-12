@@ -427,7 +427,7 @@ func TestAssign_RoleFilterAppliesToOwnerAndHolder(t *testing.T) {
 
 	// Nor does holding an entry: plant one directly, as a role change after the
 	// fact would leave behind, and check it is not re-selectable.
-	if _, err := db.SetEventListItemAssignee(eventId, list.Id, item.Id, &guestOwnerId, "Test User"); err != nil {
+	if _, err := db.SetEventListItemAssignee(eventId, list.Id, []primitive.ObjectID{item.Id}, &guestOwnerId, "Test User"); err != nil {
 		t.Fatalf("plant assignment: %v", err)
 	}
 	w := do(h, http.MethodGet, "/events/"+eventId.Hex()+"/lists/assignees", "", cookie)
@@ -570,6 +570,122 @@ func TestAssign_RefusesANonChecklist(t *testing.T) {
 
 	if code := assignItem(h, eventId, list.Id, item.Id, `{"assigneeId":"`+ownerId.Hex()+`"}`, cookie); code != http.StatusBadRequest {
 		t.Errorf("assign on a location list: got %d, want 400", code)
+	}
+}
+
+// Assigning a parent assigns its whole subtree, and clearing it clears the same
+// set. This is WFFA's actual shape: a heading ("Sleeping") over the things it
+// covers, where assigning the heading alone was the reported surprise.
+func TestAssign_CascadesToTheSubtree(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "assign-casc-owner@example.test")
+	mateId := insertTestUser(t, models.RoleMember, "assign-casc-mate@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := assignTestRouter()
+
+	cookie := loginAs(t, h, ownerId.Hex())
+	setRsvp(t, eventId, mateId, models.RsvpGoing)
+
+	list := createListFor(t, h, eventId, cookie, `{"name":"Gear","kind":"checklist"}`)
+	parent := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Sleeping"}`)
+	childA := addItemFor(t, h, eventId, list.Id, cookie,
+		`{"text":"1 Tent","parentId":"`+parent.Id.Hex()+`"}`)
+	childB := addItemFor(t, h, eventId, list.Id, cookie,
+		`{"text":"2 Cots","parentId":"`+parent.Id.Hex()+`"}`)
+	// A grandchild, so the walk is proven to go deeper than one level.
+	grandchild := addItemFor(t, h, eventId, list.Id, cookie,
+		`{"text":"Pump","parentId":"`+childA.Id.Hex()+`"}`)
+	// A sibling branch that must NOT be touched.
+	untouched := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Cooking"}`)
+
+	// One sub-entry already belongs to somebody else: the cascade takes it,
+	// which is the deliberate trade for a branch that reads one name.
+	if code := assignItem(h, eventId, list.Id, childA.Id, `{"assigneeId":"`+mateId.Hex()+`"}`, cookie); code != http.StatusOK {
+		t.Fatalf("seed assignment: got %d, want 200", code)
+	}
+
+	if code := assignItem(h, eventId, list.Id, parent.Id, `{"assigneeId":"`+ownerId.Hex()+`"}`, cookie); code != http.StatusOK {
+		t.Fatalf("assign the parent: got %d, want 200", code)
+	}
+
+	holderOf := func(items []models.EventListItem, id primitive.ObjectID) *primitive.ObjectID {
+		for _, it := range items {
+			if it.Id == id {
+				return it.AssigneeId
+			}
+		}
+		t.Fatalf("item %s vanished", id.Hex())
+		return nil
+	}
+	items := readEventLists(t, eventId)[0].Items
+
+	for _, tc := range []struct {
+		name string
+		id   primitive.ObjectID
+	}{
+		{"the parent", parent.Id},
+		{"a child", childB.Id},
+		{"a grandchild", grandchild.Id},
+		{"a child someone else held", childA.Id},
+	} {
+		got := holderOf(items, tc.id)
+		if got == nil || *got != ownerId {
+			t.Errorf("%s: assignee = %v, want the cascade's target", tc.name, got)
+		}
+	}
+	if holderOf(items, untouched.Id) != nil {
+		t.Error("the cascade reached a sibling branch it should not have")
+	}
+
+	// Symmetric: clearing the parent clears the same set, which is what makes
+	// the overwrite above safe to do without asking.
+	if code := assignItem(h, eventId, list.Id, parent.Id, `{"assigneeId":""}`, cookie); code != http.StatusOK {
+		t.Fatalf("unassign the parent: got %d, want 200", code)
+	}
+	items = readEventLists(t, eventId)[0].Items
+	for _, id := range []primitive.ObjectID{parent.Id, childA.Id, childB.Id, grandchild.Id} {
+		if holderOf(items, id) != nil {
+			t.Errorf("unassign did not cascade to %s", id.Hex())
+		}
+	}
+	// And the names went with the ids, or the byline would still read a holder.
+	for _, it := range items {
+		if it.AssigneeName != "" {
+			t.Errorf("an assignee name survived the cascade clear: %q", it.AssigneeName)
+		}
+	}
+}
+
+// A leaf entry cascades to itself and nothing else — the ordinary case must not
+// have been broken by making the write take a slice.
+func TestAssign_LeafTouchesOnlyItself(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "assign-leaf-owner@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := assignTestRouter()
+
+	cookie := loginAs(t, h, ownerId.Hex())
+	list := createListFor(t, h, eventId, cookie, `{"name":"Gear","kind":"checklist"}`)
+	one := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"1 Tent"}`)
+	two := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"2 Cots"}`)
+
+	if code := assignItem(h, eventId, list.Id, one.Id, `{"assigneeId":"`+ownerId.Hex()+`"}`, cookie); code != http.StatusOK {
+		t.Fatalf("assign: got %d, want 200", code)
+	}
+	items := readEventLists(t, eventId)[0].Items
+	for _, it := range items {
+		switch it.Id {
+		case one.Id:
+			if it.AssigneeId == nil {
+				t.Error("the clicked entry was not assigned")
+			}
+		case two.Id:
+			if it.AssigneeId != nil {
+				t.Error("assigning one top-level entry reached its sibling")
+			}
+		}
 	}
 }
 

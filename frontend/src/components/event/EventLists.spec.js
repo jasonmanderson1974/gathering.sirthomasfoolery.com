@@ -147,6 +147,44 @@ describe("EventLists — the assignee control", () => {
     expect(buttonTitled(/assign to a member/i)).toBeFalsy()
   })
 
+  // Assigning a parent overwrites everyone below it. That is the intended
+  // behaviour and a nasty surprise if it is invisible, and a confirm dialog on
+  // every assign would be worse than the problem — so the count has to be on the
+  // control before the click.
+  it("warns on the control that assigning a parent is a bulk action", async () => {
+    const nested = {
+      _id: SHARED_LIST_ID,
+      name: "Gear",
+      kind: "checklist",
+      items: [
+        { _id: "p1", text: "Sleeping", order: 1024, userId: MEMBER._id },
+        { _id: "c1", text: "1 Tent", parentId: "p1", order: 1024, userId: MEMBER._id },
+        { _id: "c2", text: "2 Cots", parentId: "p1", order: 2048, userId: MEMBER._id },
+        { _id: "g1", text: "Pump", parentId: "c1", order: 1024, userId: MEMBER._id },
+        { _id: "solo", text: "Cooking", order: 2048, userId: MEMBER._id },
+      ],
+    }
+    const wrapper = await mountLists({
+      canAssign: true,
+      assignees: [BART],
+      lists: [nested],
+    })
+    await expandList(wrapper)
+
+    const titles = [...document.querySelectorAll("button")]
+      .map((b) => b.getAttribute("title") || "")
+      .filter((t) => /assign to a member/i.test(t))
+
+    // The parent counts its whole subtree, not just its direct children.
+    expect(titles).toContain(
+      "Assign to a member — also applies to 3 sub-entries"
+    )
+    // Singular where it should be.
+    expect(titles).toContain("Assign to a member — also applies to 1 sub-entry")
+    // A leaf says nothing extra at all.
+    expect(titles).toContain("Assign to a member")
+  })
+
   it("emits assign-item with the chosen member", async () => {
     const wrapper = await mountLists({
       canAssign: true,

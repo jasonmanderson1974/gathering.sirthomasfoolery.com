@@ -138,6 +138,32 @@ func setListItemFields(
 	listId, itemId primitive.ObjectID,
 	fields bson.M,
 ) (bool, error) {
+	return setListItemsFields(coll, filter, listId, []primitive.ObjectID{itemId}, fields)
+}
+
+// setListItemsFields is the same write across SEVERAL items of one list, still
+// as a single update — the `$in` in the array filter is what keeps it one.
+//
+// That matters more here than it looks: assigning a parent entry cascades to its
+// whole subtree (N1), and doing that as a loop of single updates would leave a
+// branch half-assigned whenever one of them failed, with no way for the client
+// to tell. The same reason deleteListItems takes a slice.
+//
+// Reports MatchedCount on the DOCUMENT, so it says whether the event was there,
+// not how many items were touched. Callers have already resolved the ids from
+// the list they read, and an id that has since been removed is a no-op rather
+// than an error — the same tolerance every other write here has.
+func setListItemsFields(
+	coll *mongo.Collection,
+	filter bson.M,
+	listId primitive.ObjectID,
+	itemIds []primitive.ObjectID,
+	fields bson.M,
+) (bool, error) {
+	if len(itemIds) == 0 {
+		return false, nil
+	}
+
 	set := bson.M{}
 	for name, value := range fields {
 		set["lists.$[l].items.$[i]."+name] = value
@@ -145,7 +171,10 @@ func setListItemFields(
 
 	res, err := coll.UpdateOne(context.Background(), filter,
 		bson.M{"$set": set},
-		arrayFilterOptions(bson.M{"l._id": listId}, bson.M{"i._id": itemId}),
+		arrayFilterOptions(
+			bson.M{"l._id": listId},
+			bson.M{"i._id": bson.M{"$in": itemIds}},
+		),
 	)
 	if err != nil {
 		return false, err
@@ -278,24 +307,30 @@ func SetEventListItemChecked(
 	})
 }
 
-// SetEventListItemAssignee records who a checklist item is for (N1), or clears
-// it when assigneeId is nil.
+// SetEventListItemAssignee records who a set of checklist items is for (N1), or
+// clears them when assigneeId is nil.
+//
+// Takes a SLICE because assigning an entry assigns its sub-entries too: a parent
+// is a heading over work, so handing over "Sleeping" hands over the tent and the
+// cots with it. The caller resolves the subtree (collectDescendantIds, which
+// already includes the root); this writes the whole branch in ONE update, so it
+// can never land half-applied.
 //
 // Both fields are written every time, in both directions, for the same reason
 // the checked quartet is: an unassign that only cleared the id would leave a
 // name behind, and the name is what renders. Clearing $sets BSON null rather
 // than $unset-ing, which decodes straight back into the pointer as nil — so this
-// stays one call to setListItemFields, with no second update shape to keep
-// correct.
+// stays one write shape, with no second one to keep correct.
 //
-// Reports MatchedCount, like every sibling here: re-assigning an item to the
-// member who already holds it modifies nothing and is still a success.
+// Reports MatchedCount, like every sibling here: re-assigning to the member who
+// already holds it modifies nothing and is still a success.
 func SetEventListItemAssignee(
-	eventId, listId, itemId primitive.ObjectID,
+	eventId, listId primitive.ObjectID,
+	itemIds []primitive.ObjectID,
 	assigneeId *primitive.ObjectID,
 	name string,
 ) (bool, error) {
-	return setListItemFields(EventsCollection, eventFilter(eventId), listId, itemId, bson.M{
+	return setListItemsFields(EventsCollection, eventFilter(eventId), listId, itemIds, bson.M{
 		"assigneeId":   assigneeId,
 		"assigneeName": name,
 	})

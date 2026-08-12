@@ -266,6 +266,12 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
   than squeezing the text further; **without the min-width flexbox shrinks the text indefinitely and
   the row never wraps at all.** Note this fault produces no horizontal scroll, so `check:routes`
   passes it too — a fifth button needs a *screenshot*, not a green check.
+- **Assigning a checklist entry cascades to its whole subtree** (N1) — `collectDescendantIds` (the
+  same walk the cascade delete uses) into `db.SetEventListItemAssignee`, which takes a **slice** and
+  writes the branch in one `$in` update so it can never half-apply. It **overwrites** sub-entries
+  other people hold, on purpose. **Clearing cascades too, which makes it a reset and not an undo:
+  un-assigning a parent destroys the holders the cascade overwrote rather than restoring them**
+  (TODO3 N2, open). Don't describe the current behaviour as reversible.
 - **"Assigned" in My Lists is DERIVED, not stored** (N1). The shared `EventListItem` carries
   `assigneeId` and is the only record; `getPersonalLists` (`routes/personal_lists.go`) synthesizes a
   read-only `EventList` from the event's checklist entries naming the caller, marked

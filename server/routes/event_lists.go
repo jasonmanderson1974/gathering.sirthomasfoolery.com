@@ -1114,7 +1114,19 @@ func setEventListItemAssignee(c *gin.Context) {
 		}
 	}
 
-	matched, err := db.SetEventListItemAssignee(event.Id, list.Id, item.Id, assigneeId, assigneeName)
+	// The whole subtree, not just the entry clicked: a parent is a heading over
+	// work, so handing over "Sleeping" hands over the tent and the cots with it,
+	// and clearing it clears them. Reuses the walk the cascade delete already
+	// does — same tree, same cycle-safety, and it includes the root.
+	//
+	// It OVERWRITES a sub-entry someone else holds, deliberately: the point is
+	// that a branch ends up reading one name. That is safe to do silently only
+	// because it is exactly reversible — picking "Unassigned" on the same entry
+	// clears the same set — and because every entry's holder is on its byline
+	// afterwards.
+	itemIds := collectDescendantIds(list, item.Id)
+
+	matched, err := db.SetEventListItemAssignee(event.Id, list.Id, itemIds, assigneeId, assigneeName)
 	if err != nil {
 		logger.StdErr.Println(err)
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})

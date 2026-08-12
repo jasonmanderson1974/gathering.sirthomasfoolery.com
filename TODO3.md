@@ -2233,9 +2233,41 @@ your own entries to it. Ticking is the only thing it allows, which is the only t
   **The general lesson: a fixture cannot tell you which signal your users actually use.** The seed
   had RSVPs because they were put there deliberately, so every local check passed over a rule that
   selected nobody in production.
+
+### N2 — a cascading assign cannot be undone, only reset · **P2 · M** — OPEN
+
+Raised 2026-08-12, immediately after N1's cascade shipped, and it is a hole in what that item
+agreed rather than a defect in what it built.
+
+Assigning a parent overwrites every holder beneath it. Clearing the parent cascades too, so the
+obvious "undo" — set it back to Unassigned — does not restore what was there; it **destroys it**.
+Assign "Sleeping" by mistake when the tent was Bart's and the bags were Ada's, realise, clear it,
+and Bart and Ada's assignments are gone with no record they existed. Symmetric unassign is a
+**reset, not an undo**, and the argument that made silent overwriting acceptable ("it is exactly
+reversible") is therefore not true.
+
+The likely answer is a real undo rather than a confirm dialog: capture the branch's prior
+(itemId → assigneeId, assigneeName) before a cascading write, and offer **Undo** on the snackbar
+that follows it. That restores exactly, costs nothing when nobody uses it, and does not put a
+dialog in front of the bulk action people actually want. Needs a bulk restore the server accepts —
+a map, not a single assignee — or the client replaying per-item writes, which is not atomic and can
+half-apply. Prefer the former.
+
+Alternatives considered and not chosen at N1: confirm-before-overwrite (prevents rather than
+reverts, and taxes the common case), and fill-only-the-blanks (makes the mistake harmless but gives
+up the branch-reads-one-name property that is the point of the cascade).
 - **Deliberately not `mentionableUserIds`.** That set is "everyone who has taken part" —
   respondents, poll voters, comment authors. Right question for an @mention, wrong one for "who is
   coming and can be asked to bring the port".
+- **Assigning an entry assigns its whole subtree, and clearing it clears the same set.** A parent
+  is a heading over work — handing over "Sleeping" hands over the tent and the cots with it, which
+  is what assigning the heading alone was reported as failing to do. Reuses `collectDescendantIds`,
+  the same cycle-safe walk the cascade delete uses, and writes the branch in **one** update
+  (`setListItemsFields`, an `$in` array filter) so it can never land half-applied. It **overwrites**
+  a sub-entry someone else holds, deliberately: the point is that a branch reads one name. The
+  count is on the control's tooltip — "also applies to 3 sub-entries" — because a bulk action that
+  is invisible before the click is a trap, and a confirm dialog on every assign would be worse than
+  the problem.
 - **`SourceListId`/`SourceListName` are `bson:"-"`, and the tag is load-bearing.** `moveListItems`
   `$push`es whole `EventListItem` values, so an untagged field would be written onto the real entry
   the first time anyone dragged one between lists. There is a test that reads the RAW document and
