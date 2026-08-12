@@ -1515,12 +1515,49 @@ one, which habitually holds a restored production dump.
 Production picks these up on its next boot, since `db.Init` runs at startup; no migration script is
 needed and none was written.
 
-### L12 — Swagger UI is served publicly in production · **P3 · S**
+### L12 — Swagger UI is served publicly in production · **P3 · S** — DONE 2026-08-11
 
 `server/main.go:228` mounts `router.GET("/swagger/*any", …)` unconditionally, outside every auth
 group. On an app where **all** event access requires sign-in (E3), the complete API surface —
 every route, every model shape, every field name — is readable by anyone who visits
 `/swagger/index.html`. Gate it on `gin.Mode() != gin.ReleaseMode`, or behind the admin role.
+
+**DONE 2026-08-11**, the first option — dev-only, not admin-gated. Swagger UI is a
+local-development tool here (CLAUDE.md has always documented it at `localhost:3002`), so
+admin-gating would have kept a login-protected attack surface alive in production to serve a page
+nobody opens there. Removing the route removes the question.
+
+Measured rather than asserted, against the real binary on a throwaway Mongo:
+
+| | `-release=true` | dev (`GIN_MODE=debug`) |
+| --- | --- | --- |
+| `/swagger/doc.json` | 200, **1,780 bytes — the SPA shell** | 200, **200,656 bytes of API surface** |
+| `/swagger/index.html` | 200, SPA shell, zero occurrences of "swagger" | 200, the Swagger UI |
+| boot log | silent | `DEV MODE: Swagger UI is served at /swagger/index.html` |
+
+200KB of every route, model shape and field name was readable by anyone who asked, with no session,
+on an app where E3 requires sign-in for everything else.
+
+Two decisions worth keeping:
+
+- **The check is phrased as NOT-release, not as "is dev".** Anything that leaves the mode unset or
+  unreadable then fails *closed*. That is not hypothetical here: `gin.Mode()` has already been
+  silently wrong in this repo for months (the dev image ran `-release=true` over compose's
+  `GIN_MODE: debug`, M3). Wrong in this direction costs a developer their docs, which is loud and
+  harmless; wrong in the other direction costs the API surface, silently.
+- **In release the route is never registered, so the path falls through to the SPA `NoRoute`
+  handler and returns the app shell — a 200, not a 404.** That is deliberate: a 404 confirms the
+  path is special, while the shell is what every other unknown path already returns. Anyone
+  expecting a 404 here will think the gate failed.
+
+The registration moved out of `main()` into `registerSwagger`, purely so it can be tested.
+`swagger_gate_test.go` drives a real request through a real router in all three gin modes and, in
+release, asserts the body contains none of `swagger` / `"paths"` / `definitions` — **by content,
+not by length**, since gin's unmatched-route default body is the non-empty text `404 page not
+found`. The first draft asserted an empty body and failed against that. Shown able to fail:
+removing the gate trips all three assertions, the content one included.
+
+Verified: `go build`, `go vet`, `golangci-lint` (0 issues), full suite green.
 
 ### L13 — `vue3-recommended` is not worth adopting; three of its rules are · **P3 · S**
 

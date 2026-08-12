@@ -150,7 +150,14 @@ The Go module is `sirtom/server` (renamed from `schej.it/server`, 2026-07-23). T
 - What blocks: a vulnerability in a **shipped** dependency (`npm audit --omit=dev`, currently 0), a
   Go vulnerability our code **calls**, and any change to the module-level Go findings against
   `GO_ALLOWLIST` in the script. The dev-toolchain total prints every run and never fails.
-- `swag init --parseDependency --parseInternal` (in `server/`) — regenerate Swagger docs in `server/docs/` after editing route comments. **The two flags are required** — a bare `swag init` aborts with `cannot find type definition: primitive.DateTime` (swag can't introspect the Mongo driver types the allowlist models use); `--parseDependency` resolves them. Pin the CLI to the go.mod version (`go install github.com/swaggo/swag/cmd/swag@v1.16.1`; note its `--version` misreports as v1.8.12). Swagger UI is served at `http://localhost:3002/swagger/index.html`.
+- `swag init --parseDependency --parseInternal` (in `server/`) — regenerate Swagger docs in `server/docs/` after editing route comments. **The two flags are required** — a bare `swag init` aborts with `cannot find type definition: primitive.DateTime` (swag can't introspect the Mongo driver types the allowlist models use); `--parseDependency` resolves them. Pin the CLI to the go.mod version (`go install github.com/swaggo/swag/cmd/swag@v1.16.1`; note its `--version` misreports as v1.8.12). Swagger UI is served at `http://localhost:3002/swagger/index.html` — **in dev only, and that is a
+security boundary, not a convenience** (L12). `registerSwagger` in `main.go` skips the route
+entirely in release mode, because it was previously mounted outside every auth group and served
+200KB of complete API surface — every route, model and field name — to anyone who asked, with no
+session, on an app where E3 requires sign-in for everything else. The check is phrased as
+*not*-release so an unset or unreadable mode fails closed. In release the path falls through to the
+SPA `NoRoute` handler and returns the app shell, so don't expect a 404. `swagger_gate_test.go`
+asserts both directions.
 - MongoDB backup/restore: `mongodump --host=localhost:27017 --db=schej-it` / `mongorestore --uri mongodb://localhost:27017 ./dump --drop`.
 
 ### Required env vars for local server boot

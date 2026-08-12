@@ -240,8 +240,12 @@ func main() {
 	}
 	router.NoRoute(noRouteHandler())
 
-	// Init swagger documentation
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
+	// Swagger UI — dev only. Announced at boot for the same reason M3 announces
+	// the OTP branch: a server serving its own API documentation should say so
+	// rather than leave it to be inferred from a mode flag that has lied before.
+	if registerSwagger(router) {
+		logger.StdErr.Println("DEV MODE: Swagger UI is served at /swagger/index.html")
+	}
 
 	// Run server. Run only returns on failure — most often the port already
 	// being held — and discarding that error made the process exit silently
@@ -277,6 +281,37 @@ func loadDotEnv() {
 	// Validate secrets
 	validateSessionSecret()
 	validateEncryptionKey()
+}
+
+// registerSwagger mounts the Swagger UI, but only outside release mode. It
+// reports whether it mounted, so the caller can announce it and a test can
+// assert it (TODO3 L12).
+//
+// This used to be registered unconditionally, outside every auth group, on an
+// app where all event access requires sign-in (E3). That published the complete
+// API surface — every route, every model shape, every field name — to anyone who
+// opened /swagger/index.html, with no session. It is a local-development tool
+// and it is now only served where it is used.
+//
+// Gated on gin.Mode() rather than an env var of its own, and phrased as
+// NOT-release deliberately: anything that leaves the mode unset or unreadable
+// fails CLOSED — no docs — rather than exposing them. That matters here
+// specifically because gin.Mode() has already been silently wrong once in this
+// repo (the dev image ran `-release=true` over compose's `GIN_MODE: debug` for
+// months, M3). Wrong in that direction now costs a developer their docs, which
+// is loud and harmless; wrong in the other direction would cost the API surface,
+// which is silent.
+//
+// In release the routes are simply never registered, so /swagger/index.html
+// falls through to the SPA NoRoute handler and returns the app shell. That beats
+// a 404: a 404 confirms the path is special, and the shell is what every other
+// unknown path already returns.
+func registerSwagger(router *gin.Engine) bool {
+	if gin.Mode() == gin.ReleaseMode {
+		return false
+	}
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
+	return true
 }
 
 // parseCorsOrigins splits CORS_ORIGINS on commas, trimming surrounding
