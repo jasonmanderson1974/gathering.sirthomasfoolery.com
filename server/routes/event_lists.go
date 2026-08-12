@@ -65,6 +65,7 @@ const (
 	errListTooDeep      = "list-depth-exceeded"
 	errNotChecklist     = "not-a-checklist"
 	errInvalidMove      = "invalid-item-move"
+	errInvalidAssignee  = "invalid-assignee"
 )
 
 // listViewer is the caller's identity as it bears on lists. Kept as a plain
@@ -133,6 +134,20 @@ func (v listViewer) canDeleteItem(item models.EventListItem) bool {
 		return true
 	}
 	return v.IsMember
+}
+
+// canAssign reports whether this viewer may (un)assign entries to people (N1).
+//
+// Member and up, and deliberately NOT narrowed to the entry's author or to the
+// assignee themselves: dividing up the work is the planning, and a member who
+// can already delete anyone's entry is not meaningfully restrained by being
+// unable to hand one over. Guests are excluded — they see who an entry is for,
+// and change nothing.
+//
+// A separate predicate from canDeleteItem's `IsMember` fallback even though the
+// rule matches today, so either can move without dragging the other with it.
+func (v listViewer) canAssign() bool {
+	return v.UserId != "" && v.IsMember
 }
 
 // sanitizeListName trims a list name and reports whether it's usable.
@@ -871,6 +886,163 @@ func setEventListItemChecked(c *gin.Context) {
 		user.Id, user.DisplayName(),
 		primitive.NewDateTimeFromTime(time.Now()),
 	)
+	if err != nil {
+		logger.StdErr.Println(err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
+	if !matched {
+		// Removed between the read and the write.
+		c.JSON(http.StatusNotFound, responses.Error{Error: errListItemNotFound})
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+// assignableMembers is the set of people a checklist entry may be given to
+// (N1), and the single definition of it: accounts with a going-or-maybe RSVP on
+// this gathering whose role is member or above.
+//
+// Attending, because assigning work to someone who has said they aren't coming
+// is a mistake the picker should not be able to make. Member and above, because
+// a guest holds no responsibilities here — the same line getExpenseParticipants
+// draws, and drawn with the same predicate.
+//
+// Deliberately NOT mentionableUserIds: that set is "everyone who has taken part"
+// — availability respondents, poll voters, comment authors — which is the right
+// question for a @mention and the wrong one for "who is coming and can be asked
+// to bring the port".
+//
+// Returned slimmed and sorted, the same shape getMentionables and
+// getExpenseParticipants return, so the client renders it with the picker it
+// already has.
+func assignableMembers(event *models.Event) []*models.User {
+	if event == nil || len(event.Rsvps) == 0 {
+		return []*models.User{}
+	}
+
+	ids := make([]primitive.ObjectID, 0, len(event.Rsvps))
+	for key, rsvp := range event.Rsvps {
+		if rsvp == nil || (rsvp.Status != models.RsvpGoing && rsvp.Status != models.RsvpMaybe) {
+			continue
+		}
+		// A legacy name-keyed row yields no id and so no candidate: there is no
+		// account behind it to put work on.
+		id, isAccount := objectIdOrNil(key)
+		if !isAccount {
+			continue
+		}
+		ids = append(ids, id)
+	}
+
+	assignable := make([]models.User, 0, len(ids))
+	for _, resolved := range db.GetUsersByIds(ids) {
+		if !resolved.EffectiveRole().CanSeeMembersOnly() {
+			continue
+		}
+		assignable = append(assignable, resolved)
+	}
+	sortMentionables(assignable)
+
+	slimmed := make([]*models.User, 0, len(assignable))
+	for _, u := range assignable {
+		slimmed = append(slimmed, slimUserForDisplay(u))
+	}
+	return slimmed
+}
+
+// @Summary Lists the members a checklist entry on this event may be assigned to
+// @Description Accounts with a going or maybe RSVP whose role is member or above. Guests are refused: they can see who an entry is for but cannot change it, so they have no use for the picker.
+// @Tags events
+// @Produce json
+// @Param eventId path string true "Event ID"
+// @Success 200 {array} models.User
+// @Router /events/{eventId}/lists/assignees [get]
+func getListAssignees(c *gin.Context) {
+	event, _, viewer, ok := loadListContext(c)
+	if !ok {
+		return
+	}
+	if !viewer.canAssign() {
+		c.JSON(http.StatusForbidden, responses.Error{Error: errs.NotAuthorized})
+		return
+	}
+
+	c.JSON(http.StatusOK, assignableMembers(event))
+}
+
+// @Summary Assigns a checklist entry to a member, or clears the assignment
+// @Description Members and above only. An empty or absent assigneeId unassigns. The entry itself is the one record — the assignee sees it in their own My Lists under "Assigned", synthesized at read time rather than copied.
+// @Tags events
+// @Accept json
+// @Produce json
+// @Param eventId path string true "Event ID"
+// @Param listId path string true "List ID"
+// @Param itemId path string true "Item ID"
+// @Param payload body object{assigneeId=string} true "Account id to assign to, or empty to unassign"
+// @Success 200
+// @Router /events/{eventId}/lists/{listId}/items/{itemId}/assignee [put]
+func setEventListItemAssignee(c *gin.Context) {
+	payload := struct {
+		// A plain string with no binding tag, unlike the checked route's pointer:
+		// "" IS the unassign case, so an absent field and a cleared one mean the
+		// same thing and neither is an error.
+		AssigneeId string `json:"assigneeId"`
+	}{}
+	if err := c.Bind(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
+		return
+	}
+
+	event, _, viewer, ok := loadListContext(c)
+	if !ok {
+		return
+	}
+	if !viewer.canAssign() {
+		c.JSON(http.StatusForbidden, responses.Error{Error: errs.NotAuthorized})
+		return
+	}
+	list, found := findEventList(event, c.Param("listId"))
+	if !found {
+		c.JSON(http.StatusNotFound, responses.Error{Error: errListNotFound})
+		return
+	}
+	// Assignability is a property of the list's KIND, exactly as the checkbox is:
+	// there is nothing to finish on a text or location list. Any depth of entry
+	// on a checklist may be assigned, sub-entries included.
+	if list.Kind != models.ListKindChecklist {
+		c.JSON(http.StatusBadRequest, responses.Error{Error: errNotChecklist})
+		return
+	}
+	item, itemFound := findListItem(list, c.Param("itemId"))
+	if !itemFound {
+		c.JSON(http.StatusNotFound, responses.Error{Error: errListItemNotFound})
+		return
+	}
+
+	var assigneeId *primitive.ObjectID
+	assigneeName := ""
+	if payload.AssigneeId != "" {
+		// The picker is a hint; this is the rule. Resolving against the same set
+		// the picker was built from is what stops an assignment naming someone who
+		// is not coming, or a guest, or an account with no connection to the club.
+		for _, candidate := range assignableMembers(event) {
+			if candidate.Id.Hex() != payload.AssigneeId {
+				continue
+			}
+			id := candidate.Id
+			assigneeId = &id
+			assigneeName = candidate.DisplayName()
+			break
+		}
+		if assigneeId == nil {
+			c.JSON(http.StatusBadRequest, responses.Error{Error: errInvalidAssignee})
+			return
+		}
+	}
+
+	matched, err := db.SetEventListItemAssignee(event.Id, list.Id, item.Id, assigneeId, assigneeName)
 	if err != nil {
 		logger.StdErr.Println(err)
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})

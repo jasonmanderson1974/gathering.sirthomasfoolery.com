@@ -157,6 +157,34 @@ export const setListItemChecked = (eventId, listId, itemId, checked) => {
 }
 
 /**
+ * The members a checklist entry may be assigned to (N1): accounts with a going
+ * or maybe RSVP whose role is member or above.
+ *
+ * Must come from the server rather than being filtered out of `event.rsvps` on
+ * the client: the RSVP roster's attached user is slimmed for display and has its
+ * `role` stripped, so nothing here can tell a member from a guest.
+ *
+ * 403 for a guest caller, who has no picker to fill.
+ */
+export const getListAssignees = (eventId) => {
+  return get(`/events/${eventId}/lists/assignees`)
+}
+
+/**
+ * Assign a checklist entry to a member, or clear it with a null/empty id (N1).
+ * Member and above; a guest is refused.
+ *
+ * The entry itself is the only record — the assignee sees it in their own
+ * My Lists under "Assigned", derived at read time rather than copied — so there
+ * is nothing else to write and nothing to keep in step.
+ */
+export const setListItemAssignee = (eventId, listId, itemId, assigneeId) => {
+  return put(`/events/${eventId}/lists/${listId}/items/${itemId}/assignee`, {
+    assigneeId: assigneeId ?? "",
+  })
+}
+
+/**
  * Reposition an item, within its list or onto another one (F17).
  *
  * Takes the same right as deleting it, since a move is a delete and a re-add:

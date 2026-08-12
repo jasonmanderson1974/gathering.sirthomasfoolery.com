@@ -56,50 +56,55 @@ func initPersonalRoutes(authed *gin.RouterGroup) {
 type personalContext struct {
 	UserId  primitive.ObjectID
 	EventId primitive.ObjectID
-	Lists   []models.EventList
+	// The gathering itself, carried only for getPersonalLists, which derives the
+	// virtual "Assigned" list from its shared lists (N1). Every write path here
+	// ignores it — a private write must never depend on anything about the event.
+	Event *models.Event
+	Lists []models.EventList
 }
 
 // loadPersonalOwner resolves the signed-in user and the gathering, writing the
 // error response itself when either is missing.
 //
-// The event is looked up but nothing about it is consulted — no ownership, no
-// role, not even whether the caller can see it. It is resolved only so that a
-// stale or invented link can't seed private documents against an id that was
-// never a gathering.
-func loadPersonalOwner(c *gin.Context) (primitive.ObjectID, primitive.ObjectID, bool) {
+// Almost nothing about the event is consulted — no ownership, no role, not even
+// whether the caller can see it. It is resolved so that a stale or invented link
+// can't seed private documents against an id that was never a gathering, and so
+// that getPersonalLists can read the shared lists it derives "Assigned" from
+// (N1). Every OTHER caller wants only event.Id.
+func loadPersonalOwner(c *gin.Context) (primitive.ObjectID, *models.Event, bool) {
 	user := authUserFrom(c)
 	if user == nil {
 		c.JSON(http.StatusUnauthorized, responses.Error{Error: errs.NotSignedIn})
-		return primitive.NilObjectID, primitive.NilObjectID, false
+		return primitive.NilObjectID, nil, false
 	}
 
 	event, eventErr := db.GetEventByEitherId(c.Param("eventId"))
 	if eventErr != nil {
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
-		return primitive.NilObjectID, primitive.NilObjectID, false
+		return primitive.NilObjectID, nil, false
 	}
 	if event == nil {
 		c.JSON(http.StatusNotFound, responses.Error{Error: errs.EventNotFound})
-		return primitive.NilObjectID, primitive.NilObjectID, false
+		return primitive.NilObjectID, nil, false
 	}
 
-	return user.Id, event.Id, true
+	return user.Id, event, true
 }
 
 // loadPersonalContext adds the caller's lists to loadPersonalOwner.
 func loadPersonalContext(c *gin.Context) (personalContext, bool) {
-	userId, eventId, ok := loadPersonalOwner(c)
+	userId, event, ok := loadPersonalOwner(c)
 	if !ok {
 		return personalContext{}, false
 	}
 
-	lists, err := db.GetPersonalLists(userId, eventId)
+	lists, err := db.GetPersonalLists(userId, event.Id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 		return personalContext{}, false
 	}
 
-	return personalContext{UserId: userId, EventId: eventId, Lists: lists}, true
+	return personalContext{UserId: userId, EventId: event.Id, Event: event, Lists: lists}, true
 }
 
 // findPersonalList resolves :listId against the caller's own lists, writing the
@@ -118,8 +123,76 @@ func (ctx personalContext) findList(c *gin.Context, idempotent bool) (*models.Ev
 	return list, true
 }
 
+// assignedListName is what the derived list is called in My Lists. A member may
+// also have a real list of their own by this name; the two coexist and are told
+// apart by EventList.Virtual, never by the name.
+const assignedListName = "Assigned"
+
+// assignedList derives the virtual "Assigned" list (N1): the gathering's shared
+// checklist entries that name this caller as assignee.
+//
+// DERIVED, not copied. The shared entry stays the one record, so a tick made
+// here and a tick made on the event list are the same write to the same field —
+// the two views cannot disagree, because there is nothing to keep in step.
+// Reassigning, editing or deleting the shared entry needs no matching write into
+// anybody's private document, and no half-landed write can leave a ghost entry
+// only one member can see.
+//
+// Returns nil when nothing is assigned, so the tab count stays honest and nobody
+// carries an empty pseudo-list around forever.
+func assignedList(event *models.Event, userId primitive.ObjectID) *models.EventList {
+	if event == nil || userId.IsZero() {
+		return nil
+	}
+
+	items := []models.EventListItem{}
+	for listIdx := range event.Lists {
+		list := &event.Lists[listIdx]
+		if list.Kind != models.ListKindChecklist {
+			continue
+		}
+		for _, item := range list.Items {
+			if item.AssigneeId == nil || *item.AssigneeId != userId {
+				continue
+			}
+
+			// ParentId is CLEARED rather than carried: a sub-entry assigned to you
+			// whose parent is assigned to somebody else would arrive here pointing
+			// at an item that isn't in this list, and the client's flattening would
+			// render it as an orphan at the top level anyway. This list is flat on
+			// purpose — it answers "what am I down for", not "where does it sit".
+			item.ParentId = nil
+			// Order is restamped as a running index rather than kept: the values
+			// came from several different sibling groups and mean nothing beside
+			// each other.
+			item.Order = float64(len(items))
+			// Where it really lives, so the client writes a tick back to the shared
+			// list instead of to a private one. Neither field is ever stored.
+			listId := list.Id
+			item.SourceListId = &listId
+			item.SourceListName = list.Name
+
+			items = append(items, item)
+		}
+	}
+
+	if len(items) == 0 {
+		return nil
+	}
+
+	return &models.EventList{
+		// NilObjectID: a stable key across refetches that cannot collide with a
+		// stored list's id, since Mongo never assigns one.
+		Id:      primitive.NilObjectID,
+		Name:    assignedListName,
+		Kind:    models.ListKindChecklist,
+		Virtual: true,
+		Items:   items,
+	}
+}
+
 // @Summary Returns the caller's own private lists on a gathering
-// @Description Private to the signed-in user: the userId is part of the query, so this can only ever return the caller's own lists. Unlike the shared lists, no display names are resolved — there is one author and the UI never shows their name.
+// @Description Private to the signed-in user: the userId is part of the query, so this can only ever return the caller's own lists. Prepends a read-only virtual list, "Assigned", derived from the shared checklist entries assigned to the caller — omitted when there are none.
 // @Tags events
 // @Accept json
 // @Produce json
@@ -131,9 +204,25 @@ func getPersonalLists(c *gin.Context) {
 	if !ok {
 		return
 	}
+
+	lists := ctx.Lists
+	// Resolve the shared lists' names BEFORE deriving, so an entry ticked by
+	// somebody who has since changed their nickname is credited currently here
+	// too — the derived items are copies, and nothing re-resolves them later.
+	// The caller's own entries carry no author or checker name to resolve.
+	resolveListDisplayNames(ctx.Event.Lists)
+	if assigned := assignedList(ctx.Event, ctx.UserId); assigned != nil {
+		// Prepended: it is the one list here somebody else can add to, so it is
+		// the one worth seeing first.
+		//
+		// No new exposure — every entry in it is one this caller could already
+		// read from GET /events/:id/lists, narrowed to the ones naming them.
+		lists = append([]models.EventList{*assigned}, lists...)
+	}
+
 	// Never null: someone who has never opened the tab has no document at all,
 	// and the client splices the result in without a nil check.
-	c.JSON(http.StatusOK, ctx.Lists)
+	c.JSON(http.StatusOK, lists)
 }
 
 // @Summary Creates one of the caller's own private lists

@@ -55,12 +55,12 @@ type personalNoteResponse struct {
 // @Success 200 {object} routes.personalNoteResponse
 // @Router /events/{eventId}/my-notes [get]
 func getPersonalNote(c *gin.Context) {
-	userId, eventId, ok := loadPersonalOwner(c)
+	userId, event, ok := loadPersonalOwner(c)
 	if !ok {
 		return
 	}
 
-	note, err := db.GetPersonalNote(userId, eventId)
+	note, err := db.GetPersonalNote(userId, event.Id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 		return
@@ -112,12 +112,12 @@ func setPersonalNote(c *gin.Context) {
 		return
 	}
 
-	userId, eventId, ok := loadPersonalOwner(c)
+	userId, event, ok := loadPersonalOwner(c)
 	if !ok {
 		return
 	}
 
-	note, err := db.SetPersonalNote(userId, eventId, text, primitive.NewDateTimeFromTime(time.Now()))
+	note, err := db.SetPersonalNote(userId, event.Id, text, primitive.NewDateTimeFromTime(time.Now()))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 		return

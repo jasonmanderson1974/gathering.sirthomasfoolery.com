@@ -278,6 +278,29 @@ func SetEventListItemChecked(
 	})
 }
 
+// SetEventListItemAssignee records who a checklist item is for (N1), or clears
+// it when assigneeId is nil.
+//
+// Both fields are written every time, in both directions, for the same reason
+// the checked quartet is: an unassign that only cleared the id would leave a
+// name behind, and the name is what renders. Clearing $sets BSON null rather
+// than $unset-ing, which decodes straight back into the pointer as nil — so this
+// stays one call to setListItemFields, with no second update shape to keep
+// correct.
+//
+// Reports MatchedCount, like every sibling here: re-assigning an item to the
+// member who already holds it modifies nothing and is still a success.
+func SetEventListItemAssignee(
+	eventId, listId, itemId primitive.ObjectID,
+	assigneeId *primitive.ObjectID,
+	name string,
+) (bool, error) {
+	return setListItemFields(EventsCollection, eventFilter(eventId), listId, itemId, bson.M{
+		"assigneeId":   assigneeId,
+		"assigneeName": name,
+	})
+}
+
 // SetEventListItemOrder repositions an item among its existing siblings.
 func SetEventListItemOrder(eventId, listId, itemId primitive.ObjectID, order float64) (bool, error) {
 	return setListItemOrder(EventsCollection, eventFilter(eventId), listId, itemId, order)

@@ -93,9 +93,13 @@ func eventDisplayNameIds(
 				add(item.UserId.Hex())
 			}
 			// Whoever last ticked the box is displayed alongside the author, so
-			// their name has to follow a nickname change the same way.
+			// their name has to follow a nickname change the same way. Likewise
+			// whoever the entry is assigned to (N1).
 			if item.CheckedBy != nil && !item.CheckedBy.IsZero() {
 				add(item.CheckedBy.Hex())
+			}
+			if item.AssigneeId != nil && !item.AssigneeId.IsZero() {
+				add(item.AssigneeId.Hex())
 			}
 		}
 	}
@@ -163,26 +167,33 @@ func resolvePollVoteNames(polls []models.Poll, users map[string]models.User) {
 	}
 }
 
-// resolveListItemNames overwrites each list item's serialized author name — and
-// the name of whoever last ticked its checkbox — with those accounts' current
-// DisplayName. Ids that no longer resolve keep their stored snapshot.
+// resolveListItemNames overwrites each list item's three serialized names — its
+// author, whoever last ticked its checkbox, and whoever it is assigned to — with
+// those accounts' current DisplayName. Ids that no longer resolve keep their
+// stored snapshot.
 func resolveListItemNames(lists []models.EventList, users map[string]models.User) {
+	// Each name is resolved through this, so a missing account or a blank
+	// DisplayName leaves the write-time snapshot exactly where it was.
+	resolve := func(hex string, into *string) {
+		user, ok := users[hex]
+		if !ok {
+			return
+		}
+		if name := user.DisplayName(); name != "" {
+			*into = name
+		}
+	}
+
 	for listIdx := range lists {
 		items := lists[listIdx].Items
 		for itemIdx := range items {
-			if user, ok := users[items[itemIdx].UserId.Hex()]; ok {
-				if name := user.DisplayName(); name != "" {
-					items[itemIdx].AuthorName = name
-				}
+			item := &items[itemIdx]
+			resolve(item.UserId.Hex(), &item.AuthorName)
+			if item.CheckedBy != nil {
+				resolve(item.CheckedBy.Hex(), &item.CheckedByName)
 			}
-			checkedBy := items[itemIdx].CheckedBy
-			if checkedBy == nil {
-				continue
-			}
-			if user, ok := users[checkedBy.Hex()]; ok {
-				if name := user.DisplayName(); name != "" {
-					items[itemIdx].CheckedByName = name
-				}
+			if item.AssigneeId != nil {
+				resolve(item.AssigneeId.Hex(), &item.AssigneeName)
 			}
 		}
 	}

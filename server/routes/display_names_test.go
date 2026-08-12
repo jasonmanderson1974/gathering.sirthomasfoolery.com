@@ -296,3 +296,52 @@ func TestResolveListItemNamesResolvesAuthorAndChecker(t *testing.T) {
 		t.Errorf("an unresolvable id must keep its snapshot, got %+v", items[1])
 	}
 }
+
+// The assignee's name (N1) is a write-time snapshot like the other two, so it
+// has to be collected for the batched lookup and rewritten from it.
+func TestResolveListItemNamesResolvesTheAssignee(t *testing.T) {
+	author := primitive.NewObjectID()
+	assignee := primitive.NewObjectID()
+	deleted := primitive.NewObjectID()
+	zero := primitive.NilObjectID
+
+	lists := []models.EventList{{Items: []models.EventListItem{
+		{UserId: author, AuthorName: "Ada", AssigneeId: &assignee, AssigneeName: "Bart Old"},
+		{UserId: author, AuthorName: "Ada", AssigneeId: &deleted, AssigneeName: "Gone Away"},
+		// Never assigned, and a zero id: neither contributes an id to look up.
+		{UserId: author, AuthorName: "Ada"},
+		{UserId: author, AuthorName: "Ada", AssigneeId: &zero},
+	}}}
+
+	ids := eventDisplayNameIds(nil, nil, nil, lists)
+	found := make(map[primitive.ObjectID]bool, len(ids))
+	for _, id := range ids {
+		found[id] = true
+	}
+	if !found[assignee] {
+		t.Errorf("ids %v are missing the assignee", ids)
+	}
+	if len(ids) != 3 {
+		t.Errorf("got %d ids, want 3 (author + assignee + the deleted assignee): %v", len(ids), ids)
+	}
+
+	resolveListItemNames(lists, map[string]models.User{
+		author.Hex():   {Id: author, Nickname: "Ada"},
+		assignee.Hex(): {Id: assignee, FirstName: "Bart", LastName: "New"},
+	})
+
+	items := lists[0].Items
+	if items[0].AssigneeName != "Bart New" {
+		t.Errorf("assignee name = %q, want the current display name", items[0].AssigneeName)
+	}
+	if items[1].AssigneeName != "Gone Away" {
+		t.Errorf("an unresolvable assignee must keep its snapshot, got %q", items[1].AssigneeName)
+	}
+	// The author line still resolves on every row — the assignee branch must not
+	// have been made to short-circuit it.
+	for i, item := range items {
+		if item.AuthorName != "Ada" {
+			t.Errorf("item %d lost its author resolution: %q", i, item.AuthorName)
+		}
+	}
+}

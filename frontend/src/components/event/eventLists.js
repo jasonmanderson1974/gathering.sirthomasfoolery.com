@@ -336,3 +336,78 @@ export const canManageEventLists = ({
     return authUser._id === event.ownerId
   return !!canInvite
 }
+
+/**
+ * Whether a list is DERIVED rather than stored (N1) — today only the "Assigned"
+ * list that GET /my-lists synthesizes from the shared checklist entries assigned
+ * to the viewer.
+ *
+ * A virtual list is read-only in every sense except the checkbox: its entries
+ * live on the event, so renaming, reordering, editing or deleting them here
+ * would be writing to somebody else's list through a private panel. The panel
+ * passes `viewerOwnsAll`, which collapses the per-entry rights to
+ * always-allowed — so this is the predicate that has to say no.
+ */
+export const isVirtualList = (list) => list?.virtual === true
+
+/**
+ * Who may (un)assign a checklist entry to a member.
+ *
+ * Mirrors listViewer.canAssign in server/routes/event_lists.go: member and up,
+ * guests excluded. A guest still SEES the assignment — the byline renders for
+ * everyone — they just get no control.
+ *
+ * A separate concept from canInvite even though the predicate matches today,
+ * following the same reasoning canSeeMembersOnly is kept apart in
+ * store/role_getters.js: either rule can move without dragging the other.
+ */
+export const canAssignListItems = ({ authUser, canInvite }) =>
+  !!authUser && !!canInvite
+
+/**
+ * The rows of the assignee menu: "Unassigned" first, then the members, each
+ * flagged with whether it is the entry's current state.
+ *
+ * "Unassigned" is an option rather than a clear button because it is a choice
+ * among the others — handing an entry back is the same kind of act as handing it
+ * over, and hiding it when nothing is assigned would make the menu change shape
+ * under the cursor.
+ *
+ * `id` is null for the unassigned row, which is exactly what the API takes to
+ * mean "clear it".
+ */
+export const assigneeMenuOptions = (assignees, currentAssigneeId = null) => {
+  const current = currentAssigneeId ?? null
+  return [
+    { id: null, name: "Unassigned", user: null, selected: current === null },
+    ...(assignees ?? []).map((user) => ({
+      id: user._id,
+      name: displayNameOf(user),
+      user,
+      selected: user._id === current,
+    })),
+  ]
+}
+
+/**
+ * The name to show for an account in the picker. Matches the server's
+ * DisplayName() — nickname first, then the full name — with a last-resort
+ * fallback so a row can never render blank and become unclickable.
+ */
+const displayNameOf = (user) => {
+  const nickname = user?.nickname?.trim()
+  if (nickname) return nickname
+  const full = `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim()
+  return full || "Member"
+}
+
+/**
+ * The byline fragment naming who an entry is for, or null when it is nobody's.
+ *
+ * Read off the item rather than looked up in the assignee list: the two can
+ * legitimately disagree — someone assigned an entry and then changed their RSVP
+ * to "no" drops out of the picker but must still be shown as holding the entry,
+ * or the work would silently look unclaimed.
+ */
+export const assigneeLabel = (item) =>
+  item?.assigneeName ? `For ${item.assigneeName}` : null

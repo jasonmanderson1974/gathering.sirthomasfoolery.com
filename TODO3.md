@@ -2163,6 +2163,80 @@ unchanged.
 
 ---
 
+## PART N — features (opened 2026-08-12)
+
+> Parts J–M were reviews. This one is not: it is where new work goes.
+
+### N1 — checklist entries have no owner · **P2 · M** — DONE 2026-08-12
+
+A gathering's shared lists record *what needs doing* and nothing about *who is doing it*. The
+planner writes "bring the port"; the only way to claim it is to say so in the discussion, where the
+next comment buries it.
+
+An entry on a checklist now carries an assignee, chosen from a picker to the left of the
+"+ (Add sub-entry)" button, and the entries assigned to you appear in your **My Lists** tab under a
+list called **Assigned**. Ticking the box in either place ticks it in both. Any member may tick any
+entry, assigned to them or not; any member may (un)assign any entry to any member; a guest sees who
+each entry is for and changes none of it.
+
+**The one decision the rest follows from: "Assigned" is DERIVED, not copied.**
+
+`models.PersonalLists` stores `[]models.EventList` — the identical types the shared lists use — so
+the obvious implementation is to write a copy of the entry into the assignee's private document.
+That was rejected. The shared `EventListItem` stays the single record and gains an `assigneeId`;
+`GET /my-lists` *synthesizes* a read-only list from the event's own checklist entries naming the
+caller.
+
+Two-way tick propagation is then not a feature at all. There is one record, so the two views cannot
+disagree — nothing has to be kept in step, and no half-landed write can leave a ghost entry only one
+member can see. Reassigning, editing, deleting and the sub-entry cascade need no fan-out write into
+anybody else's private document. The copy design would have needed a matching write on every one of
+those paths, each of which is a place to be wrong later.
+
+The cost, accepted: the Assigned list is read-only inside My Lists — no rename, no drag, no adding
+your own entries to it. Ticking is the only thing it allows, which is the only thing asked for.
+
+- **The picker must come from the server, and this is not a preference.** The obvious client-side
+  version filters `event.rsvps`, which already carries a resolved user per RSVP — but
+  `slimUserForDisplay` strips `role`, so **nothing on the client can tell a member from a guest**.
+  `GET /events/:id/lists/assignees` is the endpoint; `assignableMembers` is the one definition of
+  the set (going/maybe RSVP ∩ member or above), and the write path re-derives it rather than
+  trusting the id it was sent.
+- **Deliberately not `mentionableUserIds`.** That set is "everyone who has taken part" —
+  respondents, poll voters, comment authors. Right question for an @mention, wrong one for "who is
+  coming and can be asked to bring the port".
+- **`SourceListId`/`SourceListName` are `bson:"-"`, and the tag is load-bearing.** `moveListItems`
+  `$push`es whole `EventListItem` values, so an untagged field would be written onto the real entry
+  the first time anyone dragged one between lists. There is a test that reads the RAW document and
+  asserts it is absent — struct decoding would hide exactly the bug the tag prevents.
+- **The derived list is FLAT: `ParentId` is cleared on every synthesized item.** A sub-entry
+  assigned to you whose parent is assigned to someone else would otherwise arrive pointing at an
+  item that is not in the list, and `flattenListItems` would render it as an orphan. It answers
+  "what am I down for", not "where does it sit".
+- **Omitted entirely when nothing is assigned**, so the My Lists tab count stays honest. A member
+  who has their own list called "Assigned" keeps it; the two coexist and are told apart by
+  `EventList.Virtual`, never by the name.
+- **`viewerOwnsAll` is what makes the read-only guard necessary.** The private panel passes it, and
+  it collapses every per-entry right to always-allowed — so without an explicit `isVirtual` check
+  the panel offers Edit and Remove on somebody else's shared entry from inside your own notebook.
+  Verified by mutation: removing the guard fails the spec.
+- **Adding a fourth icon button to the row cost the text column, and the screenshot is what said
+  so.** At 390px a twice-indented entry had ~118px of text left and wrapped sentences to two words
+  a line. No horizontal scroll, so `check:routes` passed it, the unit suite passed it and the build
+  passed it — this is the class of fault only looking at the page finds (M1). Fixed with
+  `tw-flex-wrap` on the row plus a `min-w` on the text column: the cluster drops to its own line
+  when the text needs the width. Without the min-width flexbox shrinks the text indefinitely and
+  the row never wraps at all.
+
+**Verified 2026-08-12**: full Go suite green (8 new integration tests + 3 pure), 435 frontend unit
+tests green (13 new in a new `EventLists.spec.js`), eslint clean, `check:vuetify-props` clean,
+production build clean, `golangci-lint` 0 issues, `browser-check.sh` **ALL PASS on both legs**
+(`--dev` and built). Driven by hand on a seeded stack at 390px and 1280px: assign → appears under
+Assigned → tick there → the network call is `PUT /lists/<shared>/items/<item>/checked`, and the
+shared entry changes. That last check is the whole feature in one line.
+
+---
+
 ## Workflow rules
 
 Unchanged from `CLAUDE.md` and the two archives — these are the durable part, and every one of

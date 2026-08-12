@@ -241,6 +241,15 @@ type EventList struct {
 	// way, matching Event.Location. A checklist gives every item a checkbox.
 	Kind  string          `json:"kind" bson:"kind,omitempty"`
 	Items []EventListItem `json:"items" bson:"items,omitempty"`
+
+	// Virtual marks a list that is DERIVED at read time rather than stored (N1).
+	// Today there is exactly one: the "Assigned" list that GET /my-lists
+	// synthesizes from the event's own checklist entries assigned to the caller.
+	//
+	// `bson:"-"`, like Rsvp.User — nothing writes this list, but the tag is what
+	// guarantees it, and a virtual list reaching a write path is a bug rather
+	// than a document to create. The client uses it to render the list read-only.
+	Virtual bool `json:"virtual,omitempty" bson:"-"`
 }
 
 // The list kinds. Anything else is rejected at write time rather than
@@ -301,6 +310,30 @@ type EventListItem struct {
 	CheckedBy     *primitive.ObjectID `json:"checkedBy,omitempty" bson:"checkedBy,omitempty"`
 	CheckedByName string              `json:"checkedByName,omitempty" bson:"checkedByName,omitempty"`
 	CheckedAt     primitive.DateTime  `json:"checkedAt,omitempty" bson:"checkedAt,omitempty"`
+
+	// Who the entry is FOR (N1) — distinct from UserId, who wrote it, and from
+	// CheckedBy, who last ticked it. Meaningful only on a ListKindChecklist list.
+	//
+	// A POINTER for the reason ParentId is one: omitempty can't omit a [12]byte,
+	// so a zero id would serialize as 24 zeros and read back as a real member.
+	// AssigneeName is a DisplayName() snapshot re-resolved on read exactly like
+	// AuthorName and CheckedByName (routes/display_names.go).
+	//
+	// The pair is always written together, in both directions: unassigning $sets
+	// both to their zero value rather than $unset-ing them, which keeps the write
+	// inside db's existing setListItemFields.
+	AssigneeId   *primitive.ObjectID `json:"assigneeId,omitempty" bson:"assigneeId,omitempty"`
+	AssigneeName string              `json:"assigneeName,omitempty" bson:"assigneeName,omitempty"`
+
+	// Where this entry really lives, attached per-request (NEVER stored) when it
+	// is synthesized into the virtual "Assigned" list, so the client can write a
+	// tick back to the shared list it came from rather than to a private one.
+	//
+	// `bson:"-"` is load-bearing, not decoration: moveListItems $pushes whole
+	// EventListItem values, so an untagged field here would be persisted onto the
+	// real item the first time anyone dragged one between lists.
+	SourceListId   *primitive.ObjectID `json:"sourceListId,omitempty" bson:"-"`
+	SourceListName string              `json:"sourceListName,omitempty" bson:"-"`
 }
 
 // Representation of an Event in the mongoDB database

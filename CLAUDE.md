@@ -259,6 +259,24 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
 - **A fifth band tab does not fit across a phone**, so the tab row in `Event.vue` carries
   `tw-flex-wrap`. Adding a sixth without checking the page at 390px will put the whole document
   into a horizontal scroll, on every tab. Lint, unit tests and the build all pass with that bug.
+- **A list entry's row in `EventLists.vue` is full at four icon buttons** (assign, add sub-entry,
+  edit, remove — N1). A twice-indented entry at 390px has ~118px of text column left once those and
+  the checkbox have taken their share, which wraps a sentence to two words a line. The row carries
+  `tw-flex-wrap` and the text column a `min-w`, so the button cluster drops to its own line rather
+  than squeezing the text further; **without the min-width flexbox shrinks the text indefinitely and
+  the row never wraps at all.** Note this fault produces no horizontal scroll, so `check:routes`
+  passes it too — a fifth button needs a *screenshot*, not a green check.
+- **"Assigned" in My Lists is DERIVED, not stored** (N1). The shared `EventListItem` carries
+  `assigneeId` and is the only record; `getPersonalLists` (`routes/personal_lists.go`) synthesizes a
+  read-only `EventList` from the event's checklist entries naming the caller, marked
+  `Virtual: true`, each item carrying `SourceListId` so the client writes a tick back to the shared
+  list. That is why ticking in either place shows in both: there is nothing to keep in step. Two
+  consequences worth knowing before touching it: `SourceListId`/`SourceListName` are **`bson:"-"`
+  and that tag is load-bearing** (`moveListItems` `$push`es whole items, so an untagged field would
+  be persisted onto the real entry the first time anyone dragged one); and the private panel passes
+  `viewerOwnsAll`, which collapses every per-entry right to always-allowed, so the **explicit
+  `isVirtualList` guards** are the only thing stopping it offering Edit and Remove on somebody
+  else's shared entry.
 - **`src/utils/index.js` is an `export *` barrel imported by ~40 components.** Don't add modules with
   heavy or DOM-dependent dependencies to it (e.g. `utils/markdown.js`, which pulls in DOMPurify);
   import those directly by path.

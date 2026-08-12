@@ -3,10 +3,11 @@
     :lists="lists"
     :can-manage="true"
     :viewer-owns-all="true"
-    :collaborative="false"
+    :collaborative="hasAssigned"
     drag-group="personal-list-items"
     title="My Lists"
     :refreshing="refreshing"
+    @refresh="refresh"
     @create-list="onCreateList"
     @rename-list="onRenameList"
     @delete-list="onDeleteList"
@@ -21,6 +22,8 @@
 <script>
 import { mapActions } from "vuex"
 import EventLists from "@/components/event/EventLists.vue"
+import { isVirtualList } from "@/components/event/eventLists"
+import { setListItemChecked } from "@/utils/services/EventService"
 import {
   getPersonalLists,
   createPersonalList,
@@ -66,6 +69,22 @@ export default {
     lists: [],
     refreshing: false,
   }),
+
+  computed: {
+    /**
+     * Whether the derived "Assigned" list is on screen (N1) — the server omits
+     * it entirely when nothing is assigned to this viewer.
+     *
+     * This is what `collaborative` now means here. Everything else in this panel
+     * is a document only the viewer can write, where a refresh button is an
+     * invitation to wonder what you are missing; but the Assigned rows are the
+     * club's entries, and anyone may tick one. When they are showing, refreshing
+     * is a real question with a real answer.
+     */
+    hasAssigned() {
+      return this.lists.some(isVirtualList)
+    },
+  },
 
   created() {
     // The tab may already be the selected one on arrival.
@@ -167,9 +186,22 @@ export default {
         "Could not move that entry."
       )
     },
-    onToggleChecked({ listId, itemId, checked }) {
+    /**
+     * The one handler here that can write somewhere other than the caller's own
+     * document (N1).
+     *
+     * A row from the derived "Assigned" list carries the id of the shared list
+     * it really lives on, and the tick has to go there — that entry is the only
+     * record of it, which is exactly why ticking it here and ticking it on the
+     * event page cannot disagree. `listId` for such a row is the virtual list's
+     * placeholder id and would match nothing.
+     */
+    onToggleChecked({ listId, itemId, checked, sourceListId }) {
       return this.run(
-        () => setPersonalListItemChecked(this.eventId, listId, itemId, checked),
+        () =>
+          sourceListId
+            ? setListItemChecked(this.eventId, sourceListId, itemId, checked)
+            : setPersonalListItemChecked(this.eventId, listId, itemId, checked),
         "Could not update that entry. Please try again."
       )
     },

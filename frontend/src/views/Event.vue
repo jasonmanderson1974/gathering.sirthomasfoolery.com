@@ -261,8 +261,11 @@
               <EventLists
                 :lists="sharedLists"
                 :can-manage="canManageLists"
+                :can-assign="canAssignListItems"
+                :assignees="listAssignees"
                 :refreshing="refreshingLists"
                 @refresh="refreshLists"
+                @assign-item="onAssignListItem"
                 @create-list="onCreateList"
                 @rename-list="onRenameList"
                 @delete-list="onDeleteList"
@@ -384,7 +387,10 @@ import PersonalLists from "@/components/event/PersonalLists.vue"
 import PersonalNotes from "@/components/event/PersonalNotes.vue"
 import EventExpenses from "@/components/event/EventExpenses.vue"
 import SettleUpSummary from "@/components/event/SettleUpSummary.vue"
-import { canManageEventLists } from "@/components/event/eventLists"
+import {
+  canManageEventLists,
+  canAssignListItems,
+} from "@/components/event/eventLists"
 import {
   setRsvp,
   clearRsvp,
@@ -407,6 +413,8 @@ import {
   deleteListItem,
   moveListItem,
   setListItemChecked,
+  setListItemAssignee,
+  getListAssignees,
 } from "@/utils/services/EventService"
 import pluginMessagesMixin from "@/components/event/pluginMessagesMixin"
 import expensesMixin from "@/components/event/expensesMixin"
@@ -483,6 +491,11 @@ export default {
     // Who the discussion may @mention (F9), fetched once per event.
     mentionables: [],
 
+    // Who a checklist entry may be assigned to (N1) — a narrower set than the
+    // mentionables: going/maybe RSVPs of member rank, decided by the server
+    // because the role that decides it is stripped from the RSVP roster.
+    listAssignees: [],
+
     // Whether the user has asked to see the availability grid again after it
     // collapsed on a confirmed gathering (F21). Not persisted — landing on the
     // page should always show the gathering, not the poll it came from.
@@ -515,6 +528,16 @@ export default {
         authUser: this.authUser,
         event: this.event,
         canManageUsers: this.canManageUsers,
+        canInvite: this.canInvite,
+      })
+    },
+    /**
+     * Whether this viewer may hand a checklist entry to someone (N1). Member and
+     * up — a guest sees who each entry is for and changes none of it.
+     */
+    canAssignListItems() {
+      return canAssignListItems({
+        authUser: this.authUser,
         canInvite: this.canInvite,
       })
     },
@@ -971,6 +994,23 @@ export default {
     },
 
     /**
+     * Hand a checklist entry to a member, or take it back (N1).
+     *
+     * Nothing else to write: the entry is the only record of the assignment, and
+     * the assignee's "Assigned" list in My Lists is derived from it on read. So
+     * this is the same persist-then-refetch shape as every handler around it.
+     */
+    async onAssignListItem({ listId, itemId, assigneeId }) {
+      const id = this.event.shortId ?? this.event._id
+      try {
+        await setListItemAssignee(id, listId, itemId, assigneeId)
+        await this.refreshLists()
+      } catch (err) {
+        this.showError("Could not assign that entry. Please try again.")
+      }
+    },
+
+    /**
      * Fetch the people this caller may @mention (F9).
      *
      * Once per page load, not per keystroke: the roll is ~40 people and the
@@ -986,6 +1026,29 @@ export default {
         this.mentionables = (await getMentionables(id)) ?? []
       } catch (err) {
         this.mentionables = []
+      }
+    },
+
+    /**
+     * Who a checklist entry may be assigned to (N1). Called when the Lists tab
+     * is first opened, not on arrival — see the watcher.
+     *
+     * Guarded on canInvite because the endpoint refuses a guest outright — a
+     * guest has no picker to fill, and asking would log a 403 every time they
+     * opened the tab.
+     *
+     * Swallowed like the mention picker above, and for the same reason: a
+     * missing picker costs the assignment control on one tab, while everything
+     * else on the page — including reading who entries are already for — works
+     * exactly as before.
+     */
+    async fetchListAssignees() {
+      const id = this.event?.shortId ?? this.event?._id
+      if (!id || !this.canInvite) return
+      try {
+        this.listAssignees = (await getListAssignees(id)) ?? []
+      } catch (err) {
+        this.listAssignees = []
       }
     },
 
@@ -1384,6 +1447,13 @@ export default {
     bandTab(tab) {
       if (tab === "lists") {
         this.refreshLists()
+        // Fetched with the tab rather than on arrival, unlike the mention
+        // picker: the discussion is where the page lands, so its picker has to
+        // be ready before anyone types; the assignee picker is behind a tab most
+        // visits never open, and paying for it on every event page would be a
+        // request nobody asked for. Once per page — the roll does not change
+        // while you are looking at a gathering.
+        if (!this.listAssignees.length) this.fetchListAssignees()
       }
       // The ledger is loaded on arrival for the sidebar's sake, so this is a
       // refresh rather than the first read — someone opening the tab is still

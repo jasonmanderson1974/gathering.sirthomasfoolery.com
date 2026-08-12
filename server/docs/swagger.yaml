@@ -332,10 +332,36 @@ definitions:
         type: string
       name:
         type: string
+      virtual:
+        description: |-
+          Virtual marks a list that is DERIVED at read time rather than stored (N1).
+          Today there is exactly one: the "Assigned" list that GET /my-lists
+          synthesizes from the event's own checklist entries assigned to the caller.
+
+          `bson:"-"`, like Rsvp.User — nothing writes this list, but the tag is what
+          guarantees it, and a virtual list reaching a write path is a bug rather
+          than a document to create. The client uses it to render the list read-only.
+        type: boolean
     type: object
   models.EventListItem:
     properties:
       _id:
+        type: string
+      assigneeId:
+        description: |-
+          Who the entry is FOR (N1) — distinct from UserId, who wrote it, and from
+          CheckedBy, who last ticked it. Meaningful only on a ListKindChecklist list.
+
+          A POINTER for the reason ParentId is one: omitempty can't omit a [12]byte,
+          so a zero id would serialize as 24 zeros and read back as a real member.
+          AssigneeName is a DisplayName() snapshot re-resolved on read exactly like
+          AuthorName and CheckedByName (routes/display_names.go).
+
+          The pair is always written together, in both directions: unassigning $sets
+          both to their zero value rather than $unset-ing them, which keeps the write
+          inside db's existing setListItemFields.
+        type: string
+      assigneeName:
         type: string
       authorName:
         type: string
@@ -383,6 +409,18 @@ definitions:
           Set once, when the item is added. A move never points it at a NEW parent,
           only clears it (F17), so an item's depth can shrink but never grow — which
           is what keeps routes/event_lists.go's depth check exact.
+        type: string
+      sourceListId:
+        description: |-
+          Where this entry really lives, attached per-request (NEVER stored) when it
+          is synthesized into the virtual "Assigned" list, so the client can write a
+          tick back to the shared list it came from rather than to a private one.
+
+          `bson:"-"` is load-bearing, not decoration: moveListItems $pushes whole
+          EventListItem values, so an untagged field here would be persisted onto the
+          real item the first time anyone dragged one between lists.
+        type: string
+      sourceListName:
         type: string
       text:
         type: string
@@ -2186,6 +2224,46 @@ paths:
       summary: Edits one of the caller's own list items
       tags:
       - events
+  /events/{eventId}/lists/{listId}/items/{itemId}/assignee:
+    put:
+      consumes:
+      - application/json
+      description: Members and above only. An empty or absent assigneeId unassigns.
+        The entry itself is the one record — the assignee sees it in their own My
+        Lists under "Assigned", synthesized at read time rather than copied.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: List ID
+        in: path
+        name: listId
+        required: true
+        type: string
+      - description: Item ID
+        in: path
+        name: itemId
+        required: true
+        type: string
+      - description: Account id to assign to, or empty to unassign
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            assigneeId:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Assigns a checklist entry to a member, or clears the assignment
+      tags:
+      - events
   /events/{eventId}/lists/{listId}/items/{itemId}/checked:
     put:
       consumes:
@@ -2274,6 +2352,29 @@ paths:
         (own, or any when the caller is a member or above)
       tags:
       - events
+  /events/{eventId}/lists/assignees:
+    get:
+      description: 'Accounts with a going or maybe RSVP whose role is member or above.
+        Guests are refused: they can see who an entry is for but cannot change it,
+        so they have no use for the picker.'
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.User'
+            type: array
+      summary: Lists the members a checklist entry on this event may be assigned to
+      tags:
+      - events
   /events/{eventId}/mentionables:
     get:
       description: Members and above get everyone on the roll; guests get only the
@@ -2302,9 +2403,9 @@ paths:
       consumes:
       - application/json
       description: 'Private to the signed-in user: the userId is part of the query,
-        so this can only ever return the caller''s own lists. Unlike the shared lists,
-        no display names are resolved — there is one author and the UI never shows
-        their name.'
+        so this can only ever return the caller''s own lists. Prepends a read-only
+        virtual list, "Assigned", derived from the shared checklist entries assigned
+        to the caller — omitted when there are none.'
       parameters:
       - description: Event ID
         in: path

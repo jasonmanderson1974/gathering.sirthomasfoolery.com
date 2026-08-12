@@ -67,12 +67,18 @@ func InitEvents(router *gin.RouterGroup) {
 	authed.DELETE("/:eventId/polls/:pollId", deletePoll)
 	authed.POST("/:eventId/polls/:pollId/vote", votePoll)
 	authed.GET("/:eventId/lists", getEventLists)
+	// Static rather than wildcard at this position, which Gin allows only because
+	// the GET tree has no /lists/:listId route to conflict with. Adding one later
+	// means renaming this path, not reordering these lines — Gin's conflict is
+	// structural, not registration-order.
+	authed.GET("/:eventId/lists/assignees", getListAssignees)
 	authed.POST("/:eventId/lists", createEventList)
 	authed.PATCH("/:eventId/lists/:listId", renameEventList)
 	authed.DELETE("/:eventId/lists/:listId", deleteEventList)
 	authed.POST("/:eventId/lists/:listId/items", addEventListItem)
 	authed.PUT("/:eventId/lists/:listId/items/:itemId", editEventListItem)
 	authed.PUT("/:eventId/lists/:listId/items/:itemId/checked", setEventListItemChecked)
+	authed.PUT("/:eventId/lists/:listId/items/:itemId/assignee", setEventListItemAssignee)
 	authed.PUT("/:eventId/lists/:listId/items/:itemId/move", moveEventListItem)
 	authed.DELETE("/:eventId/lists/:listId/items/:itemId", deleteEventListItem)
 

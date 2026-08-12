@@ -72,13 +72,19 @@
                 <div class="tw-text-xs tw-text-parchment-dim">
                   {{ itemsOf(list).length }}
                   {{ itemsOf(list).length === 1 ? "entry" : "entries" }}
+                  <!-- Says where these came from, since nothing else here does:
+                       they are the club's entries, not this viewer's, and the
+                       panel is otherwise entirely private. -->
+                  <span v-if="isVirtual(list)"> · from the club's lists</span>
                 </div>
               </div>
             </div>
             <!-- The management buttons sit inside the header, so their clicks
-                 must not also toggle the list open or shut. -->
+                 must not also toggle the list open or shut. Never on a derived
+                 list: there is no stored document behind it to rename or
+                 delete. -->
             <div
-              v-if="canManage"
+              v-if="canManage && !isVirtual(list)"
               class="tw-flex tw-flex-none"
               :class="{ 'tw-gap-2': phone }"
             >
@@ -112,6 +118,10 @@
              throws "draggable element must have an item slot" at runtime. A row
              here is `{ item, depth, ... }`, not the entry itself, so `item-key`
              has to be the function form rather than a field name. -->
+        <!-- Dragging is off on a derived list: its entries have no order of
+             their own to persist — they are restamped from the shared lists on
+             every read — so a drop would appear to work and be gone on the next
+             refresh. -->
         <draggable
           v-if="isExpanded(list._id)"
           :list="rowsOf(list)"
@@ -120,7 +130,7 @@
           draggable=".list-row"
           :delay="200"
           :delay-on-touch-only="true"
-          :disabled="refreshing"
+          :disabled="refreshing || isVirtual(list)"
           :data-list-id="list._id"
           class="tw-mt-2 tw-min-h-[2rem] tw-space-y-1"
           @start="onDragStart"
@@ -178,7 +188,16 @@
                 </div>
               </template>
 
-              <div v-else class="tw-flex tw-items-start tw-gap-2">
+              <!-- `tw-flex-wrap` earns its place at 390px (N1). A twice-indented
+                   entry has ~118px of text column left once four icon buttons
+                   and the checkbox have taken their share, which wraps a
+                   sentence to two words a line — readable, but only just, and it
+                   got that way by adding the assignee control to a row that was
+                   already carrying three buttons. Wrapping lets the cluster drop
+                   to its own line instead, and the min-width on the text column
+                   below is what decides when: without one, flexbox shrinks the
+                   text indefinitely and the row never wraps at all. -->
+              <div v-else class="tw-flex tw-flex-wrap tw-items-start tw-gap-2">
                 <!-- Collapse toggle, in a fixed-width slot that stays empty on an
                    entry with no children, so text lines up down the column. -->
                 <div class="tw-mt-0.5 tw-w-4 tw-flex-none">
@@ -222,7 +241,7 @@
                   }}
                 </v-icon>
 
-                <div class="tw-min-w-0 tw-flex-grow">
+                <div class="tw-min-w-[9rem] tw-flex-grow tw-basis-0">
                   <a
                     v-if="isLocationList(list)"
                     :href="mapsUrl(row.item.text)"
@@ -245,23 +264,75 @@
                      carries no authorName and no checker, so an unconditional
                      line would leave an empty row of whitespace under every
                      one of them — and this also tidies a shared entry whose
-                     author no longer resolves. -->
+                     author no longer resolves.
+
+                     The assignee is on this line rather than in the row: the
+                     control beside it is icon-sized to survive a phone, so the
+                     byline is the only place the name is readable in full. It
+                     renders for EVERYONE, guests included — seeing who an entry
+                     is for is not the same right as changing it. -->
                   <div
-                    v-if="row.item.authorName || checkLabel(row.item)"
+                    v-if="bylineOf(list, row.item)"
                     class="tw-text-xs tw-text-parchment-dim"
                   >
-                    {{ row.item.authorName
-                    }}<span v-if="checkLabel(row.item)">
-                      · {{ checkLabel(row.item) }}</span
-                    >
+                    {{ bylineOf(list, row.item) }}
                   </div>
                 </div>
+                <!-- `tw-ml-auto` so that when the cluster DOES wrap it sits at
+                     the right of its own line rather than under the checkbox,
+                     where it would read as belonging to nothing. -->
                 <div
-                  class="tw-flex tw-flex-none"
+                  class="tw-ml-auto tw-flex tw-flex-none"
                   :class="{ 'tw-gap-2': phone }"
                 >
+                  <!-- Who the entry is for (N1). An icon opening a menu, not a
+                       select: this row already carries three buttons and
+                       indents two levels, and a select's width is what would
+                       put the whole document into a horizontal scroll at
+                       390px — which lint, the unit suite and the build all pass
+                       straight through. -->
+                  <v-menu
+                    v-if="canAssignOn(list)"
+                    :close-on-content-click="true"
+                  >
+                    <template #activator="{ props: menuProps }">
+                      <v-btn
+                        v-bind="menuProps"
+                        icon
+                        :size="phone ? 'small' : 'x-small'"
+                        class="tw-text-parchment-dim"
+                        :title="
+                          row.item.assigneeName
+                            ? `Assigned to ${row.item.assigneeName}`
+                            : 'Assign to a member'
+                        "
+                      >
+                        <UserAvatarContent
+                          v-if="row.item.assigneeName"
+                          :user="assigneeUser(row.item)"
+                          :size="phone ? 24 : 20"
+                        />
+                        <v-icon v-else size="small">mdi-account-plus</v-icon>
+                      </v-btn>
+                    </template>
+                    <v-list density="compact">
+                      <v-list-item
+                        v-for="option in assigneeOptions(row.item)"
+                        :key="option.id ?? 'unassigned'"
+                        :active="option.selected"
+                        @click="assignItem(list, row.item, option.id)"
+                      >
+                        <v-list-item-title>{{ option.name }}</v-list-item-title>
+                      </v-list-item>
+                    </v-list>
+                  </v-menu>
+                  <!-- Everything below writes to a stored entry, so none of it
+                       is offered on a derived list. `viewerOwnsAll` collapses
+                       isMine and canDelete to always-true for the private
+                       panel, which is exactly where a derived list lives — so
+                       this guard, not those, is what has to say no. -->
                   <v-btn
-                    v-if="canNest(row)"
+                    v-if="canNest(row) && !isVirtual(list)"
                     icon
                     :size="phone ? 'small' : 'x-small'"
                     class="tw-text-parchment-dim"
@@ -271,7 +342,7 @@
                     <v-icon size="small">mdi-plus</v-icon>
                   </v-btn>
                   <v-btn
-                    v-if="isMine(row.item)"
+                    v-if="isMine(row.item) && !isVirtual(list)"
                     icon
                     :size="phone ? 'small' : 'x-small'"
                     class="tw-text-parchment-dim"
@@ -281,7 +352,7 @@
                     <v-icon size="small">mdi-pencil</v-icon>
                   </v-btn>
                   <v-btn
-                    v-if="canDelete(row.item)"
+                    v-if="canDelete(row.item) && !isVirtual(list)"
                     icon
                     :size="phone ? 'small' : 'x-small'"
                     class="tw-text-parchment-dim"
@@ -342,9 +413,11 @@
           </template>
         </draggable>
 
-        <!-- Add an entry: open to everyone -->
+        <!-- Add an entry: open to everyone, except on a derived list — there is
+             no document behind it to add to, and an entry only becomes yours by
+             being assigned to you. -->
         <div
-          v-if="isExpanded(list._id)"
+          v-if="isExpanded(list._id) && !isVirtual(list)"
           class="tw-mt-2 tw-border-t tw-border-brass-dim/40 tw-pt-2"
         >
           <LocationInput
@@ -453,10 +526,11 @@
 
 <script>
 import { mapGetters, mapState } from "vuex"
-import { mapsSearchUrl, isPhone } from "@/utils"
+import { mapsSearchUrl, isPhone, userFromDisplayName } from "@/utils"
 import draggable from "vuedraggable"
 import LocationInput from "@/components/LocationInput.vue"
 import ConfirmDeleteDialog from "@/components/general/ConfirmDeleteDialog.vue"
+import UserAvatarContent from "@/components/UserAvatarContent.vue"
 import {
   flattenListItems,
   canAddChild,
@@ -465,6 +539,9 @@ import {
   resolveDrop,
   describeListDeletion,
   describeItemDeletion,
+  isVirtualList,
+  assigneeMenuOptions,
+  assigneeLabel,
 } from "@/components/event/eventLists"
 
 /**
@@ -493,6 +570,7 @@ export default {
     ConfirmDeleteDialog,
     draggable,
     LocationInput,
+    UserAvatarContent,
   },
 
   props: {
@@ -539,6 +617,25 @@ export default {
      * applyPendingFocus), so a parent must produce exactly one per mutation.
      */
     refreshing: { type: Boolean, default: false },
+    /**
+     * The members a checklist entry may be assigned to (N1) — going/maybe RSVPs
+     * of member rank or above, as the server defines them.
+     *
+     * Passed in rather than fetched here for the same reason `canManage` is: it
+     * is the parent that owns the event, and this component is presentational.
+     * Empty for a guest, and empty on the private panel, where the picker is
+     * never shown anyway.
+     */
+    assignees: { type: Array, default: () => [] },
+    /**
+     * Whether this viewer may (un)assign entries. The rule lives in
+     * `canAssignListItems` (eventLists.js) where it can be tested.
+     *
+     * Governs only the CONTROL. Who an entry is for renders on the byline for
+     * everyone — a guest sees the assignment and cannot change it, which is a
+     * different thing from not being told.
+     */
+    canAssign: { type: Boolean, default: false },
   },
 
   data: () => ({
@@ -596,6 +693,7 @@ export default {
     "delete-item",
     "move-item",
     "toggle-item-checked",
+    "assign-item",
   ],
 
   computed: {
@@ -725,14 +823,81 @@ export default {
     isChecklist(list) {
       return list.kind === "checklist"
     },
+    isVirtual(list) {
+      return isVirtualList(list)
+    },
     // Open to anyone signed in, guests included — the server agrees.
+    //
+    // `sourceListId` is what makes the derived "Assigned" list work (N1): its
+    // rows are the club's entries, so the tick has to be written to the shared
+    // list they came from, not to the private document the panel otherwise
+    // writes to. Null everywhere else, which is the parent's cue to behave as
+    // it always has.
     toggleChecked(list, item) {
       if (!this.authUser) return
       this.$emit("toggle-item-checked", {
         listId: list._id,
         itemId: item._id,
         checked: !item.checked,
+        sourceListId: item.sourceListId ?? null,
       })
+    },
+    /**
+     * Whether to offer the assignee control on this list's rows.
+     *
+     * Checklists only, matching the server, and never on a derived list — the
+     * entry is already in front of its assignee there, and reassigning it out
+     * from under yourself from inside your own panel is a confusing thing to
+     * be able to do. The shared list is where assignments are made.
+     */
+    canAssignOn(list) {
+      return this.canAssign && this.isChecklist(list) && !this.isVirtual(list)
+    },
+    assigneeOptions(item) {
+      return assigneeMenuOptions(this.assignees, item.assigneeId ?? null)
+    },
+    /**
+     * The account to draw for an assignee — the full record from the picker
+     * where it is still there, so the avatar photo renders.
+     *
+     * The fallback is not a rare edge: someone assigned an entry and then
+     * changed their RSVP to "no" drops out of `assignees` while still holding
+     * the entry, and a monogram built from the stored name is exactly right for
+     * them. `userFromDisplayName` is the same fallback the RSVP roster uses.
+     */
+    assigneeUser(item) {
+      const known = this.assignees.find((u) => u._id === item.assigneeId)
+      return known ?? userFromDisplayName(item.assigneeName)
+    },
+    assignItem(list, item, assigneeId) {
+      if (!this.canAssignOn(list)) return
+      // Selecting the name already against the entry is a no-op rather than a
+      // round trip — the menu closes and nothing was asked for.
+      if ((item.assigneeId ?? null) === (assigneeId ?? null)) return
+      this.$emit("assign-item", {
+        listId: list._id,
+        itemId: item._id,
+        assigneeId: assigneeId ?? null,
+      })
+    },
+    /**
+     * The line under an entry: who wrote it, who last ticked it, who it is for.
+     *
+     * Built here rather than in the template because it is three optional
+     * fragments joined by separators, and the template form leaves a stray "·"
+     * whenever the piece after it is absent. Returns "" for an entry with
+     * nothing to say, which the template treats as no line at all.
+     *
+     * On a derived row the author is replaced by where the entry actually
+     * lives: "from Menu" is the only thing telling you which of the club's
+     * lists you are looking at, and the assignee is by definition you.
+     */
+    bylineOf(list, item) {
+      const parts = this.isVirtual(list)
+        ? [item.sourceListName ? `from ${item.sourceListName}` : null]
+        : [item.authorName || null, assigneeLabel(item)]
+      parts.push(this.checkLabel(item))
+      return parts.filter(Boolean).join(" · ")
     },
     isMine(item) {
       // On a private panel there is nobody else's entry to be looking at, and

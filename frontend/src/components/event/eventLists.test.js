@@ -11,6 +11,10 @@ import {
   describeListDeletion,
   describeItemDeletion,
   canManageEventLists,
+  isVirtualList,
+  canAssignListItems,
+  assigneeMenuOptions,
+  assigneeLabel,
 } from "./eventLists"
 
 const item = (id, parentId = null, overrides = {}) => ({
@@ -642,5 +646,91 @@ describe("canManageEventLists", () => {
         canInvite: true,
       })
     ).toBe(true)
+  })
+})
+
+// --- Assignment (N1) ---
+
+describe("isVirtualList", () => {
+  it("is true only for the flag the server sets", () => {
+    expect(isVirtualList({ virtual: true })).toBe(true)
+    expect(isVirtualList({ virtual: false })).toBe(false)
+    expect(isVirtualList({ name: "Assigned" })).toBe(false)
+    expect(isVirtualList(null)).toBe(false)
+    expect(isVirtualList(undefined)).toBe(false)
+  })
+
+  // The name is not the discriminator: a member may have a real list of their
+  // own called "Assigned", and it must stay fully editable.
+  it("does not treat a viewer's own list named Assigned as derived", () => {
+    expect(isVirtualList({ _id: "abc", name: "Assigned" })).toBe(false)
+  })
+})
+
+describe("canAssignListItems", () => {
+  const authUser = { _id: "u1" }
+
+  it("allows member and up, refuses guests and the signed out", () => {
+    expect(canAssignListItems({ authUser, canInvite: true })).toBe(true)
+    expect(canAssignListItems({ authUser, canInvite: false })).toBe(false)
+    expect(canAssignListItems({ authUser: null, canInvite: true })).toBe(false)
+  })
+})
+
+describe("assigneeMenuOptions", () => {
+  const bart = { _id: "u2", firstName: "Bart", lastName: "Renfrew" }
+  const ada = { _id: "u3", firstName: "Ada", lastName: "King", nickname: "Ada" }
+
+  it("puts Unassigned first, carrying a null id", () => {
+    const options = assigneeMenuOptions([bart, ada], null)
+    expect(options[0]).toMatchObject({ id: null, name: "Unassigned" })
+    expect(options.map((o) => o.id)).toEqual([null, "u2", "u3"])
+  })
+
+  it("marks exactly one option selected", () => {
+    const options = assigneeMenuOptions([bart, ada], "u2")
+    expect(options.filter((o) => o.selected).map((o) => o.id)).toEqual(["u2"])
+  })
+
+  it("selects Unassigned when nothing is assigned", () => {
+    for (const current of [null, undefined]) {
+      const options = assigneeMenuOptions([bart, ada], current)
+      expect(options[0].selected).toBe(true)
+    }
+  })
+
+  it("prefers a nickname, matching the server's DisplayName", () => {
+    const [, , adaRow] = assigneeMenuOptions([bart, ada], null)
+    expect(adaRow.name).toBe("Ada")
+    const [, bartRow] = assigneeMenuOptions([bart, ada], null)
+    expect(bartRow.name).toBe("Bart Renfrew")
+  })
+
+  // A blank row would render as an unclickable gap in the menu.
+  it("never produces a blank name", () => {
+    const [, row] = assigneeMenuOptions([{ _id: "u9" }], null)
+    expect(row.name).toBe("Member")
+  })
+
+  it("survives no assignees at all", () => {
+    expect(assigneeMenuOptions(undefined, null)).toHaveLength(1)
+    expect(assigneeMenuOptions([], null)).toHaveLength(1)
+  })
+})
+
+describe("assigneeLabel", () => {
+  it("names the assignee, or nobody", () => {
+    expect(assigneeLabel({ assigneeName: "Bart" })).toBe("For Bart")
+    expect(assigneeLabel({})).toBe(null)
+    expect(assigneeLabel(null)).toBe(null)
+  })
+
+  // Read off the item, not looked up: someone who assigned an entry and then
+  // RSVP'd "no" drops out of the picker while still holding the entry, and the
+  // work must not silently look unclaimed.
+  it("still names someone who is no longer in the picker", () => {
+    expect(assigneeLabel({ assigneeId: "gone", assigneeName: "Bart" })).toBe(
+      "For Bart"
+    )
   })
 })

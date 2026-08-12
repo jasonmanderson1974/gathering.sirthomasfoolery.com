@@ -1781,6 +1781,38 @@ const docTemplate = `{
                 }
             }
         },
+        "/events/{eventId}/lists/assignees": {
+            "get": {
+                "description": "Accounts with a going or maybe RSVP whose role is member or above. Guests are refused: they can see who an entry is for but cannot change it, so they have no use for the picker.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Lists the members a checklist entry on this event may be assigned to",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.User"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/events/{eventId}/lists/{listId}": {
             "delete": {
                 "consumes": [
@@ -2016,6 +2048,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/events/{eventId}/lists/{listId}/items/{itemId}/assignee": {
+            "put": {
+                "description": "Members and above only. An empty or absent assigneeId unassigns. The entry itself is the one record — the assignee sees it in their own My Lists under \"Assigned\", synthesized at read time rather than copied.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Assigns a checklist entry to a member, or clears the assignment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "List ID",
+                        "name": "listId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Item ID",
+                        "name": "itemId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Account id to assign to, or empty to unassign",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "assigneeId": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
         "/events/{eventId}/lists/{listId}/items/{itemId}/checked": {
             "put": {
                 "description": "Open to every signed-in user, guests included — the same reasoning as adding an item. Only the last person to change the state is recorded; there is no history.",
@@ -2170,7 +2259,7 @@ const docTemplate = `{
         },
         "/events/{eventId}/my-lists": {
             "get": {
-                "description": "Private to the signed-in user: the userId is part of the query, so this can only ever return the caller's own lists. Unlike the shared lists, no display names are resolved — there is one author and the UI never shows their name.",
+                "description": "Private to the signed-in user: the userId is part of the query, so this can only ever return the caller's own lists. Prepends a read-only virtual list, \"Assigned\", derived from the shared checklist entries assigned to the caller — omitted when there are none.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4724,6 +4813,10 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "virtual": {
+                    "description": "Virtual marks a list that is DERIVED at read time rather than stored (N1).\nToday there is exactly one: the \"Assigned\" list that GET /my-lists\nsynthesizes from the event's own checklist entries assigned to the caller.\n\n` + "`" + `bson:\"-\"` + "`" + `, like Rsvp.User — nothing writes this list, but the tag is what\nguarantees it, and a virtual list reaching a write path is a bug rather\nthan a document to create. The client uses it to render the list read-only.",
+                    "type": "boolean"
                 }
             }
         },
@@ -4731,6 +4824,13 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "_id": {
+                    "type": "string"
+                },
+                "assigneeId": {
+                    "description": "Who the entry is FOR (N1) — distinct from UserId, who wrote it, and from\nCheckedBy, who last ticked it. Meaningful only on a ListKindChecklist list.\n\nA POINTER for the reason ParentId is one: omitempty can't omit a [12]byte,\nso a zero id would serialize as 24 zeros and read back as a real member.\nAssigneeName is a DisplayName() snapshot re-resolved on read exactly like\nAuthorName and CheckedByName (routes/display_names.go).\n\nThe pair is always written together, in both directions: unassigning $sets\nboth to their zero value rather than $unset-ing them, which keeps the write\ninside db's existing setListItemFields.",
+                    "type": "string"
+                },
+                "assigneeName": {
                     "type": "string"
                 },
                 "authorName": {
@@ -4758,6 +4858,13 @@ const docTemplate = `{
                 },
                 "parentId": {
                     "description": "ParentId is nil for a top-level item. A POINTER, not a bare ObjectID:\nomitempty can't omit a [12]byte array, so a zero id would serialize as 24\nzeros and read back as a real parent. Items written before nesting existed\nhave no field at all, which decodes to nil — hence no migration.\n\nSet once, when the item is added. A move never points it at a NEW parent,\nonly clears it (F17), so an item's depth can shrink but never grow — which\nis what keeps routes/event_lists.go's depth check exact.",
+                    "type": "string"
+                },
+                "sourceListId": {
+                    "description": "Where this entry really lives, attached per-request (NEVER stored) when it\nis synthesized into the virtual \"Assigned\" list, so the client can write a\ntick back to the shared list it came from rather than to a private one.\n\n` + "`" + `bson:\"-\"` + "`" + ` is load-bearing, not decoration: moveListItems $pushes whole\nEventListItem values, so an untagged field here would be persisted onto the\nreal item the first time anyone dragged one between lists.",
+                    "type": "string"
+                },
+                "sourceListName": {
                     "type": "string"
                 },
                 "text": {
