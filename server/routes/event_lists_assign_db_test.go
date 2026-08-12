@@ -28,6 +28,7 @@ func assignTestRouter() *gin.Engine {
 	r.PUT("/events/:eventId/lists/:listId/items/:itemId/checked", middleware.AuthRequired(), setEventListItemChecked)
 	r.PUT("/events/:eventId/lists/:listId/items/:itemId/assignee", middleware.AuthRequired(), setEventListItemAssignee)
 	r.PUT("/events/:eventId/lists/:listId/items/:itemId/move", middleware.AuthRequired(), moveEventListItem)
+	r.POST("/events/:eventId/lists/undo-assign", middleware.AuthRequired(), undoListAssign)
 	initPersonalRoutes(r.Group("/events", middleware.AuthRequired()))
 	return r
 }

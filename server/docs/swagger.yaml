@@ -2260,7 +2260,15 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: affected counts the entries written; undoToken is present only
+            when the write cascaded, and is what POST /lists/undo-assign takes
+          schema:
+            properties:
+              affected:
+                type: integer
+              undoToken:
+                type: string
+            type: object
       summary: Assigns a checklist entry to a member, or clears the assignment
       tags:
       - events
@@ -2375,6 +2383,38 @@ paths:
               $ref: '#/definitions/models.User'
             type: array
       summary: Lists the members a checklist entry on this event may be assigned to
+      tags:
+      - events
+  /events/{eventId}/lists/undo-assign:
+    post:
+      consumes:
+      - application/json
+      description: Restores every entry in the branch to the holder it had before
+        — including entries that were unassigned, and including a holder who is no
+        longer in the assignable pool. The payload is the server's own record of what
+        it replaced, so there is nothing to validate and nothing to forge. Honoured
+        for a short window after the action, once, by the member who made it.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: The token returned by the assignment being undone
+        in: body
+        name: payload
+        required: true
+        schema:
+          properties:
+            undoToken:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      summary: Reverses the caller's last cascading assignment on this gathering
       tags:
       - events
   /events/{eventId}/mentionables:

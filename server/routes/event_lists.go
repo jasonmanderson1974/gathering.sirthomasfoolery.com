@@ -66,6 +66,7 @@ const (
 	errNotChecklist     = "not-a-checklist"
 	errInvalidMove      = "invalid-item-move"
 	errInvalidAssignee  = "invalid-assignee"
+	errUndoUnavailable  = "undo-unavailable"
 )
 
 // listViewer is the caller's identity as it bears on lists. Kept as a plain
@@ -1053,7 +1054,7 @@ func getListAssignees(c *gin.Context) {
 // @Param listId path string true "List ID"
 // @Param itemId path string true "Item ID"
 // @Param payload body object{assigneeId=string} true "Account id to assign to, or empty to unassign"
-// @Success 200
+// @Success 200 {object} object{affected=int,undoToken=string} "affected counts the entries written; undoToken is present only when the write cascaded, and is what POST /lists/undo-assign takes"
 // @Router /events/{eventId}/lists/{listId}/items/{itemId}/assignee [put]
 func setEventListItemAssignee(c *gin.Context) {
 	payload := struct {
@@ -1067,7 +1068,7 @@ func setEventListItemAssignee(c *gin.Context) {
 		return
 	}
 
-	event, _, viewer, ok := loadListContext(c)
+	event, user, viewer, ok := loadListContext(c)
 	if !ok {
 		return
 	}
@@ -1126,6 +1127,18 @@ func setEventListItemAssignee(c *gin.Context) {
 	// afterwards.
 	itemIds := collectDescendantIds(list, item.Id)
 
+	// Captured from the list as READ, before the write replaces it (N2). Only
+	// when the action cascades: a leaf assign changes one visible row and is
+	// already one click to correct, so remembering it would put an Undo on the
+	// common case for nothing. That single condition is the whole "when is undo
+	// offered" rule, and it lives here rather than in the client so the two
+	// cannot drift.
+	cascaded := len(itemIds) > 1
+	var prior []priorAssignment
+	if cascaded {
+		prior = snapshotAssignments(list, itemIds)
+	}
+
 	matched, err := db.SetEventListItemAssignee(event.Id, list.Id, itemIds, assigneeId, assigneeName)
 	if err != nil {
 		logger.StdErr.Println(err)
@@ -1135,6 +1148,75 @@ func setEventListItemAssignee(c *gin.Context) {
 	if !matched {
 		// Removed between the read and the write.
 		c.JSON(http.StatusNotFound, responses.Error{Error: errListItemNotFound})
+		return
+	}
+
+	// Remembered only after the write landed — an undo for something that never
+	// happened is worse than no undo.
+	response := gin.H{"affected": len(itemIds)}
+	if cascaded {
+		response["undoToken"] = assignUndos.Remember(user.Id, assignUndoRecord{
+			EventId: event.Id,
+			ListId:  list.Id,
+			Prior:   prior,
+		})
+	}
+	c.JSON(http.StatusOK, response)
+}
+
+// @Summary Reverses the caller's last cascading assignment on this gathering
+// @Description Restores every entry in the branch to the holder it had before — including entries that were unassigned, and including a holder who is no longer in the assignable pool. The payload is the server's own record of what it replaced, so there is nothing to validate and nothing to forge. Honoured for a short window after the action, once, by the member who made it.
+// @Tags events
+// @Accept json
+// @Produce json
+// @Param eventId path string true "Event ID"
+// @Param payload body object{undoToken=string} true "The token returned by the assignment being undone"
+// @Success 200
+// @Router /events/{eventId}/lists/undo-assign [post]
+func undoListAssign(c *gin.Context) {
+	payload := struct {
+		UndoToken string `json:"undoToken" binding:"required"`
+	}{}
+	if err := c.Bind(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
+		return
+	}
+
+	event, user, viewer, ok := loadListContext(c)
+	if !ok {
+		return
+	}
+	// Same right as assigning: undo is an assignment, made backwards.
+	if !viewer.canAssign() {
+		c.JSON(http.StatusForbidden, responses.Error{Error: errs.NotAuthorized})
+		return
+	}
+
+	record, found := assignUndos.Take(user.Id, event.Id, payload.UndoToken)
+	if !found {
+		// Expired, already used, superseded by a later action, or never theirs.
+		// One code for all of them: the client's answer is the same sentence, and
+		// distinguishing them would tell a caller which tokens exist.
+		c.JSON(http.StatusNotFound, responses.Error{Error: errUndoUnavailable})
+		return
+	}
+
+	assignees := make([]db.ListItemAssignee, 0, len(record.Prior))
+	for _, entry := range record.Prior {
+		assignees = append(assignees, db.ListItemAssignee{
+			ItemId:     entry.ItemId,
+			AssigneeId: entry.AssigneeId,
+			Name:       entry.AssigneeName,
+		})
+	}
+
+	// NO assignableMembers check here, and that is the point of holding the
+	// snapshot server-side: the cascade may well have taken the pool membership
+	// away from the very person being restored, since holding an assignment is
+	// one of the things that puts someone in it.
+	if _, err := db.RestoreEventListItemAssignees(event.Id, record.ListId, assignees); err != nil {
+		logger.StdErr.Println(err)
+		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
 		return
 	}
 

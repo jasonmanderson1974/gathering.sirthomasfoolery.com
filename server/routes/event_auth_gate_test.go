@@ -63,6 +63,7 @@ var eventRoutes = []struct {
 	{http.MethodPut, "/api/events/abc/lists/l1/items/i1", false},
 	{http.MethodPut, "/api/events/abc/lists/l1/items/i1/checked", false},
 	{http.MethodPut, "/api/events/abc/lists/l1/items/i1/assignee", false},
+	{http.MethodPost, "/api/events/abc/lists/undo-assign", false},
 	{http.MethodPut, "/api/events/abc/lists/l1/items/i1/move", false},
 	{http.MethodDelete, "/api/events/abc/lists/l1/items/i1", false},
 

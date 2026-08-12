@@ -393,8 +393,12 @@ export const assigneeMenuOptions = (assignees, currentAssigneeId = null) => {
  * The name to show for an account in the picker. Matches the server's
  * DisplayName() — nickname first, then the full name — with a last-resort
  * fallback so a row can never render blank and become unclickable.
+ *
+ * Exported so the undo toast (N2) names the assignee the same way the menu row
+ * they clicked did: two spellings of the same person in the same second would
+ * read as two different people.
  */
-const displayNameOf = (user) => {
+export const displayNameOf = (user) => {
   const nickname = user?.nickname?.trim()
   if (nickname) return nickname
   const full = `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim()
@@ -411,3 +415,33 @@ const displayNameOf = (user) => {
  */
 export const assigneeLabel = (item) =>
   item?.assigneeName ? `For ${item.assigneeName}` : null
+
+/**
+ * The message on the undo toast after a cascading assignment (N2).
+ *
+ * The COUNT is the part that earns the toast: assigning a parent quietly rewrites
+ * everything under it, including entries other members held, and "9 entries" is
+ * the only place that number is ever stated.
+ *
+ * `assigned` and `assigneeName` are SEPARATE arguments, and that is not
+ * redundancy. Deriving "was this a clear?" from the name being absent gets it
+ * wrong in the one case where the picker has not loaded: the entries really were
+ * handed to somebody, we just cannot spell them, and "Cleared 9 entries." would
+ * then tell the reader the exact opposite of what happened. An unnameable
+ * assignee costs the name, never the verb.
+ *
+ * Pure, so the wording and its pluralisation are testable without a DOM — the
+ * same split describeItemDeletion already follows.
+ */
+export const describeAssignCascade = ({
+  count,
+  assigned = false,
+  assigneeName = null,
+} = {}) => {
+  const n = Number(count) || 0
+  const entries = `${n} ${n === 1 ? "entry" : "entries"}`
+  if (!assigned) return `Cleared ${entries}.`
+  return assigneeName
+    ? `Assigned ${entries} to ${assigneeName}.`
+    : `Assigned ${entries}.`
+}

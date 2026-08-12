@@ -15,6 +15,7 @@ import {
   canAssignListItems,
   assigneeMenuOptions,
   assigneeLabel,
+  describeAssignCascade,
 } from "./eventLists"
 
 const item = (id, parentId = null, overrides = {}) => ({
@@ -732,5 +733,48 @@ describe("assigneeLabel", () => {
     expect(assigneeLabel({ assigneeId: "gone", assigneeName: "Bart" })).toBe(
       "For Bart"
     )
+  })
+})
+
+describe("describeAssignCascade", () => {
+  it("states the count, which is the only place the number is said", () => {
+    expect(
+      describeAssignCascade({ count: 9, assigned: true, assigneeName: "Bart" })
+    ).toBe("Assigned 9 entries to Bart.")
+  })
+
+  it("reads a clear differently from a hand-over", () => {
+    expect(describeAssignCascade({ count: 9 })).toBe("Cleared 9 entries.")
+    expect(describeAssignCascade({ count: 9, assigned: false })).toBe(
+      "Cleared 9 entries."
+    )
+  })
+
+  // The case that matters: the picker is fetched with the Lists tab, so the
+  // assignee can be unnameable. Inferring "cleared" from the missing name would
+  // tell the reader the exact opposite of what happened.
+  it("loses the name but never the verb", () => {
+    expect(describeAssignCascade({ count: 9, assigned: true })).toBe(
+      "Assigned 9 entries."
+    )
+    expect(
+      describeAssignCascade({ count: 9, assigned: true, assigneeName: null })
+    ).toBe("Assigned 9 entries.")
+  })
+
+  it("pluralises", () => {
+    expect(
+      describeAssignCascade({ count: 1, assigned: true, assigneeName: "Ada" })
+    ).toBe("Assigned 1 entry to Ada.")
+    expect(
+      describeAssignCascade({ count: 2, assigned: true, assigneeName: "Ada" })
+    ).toBe("Assigned 2 entries to Ada.")
+    expect(describeAssignCascade({ count: 1 })).toBe("Cleared 1 entry.")
+  })
+
+  it("never renders NaN or undefined for a missing count", () => {
+    for (const args of [undefined, {}, { count: null }, { count: "x" }]) {
+      expect(describeAssignCascade(args)).toBe("Cleared 0 entries.")
+    }
   })
 })

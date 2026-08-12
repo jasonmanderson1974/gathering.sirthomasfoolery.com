@@ -269,9 +269,17 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
 - **Assigning a checklist entry cascades to its whole subtree** (N1) — `collectDescendantIds` (the
   same walk the cascade delete uses) into `db.SetEventListItemAssignee`, which takes a **slice** and
   writes the branch in one `$in` update so it can never half-apply. It **overwrites** sub-entries
-  other people hold, on purpose. **Clearing cascades too, which makes it a reset and not an undo:
-  un-assigning a parent destroys the holders the cascade overwrote rather than restoring them**
-  (TODO3 N2, open). Don't describe the current behaviour as reversible.
+  other people hold, on purpose — clearing cascades too, so un-assigning a parent is a *reset*, not
+  an undo: on its own it destroys the holders the cascade overwrote.
+- **What makes that safe is N2's Undo, and it works only because the SERVER holds the snapshot.**
+  A cascading assign or clear records what it replaced in `assignUndoStore`
+  (`server/routes/list_assign_undo.go`, modelled on `utils.RateLimiter`) and returns an
+  `undoToken`; `POST /events/:id/lists/undo-assign` restores it. **Don't "simplify" this by having
+  the client send the prior state back** — `assignableMembers` counts *current holders* as one of
+  its sources, so a cascade can push the very member being restored out of the pool and the undo
+  would be refused by our own validation. That is asserted by
+  `TestUndo_RestoresAHolderWhoLeftTheAssignablePool`. The server window (30s) is deliberately longer
+  than the button (7s); records are in-process and lost on restart, which is fine for the window.
 - **"Assigned" in My Lists is DERIVED, not stored** (N1). The shared `EventListItem` carries
   `assigneeId` and is the only record; `getPersonalLists` (`routes/personal_lists.go`) synthesizes a
   read-only `EventList` from the event's checklist entries naming the caller, marked

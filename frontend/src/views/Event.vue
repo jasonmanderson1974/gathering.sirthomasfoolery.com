@@ -337,6 +337,36 @@
         @save-schedule-event="saveScheduleEvent"
       />
     </div>
+
+    <!-- Undo for a cascading assignment (N2).
+
+         Its OWN snackbar rather than the app-wide AutoSnackbar: that one takes a
+         bare string and hard-codes a close button into its actions slot, so
+         giving it an Undo would mean putting a callback into Vuex state and
+         routing it back out through App.vue. This view already owns the assign
+         handler and the refetch, so nothing has to be plumbed anywhere.
+
+         Left at Vuetify's default bottom placement on purpose — both global
+         toasts are `location="top"`, and they would otherwise sit on top of each
+         other when an assignment and an error land together.
+
+         The 7 seconds is the snackbar's OWN timeout, not a timer of ours, so
+         there is nothing to clear on navigation or to leak. The server honours
+         an undo for longer than that (see undoWindow), so the button cannot
+         outlive the record behind it.
+
+         `actions` is the Vuetify 3 name; it was `action` in Vuetify 2. -->
+    <v-snackbar v-model="showAssignUndo" :timeout="7000">
+      <span class="tw-text-sm">{{ assignUndo ? assignUndo.text : "" }}</span>
+      <template #actions>
+        <v-btn variant="text" class="tw-text-brass" @click="onUndoAssign">
+          Undo
+        </v-btn>
+        <v-btn icon size="small" @click="showAssignUndo = false">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+      </template>
+    </v-snackbar>
   </span>
 </template>
 
@@ -390,6 +420,8 @@ import SettleUpSummary from "@/components/event/SettleUpSummary.vue"
 import {
   canManageEventLists,
   canAssignListItems,
+  describeAssignCascade,
+  displayNameOf,
 } from "@/components/event/eventLists"
 import {
   setRsvp,
@@ -415,6 +447,7 @@ import {
   setListItemChecked,
   setListItemAssignee,
   getListAssignees,
+  undoListAssign,
 } from "@/utils/services/EventService"
 import pluginMessagesMixin from "@/components/event/pluginMessagesMixin"
 import expensesMixin from "@/components/event/expensesMixin"
@@ -495,6 +528,12 @@ export default {
     // mentionables: going/maybe RSVPs of member rank, decided by the server
     // because the role that decides it is stripped from the RSVP roster.
     listAssignees: [],
+
+    // The last cascading assignment, while it can still be undone (N2):
+    // `{ token, text }`, or null. Only ever set from a response that carried a
+    // token, so the "which actions are undoable" rule stays on the server.
+    assignUndo: null,
+    showAssignUndo: false,
 
     // Whether the user has asked to see the availability grid again after it
     // collapsed on a confirmed gathering (F21). Not persisted — landing on the
@@ -999,14 +1038,70 @@ export default {
      * Nothing else to write: the entry is the only record of the assignment, and
      * the assignee's "Assigned" list in My Lists is derived from it on read. So
      * this is the same persist-then-refetch shape as every handler around it.
+     *
+     * The one addition is the undo (N2). The server returns a token ONLY when
+     * the write cascaded, so this offers the button exactly when the server says
+     * it can honour it — there is no second copy of that rule here to drift.
      */
     async onAssignListItem({ listId, itemId, assigneeId }) {
       const id = this.event.shortId ?? this.event._id
       try {
-        await setListItemAssignee(id, listId, itemId, assigneeId)
+        const res = await setListItemAssignee(id, listId, itemId, assigneeId)
         await this.refreshLists()
+        this.offerAssignUndo(res, assigneeId)
       } catch (err) {
         this.showError("Could not assign that entry. Please try again.")
+      }
+    },
+
+    /**
+     * Show the undo toast, if the assignment that just landed was undoable.
+     *
+     * The name is looked up in `listAssignees` rather than read back off the
+     * refetched entry: the message describes the action that was taken, and it
+     * should say so even if somebody else changed the entry in between.
+     */
+    offerAssignUndo(res, assigneeId) {
+      if (!res?.undoToken) return
+      const assignee = this.listAssignees.find((u) => u._id === assigneeId)
+      this.assignUndo = {
+        token: res.undoToken,
+        text: describeAssignCascade({
+          count: res.affected,
+          // `assigned` comes from what was ASKED for, not from whether a name
+          // could be found: the picker is fetched with the Lists tab, so an
+          // unnameable assignee is possible, and inferring "cleared" from a
+          // missing name would report the opposite of what happened.
+          assigned: !!assigneeId,
+          assigneeName: assignee ? displayNameOf(assignee) : null,
+        }),
+      }
+      this.showAssignUndo = true
+    },
+
+    /**
+     * Put a cascading assignment back exactly as it was (N2).
+     *
+     * Sends only the token — the snapshot is the server's, which is what lets
+     * this restore a member the cascade pushed out of the assignable pool.
+     *
+     * The toast closes first: whether the restore succeeds or the window has
+     * closed, the button has had its one use, and leaving it up invites a second
+     * click that can only fail.
+     */
+    async onUndoAssign() {
+      const pending = this.assignUndo
+      this.showAssignUndo = false
+      this.assignUndo = null
+      if (!pending) return
+
+      const id = this.event.shortId ?? this.event._id
+      try {
+        await undoListAssign(id, pending.token)
+        await this.refreshLists()
+      } catch (err) {
+        this.showError("That can no longer be undone.")
+        await this.refreshLists()
       }
     },
 

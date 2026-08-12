@@ -185,6 +185,21 @@ export const setListItemAssignee = (eventId, listId, itemId, assigneeId) => {
 }
 
 /**
+ * Reverse the caller's last CASCADING assignment on this gathering (N2).
+ *
+ * Takes only the token the assignment returned: the snapshot of what was
+ * replaced lives on the server, which is what lets an undo restore a member the
+ * cascade pushed out of the assignable pool — a client-supplied restore naming
+ * them would be refused by the assign route's own validation.
+ *
+ * 404 `undo-unavailable` once the window has passed, after it has been used, or
+ * once a later action has superseded it.
+ */
+export const undoListAssign = (eventId, undoToken) => {
+  return post(`/events/${eventId}/lists/undo-assign`, { undoToken })
+}
+
+/**
  * Reposition an item, within its list or onto another one (F17).
  *
  * Takes the same right as deleting it, since a move is a delete and a re-add:

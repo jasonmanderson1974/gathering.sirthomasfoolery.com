@@ -79,6 +79,10 @@ func InitEvents(router *gin.RouterGroup) {
 	authed.PUT("/:eventId/lists/:listId/items/:itemId", editEventListItem)
 	authed.PUT("/:eventId/lists/:listId/items/:itemId/checked", setEventListItemChecked)
 	authed.PUT("/:eventId/lists/:listId/items/:itemId/assignee", setEventListItemAssignee)
+	// Static under /lists like the assignees route, and safe for the same
+	// structural reason: the POST tree has no /lists/:listId route to conflict
+	// with.
+	authed.POST("/:eventId/lists/undo-assign", undoListAssign)
 	authed.PUT("/:eventId/lists/:listId/items/:itemId/move", moveEventListItem)
 	authed.DELETE("/:eventId/lists/:listId/items/:itemId", deleteEventListItem)
 

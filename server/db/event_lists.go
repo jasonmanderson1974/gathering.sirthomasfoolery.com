@@ -23,6 +23,7 @@ package db
 
 import (
 	"context"
+	"strconv"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -182,6 +183,57 @@ func setListItemsFields(
 	return res.MatchedCount > 0, nil
 }
 
+// ListItemAssignee is one item's assignment. A nil AssigneeId means unassigned,
+// which is a state worth restoring as precisely as a name is.
+type ListItemAssignee struct {
+	ItemId     primitive.ObjectID
+	AssigneeId *primitive.ObjectID
+	Name       string
+}
+
+// restoreListItemAssignees writes a DIFFERENT assignee to each of several items,
+// still in one update.
+//
+// setListItemsFields cannot do this: it fans one value across everything its
+// `$in` matches. Restoring a branch (N2) needs "this one back to Bart, that one
+// back to nobody", so each item gets its own array-filter identifier — i0, i1,
+// … — and its own $set paths. arrayFilterOptions is variadic, so this is still a
+// single UpdateOne, which matters for the same reason the cascade is one write:
+// a half-restored branch is precisely the state undo exists to avoid.
+//
+// The identifiers and the $set keys are built in the SAME loop on purpose. Mongo
+// rejects the whole update if an identifier is declared in arrayFilters and used
+// by no path, so the two must not be able to drift apart.
+func restoreListItemAssignees(
+	coll *mongo.Collection,
+	filter bson.M,
+	listId primitive.ObjectID,
+	assignees []ListItemAssignee,
+) (bool, error) {
+	if len(assignees) == 0 {
+		return false, nil
+	}
+
+	set := bson.M{}
+	filters := []interface{}{bson.M{"l._id": listId}}
+	for i, assignee := range assignees {
+		// Identifiers must be alphanumeric and start with a lowercase letter.
+		id := "i" + strconv.Itoa(i)
+		set["lists.$[l].items.$["+id+"].assigneeId"] = assignee.AssigneeId
+		set["lists.$[l].items.$["+id+"].assigneeName"] = assignee.Name
+		filters = append(filters, bson.M{id + "._id": assignee.ItemId})
+	}
+
+	res, err := coll.UpdateOne(context.Background(), filter,
+		bson.M{"$set": set},
+		arrayFilterOptions(filters...),
+	)
+	if err != nil {
+		return false, err
+	}
+	return res.MatchedCount > 0, nil
+}
+
 // setListItemOrder repositions an item among its existing siblings (F17).
 //
 // The narrowest of the three move shapes: nothing but the moved item's order
@@ -334,6 +386,15 @@ func SetEventListItemAssignee(
 		"assigneeId":   assigneeId,
 		"assigneeName": name,
 	})
+}
+
+// RestoreEventListItemAssignees puts a branch's assignments back exactly as they
+// were (N2) — each item to its own prior holder, or to nobody.
+func RestoreEventListItemAssignees(
+	eventId, listId primitive.ObjectID,
+	assignees []ListItemAssignee,
+) (bool, error) {
+	return restoreListItemAssignees(EventsCollection, eventFilter(eventId), listId, assignees)
 }
 
 // SetEventListItemOrder repositions an item among its existing siblings.

@@ -2234,28 +2234,79 @@ your own entries to it. Ticking is the only thing it allows, which is the only t
   had RSVPs because they were put there deliberately, so every local check passed over a rule that
   selected nobody in production.
 
-### N2 — a cascading assign cannot be undone, only reset · **P2 · M** — OPEN
+### N2 — a cascading assign could not be undone, only reset · **P2 · M** — DONE 2026-08-12
 
-Raised 2026-08-12, immediately after N1's cascade shipped, and it is a hole in what that item
-agreed rather than a defect in what it built.
+Raised immediately after N1's cascade shipped, and a hole in what that item agreed rather than a
+defect in what it built.
 
 Assigning a parent overwrites every holder beneath it. Clearing the parent cascades too, so the
-obvious "undo" — set it back to Unassigned — does not restore what was there; it **destroys it**.
+obvious "undo" — set it back to Unassigned — did not restore what was there, it **destroyed it**.
 Assign "Sleeping" by mistake when the tent was Bart's and the bags were Ada's, realise, clear it,
-and Bart and Ada's assignments are gone with no record they existed. Symmetric unassign is a
-**reset, not an undo**, and the argument that made silent overwriting acceptable ("it is exactly
-reversible") is therefore not true.
+and Bart and Ada's assignments were gone with no record they existed. Symmetric unassign is a
+**reset, not an undo**, so the argument that made silent overwriting acceptable — "it is exactly
+reversible" — was not true. Now it is.
 
-The likely answer is a real undo rather than a confirm dialog: capture the branch's prior
-(itemId → assigneeId, assigneeName) before a cascading write, and offer **Undo** on the snackbar
-that follows it. That restores exactly, costs nothing when nobody uses it, and does not put a
-dialog in front of the bulk action people actually want. Needs a bulk restore the server accepts —
-a map, not a single assignee — or the client replaying per-item writes, which is not atomic and can
-half-apply. Prefer the former.
+A real **Undo** on a snackbar for **7 seconds** after any assignment that *cascaded*, in both
+directions (a cascading clear is just as destructive and is restored the same way). Not offered on a
+leaf assign: that changes one visible row and is already one click to correct, so a toast there
+would be noise on the common case — on WFFA, 3 of 30 controls produce one.
 
-Alternatives considered and not chosen at N1: confirm-before-overwrite (prevents rather than
-reverts, and taxes the common case), and fill-only-the-blanks (makes the mistake harmless but gives
-up the branch-reads-one-name property that is the point of the cascade).
+- **The server holds the snapshot, and that is the whole design.** The obvious build has the client
+  capture the branch's prior state and post it back. It fails on our own rule:
+  `setEventListItemAssignee` validates every assignee against `assignableMembers`, one of whose
+  sources is *anyone already holding an assignment* — so a cascade that takes Bart's entry can take
+  his pool membership with it, and the undo that exists to put him back would be **refused**. The
+  failure lands exactly on the case the feature is for. A client-supplied restore is also
+  unverifiable, so the endpoint would have to relax the pool check to "any member+". Restoring the
+  server's own record has nothing to validate and nothing to forge, and gives the TTL a home.
+  `TestUndo_RestoresAHolderWhoLeftTheAssignablePool` asserts the whole argument, including a direct
+  assign being refused for the same member in the same test.
+- **`assignUndoStore` copies `utils.RateLimiter` deliberately** — mutex + map, lazy expiry on read
+  *and* a ticker janitor, a separately-testable `evictStale`, an idempotent `Stop`. Same
+  single-instance assumption: records live in this process and are lost on restart, which for a
+  seven-second affordance is not worth a collection.
+- **Keyed by user, carrying a token.** Keyed by user so two members never undo each other; one
+  record each, so "only the most recent action is undoable" is a property of the storage rather
+  than a UI convention. The token is what stops a stale button — a second tab, a second cascade
+  inside the window — restoring a *newer* action's snapshot. Taken once, so a double-click gets one
+  restore and one refusal.
+- **The server's window (30s) is deliberately longer than the button's (7s).** Two independent
+  clocks; the failure that matters is a button still on screen whose record has gone. Erring long
+  makes that impossible. There is a test asserting the inequality, because it is the kind of
+  constant someone tunes without noticing what it is paired with.
+- **`restoreListItemAssignees` is one `UpdateOne` with one array-filter identifier per item.**
+  `setListItemsFields` fans a single value via `$in`; a restore needs "this one back to Bart, that
+  one back to nobody". `arrayFilterOptions` was already variadic. The `$set` keys and the filters
+  are built in the same loop, since Mongo hard-errors on an identifier used by no path.
+- **The toast is `Event.vue`'s own `v-snackbar`, not the app-wide `AutoSnackbar`.** That one takes a
+  bare string and hard-codes a close button into its actions slot, so giving it an Undo would mean
+  putting a callback into Vuex state and routing it back out through `App.vue`. The view already
+  owns the assign handler and the refetch. Left at the default bottom placement so it cannot land
+  on top of the two `location="top"` global toasts.
+- **A test caught a message that reported the opposite of what happened.** `describeAssignCascade`
+  first derived "was this a clear?" from the assignee name being absent — but the picker is fetched
+  with the Lists tab, so an unnameable assignee is reachable, and the toast would have read
+  "Cleared 9 entries." for entries that had just been handed to somebody. `assigned` is now a
+  separate argument: an unnameable assignee costs the name, never the verb.
+
+**Verified 2026-08-12**: full Go suite green (16 new tests — 9 on the store, 7 end-to-end), 448
+frontend unit tests green (12 new), eslint / `check:vuetify-props` / build clean, golangci-lint 0
+issues, `browser-check.sh` ALL PASS. Driven through the real UI against a mixed branch — Drinks
+(Ambrose) → port (Cornelius) → corkscrew (Harness) — cascaded to one name and undone:
+
+```
+BEFORE:   Drinks->Ambrose  port->Cornelius  corkscrew->Harness  Ice->none
+cascade:  Drinks->Harness  port->Harness    corkscrew->Harness  Ice->none
+UNDO:     Drinks->Ambrose  port->Cornelius  corkscrew->Harness  Ice->none   EXACT MATCH
+```
+
+The 7s window was timed on the real page: button present at ~7s, gone at ~10s, and the cascade
+correctly stands once it lapses. Screenshotted at 1280px and 390px — the toast wraps to two lines on
+a phone and keeps both buttons.
+
+**Not asserted in `check:routes`, on purpose**: a control that exists for seven seconds is a timing
+race in a tier built around a settle-then-assert loop, and a flaky assertion there would cost more
+than it protects.
 - **Deliberately not `mentionableUserIds`.** That set is "everyone who has taken part" —
   respondents, poll voters, comment authors. Right question for an @mention, wrong one for "who is
   coming and can be asked to bring the port".
