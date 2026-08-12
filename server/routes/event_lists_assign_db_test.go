@@ -77,7 +77,9 @@ func TestAssign_AppearsInMyListsAndTicksThrough(t *testing.T) {
 	ownerCookie := loginAs(t, h, ownerId.Hex())
 	mateCookie := loginAs(t, h, mateId.Hex())
 	setRsvp(t, eventId, mateId, models.RsvpGoing)
-	setRsvp(t, eventId, ownerId, models.RsvpGoing)
+	// The owner deliberately gets NO RSVP: the reassign at the end of this test
+	// is what proves they are assignable anyway, which is the rule that keeps a
+	// planner able to put their own name on something.
 
 	list := createListFor(t, h, eventId, ownerCookie, `{"name":"Menu","kind":"checklist"}`)
 	item := addItemFor(t, h, eventId, list.Id, ownerCookie, `{"text":"Bring the port"}`)
@@ -235,6 +237,142 @@ func TestAssign_RefusesAnyoneOutsideTheAssignableSet(t *testing.T) {
 	// Nothing was written by any of those.
 	if stored := readEventLists(t, eventId); stored[0].Items[0].AssigneeId != nil {
 		t.Errorf("a refused assignment was stored anyway: %+v", stored[0].Items[0])
+	}
+}
+
+// The gathering's owner is assignable with no RSVP at all, and even having
+// declined their own gathering.
+//
+// This is the rule that made the feature usable: measured against production the
+// day N1 shipped, one of thirteen gatherings had any going/maybe RSVP, so an
+// attendance-only pool left the single gathering with checklists showing an
+// empty picker.
+func TestAssign_OwnerIsAlwaysAssignable(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "assign-owner-rule@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := assignTestRouter()
+
+	cookie := loginAs(t, h, ownerId.Hex())
+	list := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"checklist"}`)
+	item := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Book the room"}`)
+
+	// No RSVP anywhere on this event.
+	if code := assignItem(h, eventId, list.Id, item.Id, `{"assigneeId":"`+ownerId.Hex()+`"}`, cookie); code != http.StatusOK {
+		t.Fatalf("assign to the owner with no RSVP: got %d, want 200", code)
+	}
+
+	// And still, having said no.
+	setRsvp(t, eventId, ownerId, models.RsvpNo)
+	if code := assignItem(h, eventId, list.Id, item.Id, `{"assigneeId":""}`, cookie); code != http.StatusOK {
+		t.Fatalf("unassign: got %d, want 200", code)
+	}
+	if code := assignItem(h, eventId, list.Id, item.Id, `{"assigneeId":"`+ownerId.Hex()+`"}`, cookie); code != http.StatusOK {
+		t.Errorf("assign to an owner who declined: got %d, want 200", code)
+	}
+
+	w := do(h, http.MethodGet, "/events/"+eventId.Hex()+"/lists/assignees", "", cookie)
+	var users []models.User
+	json.Unmarshal(w.Body.Bytes(), &users)
+	if len(users) != 1 || users[0].Id != ownerId {
+		t.Errorf("picker should hold the owner alone, got %d entries", len(users))
+	}
+}
+
+// Someone already holding an entry stays in the picker even after changing their
+// RSVP to "no" — otherwise reopening the menu on that entry would offer no way
+// back to the name the page is already showing.
+func TestAssign_CurrentHolderStaysInThePicker(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "assign-holder-owner@example.test")
+	mateId := insertTestUser(t, models.RoleMember, "assign-holder-mate@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := assignTestRouter()
+
+	cookie := loginAs(t, h, ownerId.Hex())
+	setRsvp(t, eventId, mateId, models.RsvpGoing)
+
+	list := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"checklist"}`)
+	item := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Bring the port"}`)
+	other := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Bring the cheese"}`)
+
+	if code := assignItem(h, eventId, list.Id, item.Id, `{"assigneeId":"`+mateId.Hex()+`"}`, cookie); code != http.StatusOK {
+		t.Fatalf("assign: got %d, want 200", code)
+	}
+
+	// They now pull out of the gathering, but keep the entry.
+	setRsvp(t, eventId, mateId, models.RsvpNo)
+
+	w := do(h, http.MethodGet, "/events/"+eventId.Hex()+"/lists/assignees", "", cookie)
+	var users []models.User
+	json.Unmarshal(w.Body.Bytes(), &users)
+	held := false
+	for _, u := range users {
+		if u.Id == mateId {
+			held = true
+		}
+	}
+	if !held {
+		t.Error("a current holder dropped out of the picker when their RSVP changed")
+	}
+
+	// Reproducible, which is the whole point.
+	if code := assignItem(h, eventId, list.Id, other.Id, `{"assigneeId":"`+mateId.Hex()+`"}`, cookie); code != http.StatusOK {
+		t.Errorf("re-assign to the current holder: got %d, want 200", code)
+	}
+
+	// But once they hold nothing, the declined RSVP is all that is left of them.
+	if code := assignItem(h, eventId, list.Id, item.Id, `{"assigneeId":""}`, cookie); code != http.StatusOK {
+		t.Fatalf("unassign first: got %d, want 200", code)
+	}
+	if code := assignItem(h, eventId, list.Id, other.Id, `{"assigneeId":""}`, cookie); code != http.StatusOK {
+		t.Fatalf("unassign second: got %d, want 200", code)
+	}
+	if code := assignItem(h, eventId, list.Id, item.Id, `{"assigneeId":"`+mateId.Hex()+`"}`, cookie); code != http.StatusBadRequest {
+		t.Errorf("assign to a declined member holding nothing: got %d, want 400", code)
+	}
+}
+
+// The member-or-above filter applies to all three sources, not just the RSVPs:
+// a guest holds no responsibilities here whether they RSVP'd, own the gathering,
+// or were assigned something before a role change.
+func TestAssign_RoleFilterAppliesToOwnerAndHolder(t *testing.T) {
+	requireDB(t)
+
+	guestOwnerId := insertTestUser(t, models.RoleGuest, "assign-guest-owner2@example.test")
+	adminId := insertTestUser(t, models.RoleAdmin, "assign-role-admin@example.test")
+	eventId := insertTestEvent(t, guestOwnerId)
+	h := assignTestRouter()
+
+	cookie := loginAs(t, h, adminId.Hex())
+	list := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"checklist"}`)
+	item := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Bring the port"}`)
+
+	// The owner is a guest, so being the owner does not let them in.
+	if code := assignItem(h, eventId, list.Id, item.Id, `{"assigneeId":"`+guestOwnerId.Hex()+`"}`, cookie); code != http.StatusBadRequest {
+		t.Errorf("assign to a guest owner: got %d, want 400", code)
+	}
+
+	// Nor does holding an entry: plant one directly, as a role change after the
+	// fact would leave behind, and check it is not re-selectable.
+	if _, err := db.SetEventListItemAssignee(eventId, list.Id, item.Id, &guestOwnerId, "Test User"); err != nil {
+		t.Fatalf("plant assignment: %v", err)
+	}
+	w := do(h, http.MethodGet, "/events/"+eventId.Hex()+"/lists/assignees", "", cookie)
+	var users []models.User
+	json.Unmarshal(w.Body.Bytes(), &users)
+	for _, u := range users {
+		if u.Id == guestOwnerId {
+			t.Error("a guest reached the picker by holding an entry")
+		}
+	}
+	// The name still RENDERS, though — it is on the item, and hiding it would
+	// make the entry look unclaimed.
+	lists := readEventLists(t, eventId)
+	if lists[0].Items[0].AssigneeName == "" {
+		t.Error("the planted assignment stopped rendering")
 	}
 }
 

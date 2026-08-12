@@ -2200,8 +2200,21 @@ your own entries to it. Ticking is the only thing it allows, which is the only t
   version filters `event.rsvps`, which already carries a resolved user per RSVP — but
   `slimUserForDisplay` strips `role`, so **nothing on the client can tell a member from a guest**.
   `GET /events/:id/lists/assignees` is the endpoint; `assignableMembers` is the one definition of
-  the set (going/maybe RSVP ∩ member or above), and the write path re-derives it rather than
-  trusting the id it was sent.
+  the set, and the write path re-derives it rather than trusting the id it was sent.
+- **Attendance alone was the right rule and the wrong one, and only production said so.** The set
+  shipped as "going/maybe RSVP ∩ member or above". Verified read-only against prod immediately
+  after the deploy: of **thirteen gatherings, exactly one had any going/maybe RSVP, and it was
+  archived** — the single live gathering with checklists (30 entries) returned an **empty picker**,
+  so every entry on it could only be left unassigned. This club signals attendance by availability
+  and by turning up, not by the RSVP control. Nothing was wrong with the code; the rule was just
+  inert here, and a seeded fixture could never have shown it because the fixture had RSVPs by
+  construction. **Widened the same day** to the union of: a going/maybe RSVP, the gathering's
+  owner, and anyone already holding an assignment — all still filtered to member or above. The
+  owner, because a planner unable to put their own name on "book the room" is the case that made it
+  obvious; the current holder, because otherwise reopening the menu on an assigned entry offers no
+  way back to the name already on screen. The role filter applies to all three uniformly, and an
+  assignment held by someone since demoted still *renders* (the name is on the item) — it just
+  cannot be re-selected.
 - **Deliberately not `mentionableUserIds`.** That set is "everyone who has taken part" —
   respondents, poll voters, comment authors. Right question for an @mention, wrong one for "who is
   coming and can be asked to bring the port".
@@ -2228,12 +2241,20 @@ your own entries to it. Ticking is the only thing it allows, which is the only t
   when the text needs the width. Without the min-width flexbox shrinks the text indefinitely and
   the row never wraps at all.
 
-**Verified 2026-08-12**: full Go suite green (8 new integration tests + 3 pure), 435 frontend unit
+**Verified 2026-08-12**: full Go suite green (11 new integration tests + 3 pure), 435 frontend unit
 tests green (13 new in a new `EventLists.spec.js`), eslint clean, `check:vuetify-props` clean,
 production build clean, `golangci-lint` 0 issues, `browser-check.sh` **ALL PASS on both legs**
 (`--dev` and built). Driven by hand on a seeded stack at 390px and 1280px: assign → appears under
 Assigned → tick there → the network call is `PUT /lists/<shared>/items/<item>/checked`, and the
 shared entry changes. That last check is the whole feature in one line.
+
+**Deployed `2cbd81b`, then the pool widened in a follow-up.** Post-deploy verification on
+production was read-only by design — no assignment, no tick, counts and booleans only, and a
+re-survey afterwards confirmed zero writes. On the live gathering with checklists: **50 rows, 30
+pickers** (exactly the 30 checklist entries; the 20 rows on non-checklist lists correctly got
+none), no horizontal scroll, **no console errors and no Vue warnings**. That run is also what found
+the empty-picker problem above — which is the argument for doing this pass at all rather than
+stopping at a green health check.
 
 ---
 

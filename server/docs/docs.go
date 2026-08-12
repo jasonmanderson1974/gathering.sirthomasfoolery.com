@@ -1783,7 +1783,7 @@ const docTemplate = `{
         },
         "/events/{eventId}/lists/assignees": {
             "get": {
-                "description": "Accounts with a going or maybe RSVP whose role is member or above. Guests are refused: they can see who an entry is for but cannot change it, so they have no use for the picker.",
+                "description": "Accounts with a going or maybe RSVP, plus the gathering's owner, plus anyone already holding an assignment — all filtered to member or above. Guests are refused as callers: they can see who an entry is for but cannot change it, so they have no use for the picker.",
                 "produces": [
                     "application/json"
                 ],

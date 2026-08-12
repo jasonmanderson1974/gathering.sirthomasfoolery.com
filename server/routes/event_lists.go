@@ -901,28 +901,59 @@ func setEventListItemChecked(c *gin.Context) {
 }
 
 // assignableMembers is the set of people a checklist entry may be given to
-// (N1), and the single definition of it: accounts with a going-or-maybe RSVP on
-// this gathering whose role is member or above.
+// (N1), and the single definition of it. Three sources, unioned, then filtered
+// to member-or-above:
 //
-// Attending, because assigning work to someone who has said they aren't coming
-// is a mistake the picker should not be able to make. Member and above, because
-// a guest holds no responsibilities here — the same line getExpenseParticipants
-// draws, and drawn with the same predicate.
+//  1. a going-or-maybe RSVP on this gathering;
+//  2. the gathering's owner;
+//  3. anyone already holding an assignment on it.
+//
+// Attending is the rule the feature wants — assigning work to somebody who has
+// said they are not coming is a mistake the picker should not be able to
+// make — but on its own it was the wrong rule for this club. Measured against
+// production the day N1 shipped: of thirteen gatherings exactly one had any
+// going/maybe RSVP, and it was archived. The one gathering with checklists
+// returned an EMPTY picker, so every entry on it could only be left unassigned.
+// Attendance here is signalled by availability and by turning up, not by the
+// RSVP control, and a rule that is right in principle and empty in practice is
+// just a feature nobody can use.
+//
+// So the owner is in regardless: they are running the thing, and a planner
+// unable to put their own name on "book the room" is the case that made this
+// obvious. And a current holder stays in even if their RSVP has since changed,
+// so the picker can always reproduce an assignment the page is already showing —
+// otherwise reopening the menu on such an entry would offer no way back to where
+// it started.
+//
+// The member-or-above filter applies to all three uniformly: a guest holds no
+// responsibilities here, and that stays true whether they RSVP'd, own the
+// gathering, or were assigned something before a role change. Such an entry
+// still RENDERS its assignee — the name is on the item — it just cannot be
+// re-selected.
 //
 // Deliberately NOT mentionableUserIds: that set is "everyone who has taken part"
 // — availability respondents, poll voters, comment authors — which is the right
-// question for a @mention and the wrong one for "who is coming and can be asked
-// to bring the port".
+// question for a @mention and the wrong one for "who can be asked to bring the
+// port". This stays narrower than the roll on purpose.
 //
 // Returned slimmed and sorted, the same shape getMentionables and
 // getExpenseParticipants return, so the client renders it with the picker it
 // already has.
 func assignableMembers(event *models.Event) []*models.User {
-	if event == nil || len(event.Rsvps) == 0 {
+	if event == nil {
 		return []*models.User{}
 	}
 
-	ids := make([]primitive.ObjectID, 0, len(event.Rsvps))
+	seen := make(map[primitive.ObjectID]bool)
+	ids := make([]primitive.ObjectID, 0, len(event.Rsvps)+1)
+	add := func(id primitive.ObjectID) {
+		if id.IsZero() || seen[id] {
+			return
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+
 	for key, rsvp := range event.Rsvps {
 		if rsvp == nil || (rsvp.Status != models.RsvpGoing && rsvp.Status != models.RsvpMaybe) {
 			continue
@@ -933,7 +964,24 @@ func assignableMembers(event *models.Event) []*models.User {
 		if !isAccount {
 			continue
 		}
-		ids = append(ids, id)
+		add(id)
+	}
+
+	add(event.OwnerId)
+
+	for _, list := range event.Lists {
+		if list.Kind != models.ListKindChecklist {
+			continue
+		}
+		for _, item := range list.Items {
+			if item.AssigneeId != nil {
+				add(*item.AssigneeId)
+			}
+		}
+	}
+
+	if len(ids) == 0 {
+		return []*models.User{}
 	}
 
 	assignable := make([]models.User, 0, len(ids))
@@ -953,7 +1001,7 @@ func assignableMembers(event *models.Event) []*models.User {
 }
 
 // @Summary Lists the members a checklist entry on this event may be assigned to
-// @Description Accounts with a going or maybe RSVP whose role is member or above. Guests are refused: they can see who an entry is for but cannot change it, so they have no use for the picker.
+// @Description Accounts with a going or maybe RSVP, plus the gathering's owner, plus anyone already holding an assignment — all filtered to member or above. Guests are refused as callers: they can see who an entry is for but cannot change it, so they have no use for the picker.
 // @Tags events
 // @Produce json
 // @Param eventId path string true "Event ID"
