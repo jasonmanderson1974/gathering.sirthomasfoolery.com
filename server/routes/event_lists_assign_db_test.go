@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
@@ -237,6 +238,75 @@ func TestAssign_RefusesAnyoneOutsideTheAssignableSet(t *testing.T) {
 	// Nothing was written by any of those.
 	if stored := readEventLists(t, eventId); stored[0].Items[0].AssigneeId != nil {
 		t.Errorf("a refused assignment was stored anyway: %+v", stored[0].Items[0])
+	}
+}
+
+// markAvailability writes an availability response, which on this club is how
+// people actually say they are coming — the RSVP control is barely touched.
+func markAvailability(t *testing.T, eventId, userId primitive.ObjectID) {
+	t.Helper()
+	_, err := db.EventResponsesCollection.InsertOne(context.Background(), models.EventResponse{
+		Id:      primitive.NewObjectID(),
+		EventId: eventId,
+		UserId:  userId.Hex(),
+		Response: &models.Response{
+			Availability: []primitive.DateTime{
+				primitive.NewDateTimeFromTime(time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("insert availability response: %v", err)
+	}
+	t.Cleanup(func() {
+		db.EventResponsesCollection.DeleteMany(context.Background(), bson.M{"eventId": eventId})
+	})
+}
+
+// Marking availability puts you in the picker with no RSVP anywhere.
+//
+// This is the source that carries the real signal here: measured on production,
+// thirteen gatherings held ONE going/maybe RSVP between them, while availability
+// responses existed on twelve of them. Without this the picker on the only
+// gathering with checklists offered nobody but its owner.
+func TestAssign_AvailabilityResponderIsAssignable(t *testing.T) {
+	requireDB(t)
+
+	ownerId := insertTestUser(t, models.RoleMember, "assign-avail-owner@example.test")
+	responderId := insertTestUser(t, models.RoleMember, "assign-avail-mate@example.test")
+	guestResponderId := insertTestUser(t, models.RoleGuest, "assign-avail-guest@example.test")
+	eventId := insertTestEvent(t, ownerId)
+	h := assignTestRouter()
+
+	cookie := loginAs(t, h, ownerId.Hex())
+	// No RSVPs at all on this gathering — exactly the production shape.
+	markAvailability(t, eventId, responderId)
+	markAvailability(t, eventId, guestResponderId)
+
+	list := createListFor(t, h, eventId, cookie, `{"name":"Menu","kind":"checklist"}`)
+	item := addItemFor(t, h, eventId, list.Id, cookie, `{"text":"Bring the port"}`)
+
+	if code := assignItem(h, eventId, list.Id, item.Id, `{"assigneeId":"`+responderId.Hex()+`"}`, cookie); code != http.StatusOK {
+		t.Fatalf("assign to an availability responder: got %d, want 200", code)
+	}
+	// The role filter still applies to this source like the others.
+	if code := assignItem(h, eventId, list.Id, item.Id, `{"assigneeId":"`+guestResponderId.Hex()+`"}`, cookie); code != http.StatusBadRequest {
+		t.Errorf("assign to a guest who marked availability: got %d, want 400", code)
+	}
+
+	w := do(h, http.MethodGet, "/events/"+eventId.Hex()+"/lists/assignees", "", cookie)
+	var users []models.User
+	json.Unmarshal(w.Body.Bytes(), &users)
+	got := map[primitive.ObjectID]bool{}
+	for _, u := range users {
+		got[u.Id] = true
+	}
+	// The responder and the owner; not the guest.
+	if !got[responderId] || !got[ownerId] {
+		t.Errorf("picker is missing the responder or the owner: %d entries", len(users))
+	}
+	if got[guestResponderId] {
+		t.Error("a guest reached the picker by marking availability")
 	}
 }
 

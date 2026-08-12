@@ -901,40 +901,45 @@ func setEventListItemChecked(c *gin.Context) {
 }
 
 // assignableMembers is the set of people a checklist entry may be given to
-// (N1), and the single definition of it. Three sources, unioned, then filtered
+// (N1), and the single definition of it. Four sources, unioned, then filtered
 // to member-or-above:
 //
-//  1. a going-or-maybe RSVP on this gathering;
-//  2. the gathering's owner;
-//  3. anyone already holding an assignment on it.
+//  1. anyone who marked availability on this gathering;
+//  2. a going-or-maybe RSVP on it;
+//  3. the gathering's owner;
+//  4. anyone already holding an assignment on it.
 //
-// Attending is the rule the feature wants — assigning work to somebody who has
-// said they are not coming is a mistake the picker should not be able to
-// make — but on its own it was the wrong rule for this club. Measured against
-// production the day N1 shipped: of thirteen gatherings exactly one had any
-// going/maybe RSVP, and it was archived. The one gathering with checklists
-// returned an EMPTY picker, so every entry on it could only be left unassigned.
-// Attendance here is signalled by availability and by turning up, not by the
-// RSVP control, and a rule that is right in principle and empty in practice is
-// just a feature nobody can use.
+// The rule this started as was (2) alone, which is right in principle —
+// assigning work to somebody who has said they are not coming is a mistake the
+// picker should not be able to make — and was empty in practice. Measured
+// against production: across thirteen gatherings there was **one** going/maybe
+// RSVP in total, and the only gathering carrying checklists had none, so its
+// picker offered nobody. Availability responses existed on twelve of the
+// thirteen. **In this club the RSVP control is not how people say they are
+// coming — the availability grid is**, and a pool keyed to the control nobody
+// uses is a feature nobody can use.
 //
-// So the owner is in regardless: they are running the thing, and a planner
-// unable to put their own name on "book the room" is the case that made this
-// obvious. And a current holder stays in even if their RSVP has since changed,
-// so the picker can always reproduce an assignment the page is already showing —
-// otherwise reopening the menu on such an entry would offer no way back to where
-// it started.
+// So (1) is the source that actually carries the signal, and the other three are
+// there for the cases it misses. The owner because they are running the thing,
+// and a planner unable to put their own name on "book the room" was the case
+// that made the gap obvious. The current holder so the picker can always
+// reproduce an assignment the page is already showing — otherwise reopening the
+// menu on such an entry offers no way back to where it started.
 //
-// The member-or-above filter applies to all three uniformly: a guest holds no
-// responsibilities here, and that stays true whether they RSVP'd, own the
-// gathering, or were assigned something before a role change. Such an entry
+// What this costs, stated plainly: somebody who marked availability and later
+// RSVP'd "no" stays assignable, because the availability response is still
+// there. The original rule would have excluded them. That is the trade for a
+// picker with anybody in it at all here.
+//
+// The member-or-above filter applies to all four uniformly: a guest holds no
+// responsibilities here, and that stays true whether they responded, RSVP'd, own
+// the gathering, or were assigned something before a role change. Such an entry
 // still RENDERS its assignee — the name is on the item — it just cannot be
 // re-selected.
 //
-// Deliberately NOT mentionableUserIds: that set is "everyone who has taken part"
-// — availability respondents, poll voters, comment authors — which is the right
-// question for a @mention and the wrong one for "who can be asked to bring the
-// port". This stays narrower than the roll on purpose.
+// Still deliberately NOT mentionableUserIds, which additionally sweeps in poll
+// voters and comment authors: turning up in a thread is not saying you are
+// coming. This stays narrower than that and much narrower than the roll.
 //
 // Returned slimmed and sorted, the same shape getMentionables and
 // getExpenseParticipants return, so the client renders it with the picker it
@@ -953,18 +958,37 @@ func assignableMembers(event *models.Event) []*models.User {
 		seen[id] = true
 		ids = append(ids, id)
 	}
+	// Every hex here comes from a map key or a stored string that may equally be
+	// a typed-in guest name, so it goes through the same discriminator the rest
+	// of this package uses: no id, no candidate — there is no account behind it
+	// to put work on.
+	addHex := func(hex string) {
+		if id, ok := objectIdOrNil(hex); ok {
+			add(id)
+		}
+	}
+
+	// Fetched here rather than passed in, following gatheringMembers: both
+	// callers would otherwise have to remember to do it. Best-effort on
+	// purpose — a failed read yields a NARROWER pool, never a wider one, so an
+	// outage cannot open the picker up to somebody it should not contain.
+	if responses, err := db.GetEventResponses(event.Id.Hex()); err == nil {
+		for _, response := range responses {
+			addHex(response.UserId)
+		}
+	} else {
+		logger.StdErr.Println(err)
+	}
 
 	for key, rsvp := range event.Rsvps {
 		if rsvp == nil || (rsvp.Status != models.RsvpGoing && rsvp.Status != models.RsvpMaybe) {
 			continue
 		}
-		// A legacy name-keyed row yields no id and so no candidate: there is no
-		// account behind it to put work on.
-		id, isAccount := objectIdOrNil(key)
-		if !isAccount {
-			continue
+		addHex(key)
+		// Older RSVPs are keyed by name but still carry the account id.
+		if !rsvp.UserId.IsZero() {
+			add(rsvp.UserId)
 		}
-		add(id)
 	}
 
 	add(event.OwnerId)
@@ -1001,7 +1025,7 @@ func assignableMembers(event *models.Event) []*models.User {
 }
 
 // @Summary Lists the members a checklist entry on this event may be assigned to
-// @Description Accounts with a going or maybe RSVP, plus the gathering's owner, plus anyone already holding an assignment — all filtered to member or above. Guests are refused as callers: they can see who an entry is for but cannot change it, so they have no use for the picker.
+// @Description Accounts that marked availability on this gathering, plus going/maybe RSVPs, plus the gathering's owner, plus anyone already holding an assignment — all filtered to member or above. Guests are refused as callers: they can see who an entry is for but cannot change it, so they have no use for the picker.
 // @Tags events
 // @Produce json
 // @Param eventId path string true "Event ID"

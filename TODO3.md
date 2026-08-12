@@ -2201,20 +2201,38 @@ your own entries to it. Ticking is the only thing it allows, which is the only t
   `slimUserForDisplay` strips `role`, so **nothing on the client can tell a member from a guest**.
   `GET /events/:id/lists/assignees` is the endpoint; `assignableMembers` is the one definition of
   the set, and the write path re-derives it rather than trusting the id it was sent.
-- **Attendance alone was the right rule and the wrong one, and only production said so.** The set
-  shipped as "going/maybe RSVP ∩ member or above". Verified read-only against prod immediately
-  after the deploy: of **thirteen gatherings, exactly one had any going/maybe RSVP, and it was
-  archived** — the single live gathering with checklists (30 entries) returned an **empty picker**,
-  so every entry on it could only be left unassigned. This club signals attendance by availability
-  and by turning up, not by the RSVP control. Nothing was wrong with the code; the rule was just
-  inert here, and a seeded fixture could never have shown it because the fixture had RSVPs by
-  construction. **Widened the same day** to the union of: a going/maybe RSVP, the gathering's
-  owner, and anyone already holding an assignment — all still filtered to member or above. The
-  owner, because a planner unable to put their own name on "book the room" is the case that made it
-  obvious; the current holder, because otherwise reopening the menu on an assigned entry offers no
-  way back to the name already on screen. The role filter applies to all three uniformly, and an
-  assignment held by someone since demoted still *renders* (the name is on the item) — it just
-  cannot be re-selected.
+- **The pool was wrong twice, and production is what said so both times.** It shipped as
+  "going/maybe RSVP ∩ member or above" — right in principle, since work should not land on someone
+  who has declined.
+
+  *First correction.* Verified read-only against prod immediately after the deploy: of **thirteen
+  gatherings, exactly one had any going/maybe RSVP, and it was archived** — the single live
+  gathering with checklists (30 entries) returned an **empty picker**, so every entry on it could
+  only be left unassigned. Widened to add the gathering's **owner** (a planner unable to put their
+  own name on "book the room" is the case that made the gap obvious) and **anyone already holding
+  an assignment** (otherwise reopening the menu on an assigned entry offers no way back to the name
+  already on screen).
+
+  *Second correction, and the one that actually mattered.* That fix made every picker size **1** —
+  the owner, and nobody else. Reported from use: on the gathering with the checklists you could
+  assign its planner and not yourself. Diagnosed on the real document rather than guessed: the
+  `rsvps` map on that gathering is **entirely empty**, and the two people who had signalled they
+  were coming had done it by **marking availability**. **In this club the RSVP control is not how
+  people say they are coming — the availability grid is.** Availability responses existed on twelve
+  of the thirteen gatherings against one RSVP in total. So availability responders are now the
+  pool's primary source, with the other three as the cases it misses.
+
+  The cost, stated rather than buried: somebody who marked availability and later RSVP'd "no" stays
+  assignable, because the response is still there. The original rule would have excluded them.
+  That is the trade for a picker with anybody in it at all. Still narrower than
+  `mentionableUserIds`, which also sweeps in poll voters and comment authors — turning up in a
+  thread is not saying you are coming.
+
+  The member-or-above filter applies to all four sources uniformly, and an assignment held by
+  someone since demoted still *renders* (the name is on the item) — it just cannot be re-selected.
+  **The general lesson: a fixture cannot tell you which signal your users actually use.** The seed
+  had RSVPs because they were put there deliberately, so every local check passed over a rule that
+  selected nobody in production.
 - **Deliberately not `mentionableUserIds`.** That set is "everyone who has taken part" —
   respondents, poll voters, comment authors. Right question for an @mention, wrong one for "who is
   coming and can be asked to bring the port".
