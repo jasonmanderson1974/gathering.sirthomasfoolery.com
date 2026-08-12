@@ -160,6 +160,34 @@ else
   ver chrome google-chrome --version
 fi
 
+# ...except this one, which is compared rather than printed (L15). This box
+# builds with a newer Go than go.mod and CI declare, which is the arrangement
+# that produces a green local run and a red CI one.
+#
+# Deliberately a NOTE and not a `fail`: the exposure is much smaller than it
+# looks, and overstating it would send someone downgrading a shared machine for
+# no reason. The `go` directive gates *language* features, so 1.26-only syntax
+# fails to compile here too; and `go vet` carries the `stdversion` analyzer,
+# which reports too-new *stdlib* symbols — backend-ci runs it blocking, and so
+# can you. Between them the "compiles here, fails in CI" case is already caught.
+#
+# If you want the exact toolchain anyway, it is `GOTOOLCHAIN=go<version> go build`.
+# A `toolchain` line in go.mod does NOT do it: that sets a floor, so a newer
+# local Go still wins (measured — 1.26.5 kept being used).
+if command -v go >/dev/null 2>&1 && [ -f server/go.mod ]; then
+  go_local="$(go env GOVERSION 2>/dev/null | sed 's/^go//')"
+  go_mod="$(awk '/^go [0-9]/ { print $2; exit }' server/go.mod)"
+  go_ci="$(awk -F'"' '/go-version:/ { print $2; exit }' .github/workflows/backend-ci.yml 2>/dev/null)"
+  if [ -n "$go_local" ] && [ -n "$go_mod" ] &&
+    [ "${go_local%.*}" != "${go_mod%.*}" ]; then
+    say ""
+    say "    note: go $go_local here, but go.mod declares $go_mod and CI pins ${go_ci:-?}."
+    say "          Not a failure — the go directive gates language features and"
+    say "          \`go vet\` (stdversion) catches too-new stdlib symbols. For an"
+    say "          exact match: GOTOOLCHAIN=go${go_mod} go build ./..."
+  fi
+fi
+
 say ""
 if [ "$problems" -eq 0 ]; then
   say "dev-doctor: ok"

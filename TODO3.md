@@ -1638,7 +1638,7 @@ reading as an omission.
 (The general lesson is the same one L9 and L11 produced: the finding named a *file* it had not
 finished reading. Here `grep list-enter` was run and `grep list-` was not.)
 
-### L15 — dependency drift and a Go version skew · **P3 · S**
+### L15 — dependency drift and a Go version skew · **P3 · S** — PARTLY DONE 2026-08-11; sass-loader still open
 
 - `sass-loader` is on **10.5.2** against a latest of 17 — six majors behind, and the one dep here
   whose age is likely to bite during a future toolchain change. `core-js` 3.42→3.50,
@@ -1651,6 +1651,60 @@ finished reading. Here `grep list-enter` was run and `grep list-` was not.)
   **Correction 2026-08-11:** that is one box, not both. The WSL box runs **go1.25.5**, matching
   `go.mod` and CI exactly. The skew is on the other machine only — so "pick one" means bringing
   the 1.26.5 box down to 1.25, not moving CI.
+
+**PARTLY DONE 2026-08-11.** The routine drift and the Go skew are handled; **sass-loader is the
+one piece left open**, deliberately, as its own scoped work.
+
+**The routine drift was routine, and is taken.** `npm update` moves 134 packages, touches no line
+of `package.json`, and the full gate stays green — eslint, `check:vuetify-props`, 411 tests, the
+production build, `scripts/browser-check.sh`. `npm audit` drops 14 → 13 as a side effect. Two
+movers the item did not list: **`sass` itself, 1.77.8 → 1.102.0** (the largest single jump here),
+and `@tailwindcss/forms` 0.5.7 → 0.5.11.
+
+**sass-loader: the diagnosis is right, the target is not.** The problem is not the six-major gap in
+the abstract — it is that sass-loader 10 calls `implementation.render`, the **legacy Dart Sass JS
+API**, which Dart Sass removes in 2.0. Four things sharpen it:
+
+- **Upgrade to 16, not 17.** sass-loader 17 requires **Node ≥ 22.11** and CI runs Node 20; 16
+  requires ≥ 18.12 and already uses the modern API (`compileStringAsync`, `api: "modern"`).
+  Recording "latest is 17" as the target would have sent the work into a Node bump it does not need.
+- **It cannot arrive by accident.** `sass` is `^1.77.8`, so the caret stops before 2.0.
+- **There will be no warning first.** Built against sass 1.102 expecting deprecation output and got
+  **zero**. This will not degrade gradually; it will be a wall on the day something needs sass 2.
+- **The blast radius is small.** We have *no* sass of our own — zero `.scss`/`.sass` files, zero
+  `lang="scss"` blocks, no sass config in `vue.config.js`. The only consumer is **Vuetify's**
+  stylesheets via `webpack-plugin-vuetify` (`import "vuetify/styles"` → `vuetify/lib/styles/main.sass`),
+  so nothing of ours can break and `check:routes` — real CSS, real layout — is the check that
+  would see it if Vuetify's did.
+
+**The Go skew is real; the proposed fix was the worst option available.** Verified: `go.mod` says
+`go 1.25.0` with no `toolchain` line, CI pins 1.25, this box runs 1.26.5. But:
+
+- **A `toolchain` directive does NOT pin it.** Added `toolchain go1.25.5` and measured: Go still
+  used 1.26.5. The directive is a *floor*, so a newer local toolchain always wins.
+  `GOTOOLCHAIN=go1.25.5` is the thing that pins exactly (measured: downloads 1.25.5, builds clean).
+- **The exposure is already mostly guarded.** The `go` directive gates *language* features, so
+  1.26-only syntax fails to compile here too; and `go vet` carries the **`stdversion`** analyzer,
+  which reports too-new *stdlib* symbols — backend-ci runs `go vet` blocking. Between them, the
+  "green locally, red in CI" case the item worries about is caught before CI.
+- So downgrading a **shared** machine buys very little and costs every other project on it.
+  `scripts/dev-doctor.sh` already printed `go version`; it now **compares** it against `go.mod` and
+  the CI pin and prints a note — explicitly a note and not a failure, because overstating this is
+  what sends someone downgrading a box for no reason.
+
+**New, and not in the item at all: `vuedraggable` is a trap.** Its dist-tags are
+`latest: 2.24.3`, `next: 4.1.0`. We correctly run **4.1.0**, the Vue 3 line, published under
+`next` — so `npm outdated` reports our version as being *ahead* of "latest", and
+`npm i vuedraggable@latest` is a silent **downgrade to the Vue 2 build** that takes drag-and-drop
+with it. `package.json` is strict JSON and cannot carry the warning, and a note in a markdown file
+does not run, so `scripts/dependency-audit.sh` now fails when the installed major drops below 4.
+Shown able to fail by forcing 2.24.3 into the lockfile.
+
+Also worth knowing for whoever picks up the majors: **eslint 8 is EOL**, but `eslint-plugin-vue@10`
+accepts `^8.57.0`, so that upgrade is separable from the eslint 9/10 jump.
+
+**Still open, as its own item: sass-loader 10 → 16.** Not folded in here because it is the only
+change in this list that can actually break the build.
 
 ---
 

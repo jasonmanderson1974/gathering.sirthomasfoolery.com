@@ -97,6 +97,24 @@ if [ -n "$WANT_NPM" ]; then
   # the build, for the Vue CLI reason in the header comment.
   dev_total="$(cd frontend && npm audit 2>/dev/null | grep -E '^[0-9]+ vulnerabilities|^found ' | tail -1)"
   say "  · dev toolchain (informational, Vue CLI 5): ${dev_total:-none reported}"
+
+  # vuedraggable publishes its Vue 3 line under the `next` dist-tag and leaves
+  # `latest` on the Vue 2 line (latest: 2.24.3, next: 4.1.0 as of 2026-08-11).
+  # We run 4.x, which is correct — but it means `npm outdated` reports our
+  # version as being AHEAD of latest, and `npm i vuedraggable@latest` is a
+  # silent DOWNGRADE to the Vue 2 build that takes drag-and-drop with it (L15).
+  #
+  # package.json is strict JSON and cannot carry the warning, and a note in a
+  # markdown file does not run. This does. Majors, not exact versions: 4.x → 5.x
+  # would be a deliberate upgrade, 4.x → 2.x is the accident.
+  vd="$(cd frontend && node -p "require('./package-lock.json').packages['node_modules/vuedraggable'].version" 2>/dev/null)"
+  vd_major="${vd%%.*}"
+  if [ -n "$vd_major" ] && [ "$vd_major" -lt 4 ] 2>/dev/null; then
+    fail "vuedraggable is on $vd — that is the VUE 2 line" \
+      "npm i vuedraggable@next (4.x). \`@latest\` is 2.x and is a downgrade here."
+  else
+    say "  ✓ vuedraggable on the Vue 3 line (${vd:-unknown}; \`latest\` is 2.x, ours ships as \`next\`)"
+  fi
 fi
 
 # ----------------------------------------------------------------- go --------
