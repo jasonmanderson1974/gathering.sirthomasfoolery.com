@@ -1559,7 +1559,7 @@ removing the gate trips all three assertions, the content one included.
 
 Verified: `go build`, `go vet`, `golangci-lint` (0 issues), full suite green.
 
-### L13 — `vue3-recommended` is not worth adopting; three of its rules are · **P3 · S**
+### L13 — `vue3-recommended` is not worth adopting; three of its rules are · **P3 · S** — DONE 2026-08-11
 
 Recorded so the follow-up noted in `.eslintrc.cjs` ("tightening to `vue3-recommended` is a
 follow-up worth doing on a quiet diff") can be closed with a decision rather than re-litigated.
@@ -1574,13 +1574,69 @@ real hits) and `vue/no-unused-properties` (61 hits, worth a look). Note `vue/no-
 reports 4 and **all four are false positives** — `name-field`, `emailInput`, `datePicker` and
 `calendar` are read from mixins, which the rule cannot see. Don't enable it.
 
-### L14 — a transition that has never had any CSS · **P3 · S**
+**DONE 2026-08-11.** The `vue3-recommended` decision is now recorded in `.eslintrc.cjs` itself, in
+place of the "follow-up worth doing on a quiet diff" note that invited it to be re-litigated. The
+numbers reproduce: 1,941 warnings, 0 errors, all formatting.
+
+`vue/require-explicit-emits` was already `error` from L7. The interesting half was
+`vue/no-unused-properties`, and the outcome is **run it once, bank the findings, do not enable it**:
+
+- The counts reconcile: **23** with the rule's default groups, **61** with
+  `props/data/computed/methods/setup` — the figure in the item was the latter.
+- **19 of the 23 were genuinely dead** and are deleted: five `authUser` entries mapped into
+  components that never read them, five unused `mapActions`/`mapMutations` entries
+  (`showInfo` ×2, `refreshAuthUser`, `deleteFolder`, `getEvents`), and nine props —
+  `selectedGuestRespondent` (EventHeader), `eventId` + `respondents` (ExportCsvMenu), and
+  `days`, `times`, `curRespondent`, `responsesFormatted`, `addingAvailabilityAsGuest`
+  (RespondentsList). `curRespondent` had survived only inside a commented-out expression.
+- **Deleting an unused prop means deleting the parent's binding too**, which is the part that
+  makes this more than a lint fix: in Vue 3 a bound prop the child no longer declares does not
+  error, it falls through to `$attrs` and is rendered as a literal DOM attribute. ScheduleOverlap
+  was passing five of these to RespondentsList from two separate call sites.
+- **Not enabled as a blocking rule**, and the four remaining findings are why. All four are props
+  on ScheduleOverlap read from its own mixins — `interactable`, `showSnackbar`,
+  `animateTimeslotAlways` (`timeslotStylingMixin`), `setAuthUser` (`currentAvailabilityMixin`).
+  This is the same blind spot that disqualified `vue/no-unused-refs`, and it is structural: an
+  ESLint rule sees one file, and A5/A11 deliberately spread these components across mixins, so
+  every future extraction manufactures new false positives. They are the dangerous kind — they read
+  as dead code, and acting on one silently converts a working prop into a DOM attribute.
+- It also flags `right` on `ZigZag`, which is a **true positive that should not be fixed**: the
+  component reads direction as `!left`, but `left`/`right` is a deliberate symmetric API and both
+  call sites pass the bare word. Removing it would make every call site less readable and put
+  `right="true"` in the DOM.
+
+The four mixin-read props now carry a comment naming the mixin that reads them, so the next person
+to grep ScheduleOverlap for them finds the answer instead of a deletion candidate.
+
+### L14 — a transition that has never had any CSS · **P3 · S** — CLOSED 2026-08-11, not a defect
 
 `schedule_overlap/RespondentsList.vue:85` — `<transition-group tag="div" name="list">`. No
 `list-enter*` / `list-leave*` rule exists in any `.vue`, `.css` or `.scss` in the tree, nor in the
 compiled bundle, so the respondent list has never animated. Pre-dates the migration.
 (`CalendarEventBlock`'s `:name="transitionName"` is fine — it resolves to `fade-transition`, which
 Vuetify ships and which is present in the built CSS.) Either add the rules or drop the wrapper.
+
+**CLOSED 2026-08-11 — neither. The premise is wrong: the transition works.**
+
+`RespondentsList.vue` has always carried a `.list-move` rule in its scoped `<style>` block, and it
+ships: `list-move[data-v-3400f90d]{transition:transform .5s}` is in the built CSS. The item
+searched for `list-enter*` / `list-leave*`, found none, and concluded the list had never animated —
+but for a `transition-group`, **`-move` is the class that matters when a list reorders**, and that
+is the only thing this list ever does.
+
+`orderedRespondents` re-sorts on hover: whoever is free at the hovered timeslot floats to the top.
+The `.list-move` transition is what makes them slide instead of jump — it is doing visible work on
+every hover. Items never enter or leave, because the same respondents are always rendered and only
+their order changes, so Vue never applies an enter or leave class and there is nothing for those
+rules to do.
+
+So "add the rules" would add dead CSS, and "drop the wrapper" would delete a working animation.
+Both options in the item are wrong because both follow from the missing `.list-move`. The rule now
+carries a comment saying what it animates and why its siblings are absent, so the absence stops
+reading as an omission.
+
+(The general lesson is the same one L9 and L11 produced: the finding named a *file* it had not
+finished reading. Here `grep list-enter` was run and `grep list-` was not.)
 
 ### L15 — dependency drift and a Go version skew · **P3 · S**
 

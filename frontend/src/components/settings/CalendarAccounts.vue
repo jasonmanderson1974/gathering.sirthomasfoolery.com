@@ -157,7 +157,7 @@ export default {
   },
 
   methods: {
-    ...mapActions(["showError", "showInfo", "refreshAuthUser"]),
+    ...mapActions(["showError"]),
     ...mapMutations(["setAuthUser"]),
     addGoogleCalendar() {
       signInGoogle({

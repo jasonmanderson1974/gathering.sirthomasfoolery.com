@@ -114,7 +114,7 @@
 
 <script>
 import { isPhone } from "@/utils"
-import { mapActions, mapState } from "vuex"
+import { mapState } from "vuex"
 import CalendarPermissionsCard from "./CalendarPermissionsCard"
 import CreateAccount from "./CreateAccount"
 import AppleCredentials from "./AppleCredentials"
@@ -166,7 +166,6 @@ export default {
   },
 
   methods: {
-    ...mapActions(["showInfo"]),
     setAvailabilityManually() {
       this.$emit("setAvailabilityManually")
     },

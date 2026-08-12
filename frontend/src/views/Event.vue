@@ -108,7 +108,6 @@
               :actionButtonText="actionButtonText"
               :loading="loading"
               :userHasResponded="userHasResponded"
-              :selectedGuestRespondent="selectedGuestRespondent"
               :availabilityBtnOpacity="availabilityBtnOpacity"
               @edit-event="editEvent"
               @copy-link="copyLink"
@@ -685,7 +684,7 @@ export default {
   },
 
   methods: {
-    ...mapActions(["showError", "showInfo", "getEvents"]),
+    ...mapActions(["showError", "showInfo"]),
     ...mapMutations(["setAuthUser"]),
 
     /**

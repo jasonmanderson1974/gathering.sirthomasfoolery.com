@@ -96,7 +96,6 @@
 
 <script>
 import { isPhone } from "@/utils"
-import { mapState } from "vuex"
 
 /**
  * Event page header: title (+ when2meet chip), date
@@ -116,7 +115,6 @@ export default {
     actionButtonText: { type: String, default: "" },
     loading: { type: Boolean, default: false },
     userHasResponded: { type: Boolean, default: false },
-    selectedGuestRespondent: { default: null },
     availabilityBtnOpacity: { type: Number, default: 1 },
   },
 
@@ -134,7 +132,6 @@ export default {
   data: () => ({}),
 
   computed: {
-    ...mapState(["authUser"]),
     isPhone() {
       return isPhone(this.$vuetify)
     },

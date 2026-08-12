@@ -63,7 +63,6 @@
 
 <script>
 import { isIOS } from "@/utils"
-import { mapState } from "vuex"
 
 /**
  * Fixed bottom action bar shown on phones: schedule / mark availability in
@@ -98,7 +97,6 @@ export default {
   ],
 
   computed: {
-    ...mapState(["authUser"]),
     isIOS() {
       return isIOS()
     },

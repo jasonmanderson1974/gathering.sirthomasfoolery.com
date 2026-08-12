@@ -26,8 +26,6 @@
           <v-spacer />
           <ExportCsvMenu
             :event="event"
-            :eventId="eventId"
-            :respondents="respondents"
             :parsedResponses="parsedResponses"
             :timezone="timezone"
           />
@@ -327,6 +325,18 @@
 </template>
 
 <style scoped>
+/*
+ * The move transition for the `name="list"` transition-group above, and it is
+ * doing real work every time you hover a timeslot: `orderedRespondents` re-sorts
+ * so whoever is free at the hovered slot floats to the top, and this is what
+ * makes them slide rather than jump.
+ *
+ * There are deliberately no `list-enter-*` / `list-leave-*` rules (L14). Items
+ * in this list do not enter or leave during normal use — the same respondents
+ * are always rendered, only their order changes — so `-move` is the only class
+ * Vue ever applies here. Their absence was once read as "this transition has
+ * never had any CSS"; it hasn't needed any.
+ */
 .list-move {
   transition: transform 0.5s;
 }
@@ -335,7 +345,7 @@
 <script>
 import { _delete, isPhone, displayName } from "@/utils"
 import UserAvatarContent from "../UserAvatarContent.vue"
-import { mapState, mapActions } from "vuex"
+import { mapActions } from "vuex"
 import EventOptions from "./EventOptions.vue"
 import OverflowGradient from "@/components/OverflowGradient.vue"
 import ExportCsvMenu from "./ExportCsvMenu.vue"
@@ -353,10 +363,7 @@ export default {
   props: {
     eventId: { type: String, required: true },
     event: { type: Object, required: true },
-    days: { type: Array, required: true },
-    times: { type: Array, required: true },
     curDate: { type: Date, required: false }, // Date of the current timeslot
-    curRespondent: { type: String, required: true },
     curRespondents: { type: Array, required: true },
     curTimeslot: { type: Object, required: true },
     curTimeslotAvailability: { type: Object, required: true },
@@ -364,7 +371,6 @@ export default {
     parsedResponses: { type: Object, required: true },
     isOwner: { type: Boolean, required: true },
     maxHeight: { type: Number },
-    responsesFormatted: { type: Map, required: true },
     timezone: { type: Object, required: true },
     showBestTimes: { type: Boolean, required: true },
     hideIfNeeded: { type: Boolean, required: true },
@@ -377,7 +383,6 @@ export default {
     showCalendarEvents: { type: Boolean, default: false },
     hasCalendarEvents: { type: Boolean, default: false },
     showEventOptions: { type: Boolean, required: true },
-    addingAvailabilityAsGuest: { type: Boolean, required: true },
   },
 
   emits: [
@@ -410,7 +415,6 @@ export default {
   },
 
   computed: {
-    ...mapState(["authUser"]),
     allowExportCsv() {
       if (this.isPhone) return false
 

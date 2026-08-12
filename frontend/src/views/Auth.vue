@@ -4,15 +4,11 @@
 
 <script>
 import { get, post } from "@/utils"
-import { mapMutations, mapState } from "vuex"
+import { mapMutations } from "vuex"
 import { authTypes, calendarTypes } from "@/constants"
 
 export default {
   name: "Auth",
-
-  computed: {
-    ...mapState(["authUser"]),
-  },
 
   methods: {
     ...mapMutations(["setAuthUser"]),

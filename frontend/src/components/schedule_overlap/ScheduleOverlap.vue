@@ -762,10 +762,7 @@
                   ref="respondentsList"
                   :event="event"
                   :eventId="event._id"
-                  :days="allDays"
-                  :times="times"
                   :curDate="getDateFromRowCol(curTimeslot.row, curTimeslot.col)"
-                  :curRespondent="curRespondent"
                   :curRespondents="curRespondents"
                   :curTimeslot="curTimeslot"
                   :curTimeslotAvailability="curTimeslotAvailability"
@@ -775,14 +772,12 @@
                   :attendees="event.attendees"
                   v-model:showCalendarEvents="showCalendarEvents"
                   :hasCalendarEvents="hasCalendarEvents"
-                  :responsesFormatted="responsesFormatted"
                   :timezone="curTimezone"
                   v-model:show-best-times="showBestTimes"
                   v-model:hide-if-needed="hideIfNeeded"
                   v-model:show-response-counts="showResponseCounts"
                   v-model:start-calendar-on-monday="startCalendarOnMonday"
                   :show-event-options="showEventOptions"
-                  :addingAvailabilityAsGuest="addingAvailabilityAsGuest"
                   @toggleShowEventOptions="toggleShowEventOptions"
                   @addAvailability="$emit('addAvailability')"
                   @addAvailabilityAsGuest="$emit('addAvailabilityAsGuest')"
@@ -889,10 +884,7 @@
                   :max-height="100"
                   :event="event"
                   :eventId="event._id"
-                  :days="allDays"
-                  :times="times"
                   :curDate="getDateFromRowCol(curTimeslot.row, curTimeslot.col)"
-                  :curRespondent="curRespondent"
                   :curRespondents="curRespondents"
                   :curTimeslot="curTimeslot"
                   :curTimeslotAvailability="curTimeslotAvailability"
@@ -902,13 +894,11 @@
                   :attendees="event.attendees"
                   v-model:showCalendarEvents="showCalendarEvents"
                   :hasCalendarEvents="hasCalendarEvents"
-                  :responsesFormatted="responsesFormatted"
                   :timezone="curTimezone"
                   v-model:show-best-times="showBestTimes"
                   v-model:hide-if-needed="hideIfNeeded"
                   v-model:show-response-counts="showResponseCounts"
                   :show-event-options="showEventOptions"
-                  :addingAvailabilityAsGuest="addingAvailabilityAsGuest"
                   @toggleShowEventOptions="toggleShowEventOptions"
                   @addAvailability="$emit('addAvailability')"
                   @addAvailabilityAsGuest="$emit('addAvailabilityAsGuest')"
@@ -1062,9 +1052,15 @@ export default {
     noEventNames: { type: Boolean, default: false }, // Whether to show "busy" instead of the event name
     calendarOnly: { type: Boolean, default: false }, // Whether to only show calendar and not respondents or any other controls
     collapsed: { type: Boolean, default: false }, // Whether to render nothing at all (gathering already scheduled) while staying mounted
-    interactable: { type: Boolean, default: true }, // Whether to allow user to interact with component
-    showSnackbar: { type: Boolean, default: true }, // Whether to show snackbar when availability is automatically filled in
-    animateTimeslotAlways: { type: Boolean, default: false }, // Whether to animate timeslots all the time
+    // These three are read from MIXINS, not from anything in this file, so a
+    // grep of ScheduleOverlap.vue alone says they are dead and they are not
+    // (L13). `vue/no-unused-properties` reports all three for the same reason —
+    // an ESLint rule sees one file — which is why that rule is deliberately not
+    // enabled; see frontend/.eslintrc.cjs. Deleting one does NOT raise an error:
+    // Vue 3 turns the parent's binding into a plain DOM attribute and carries on.
+    interactable: { type: Boolean, default: true }, // Whether to allow user to interact with component — read in timeslotStylingMixin
+    showSnackbar: { type: Boolean, default: true }, // Whether to show snackbar when availability is automatically filled in — read in currentAvailabilityMixin
+    animateTimeslotAlways: { type: Boolean, default: false }, // Whether to animate timeslots all the time — read in timeslotStylingMixin
     showHintText: { type: Boolean, default: true }, // Whether to show the hint text telling user what to do
 
     curGuestId: { type: String, default: "" }, // Id of the current guest being edited

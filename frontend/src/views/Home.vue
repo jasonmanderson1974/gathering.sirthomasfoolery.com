@@ -69,7 +69,7 @@ export default {
   },
 
   computed: {
-    ...mapState(["events", "authUser"]),
+    ...mapState(["events"]),
     ...mapGetters(["canCreateEvents"]),
     eventsNotEmpty() {
       return this.events.length > 0

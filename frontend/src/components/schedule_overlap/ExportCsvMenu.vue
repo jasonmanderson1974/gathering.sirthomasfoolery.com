@@ -58,8 +58,6 @@ export default {
 
   props: {
     event: { type: Object, required: true },
-    eventId: { type: String, required: true },
-    respondents: { type: Array, required: true },
     parsedResponses: { type: Object, required: true },
     timezone: { type: Object, required: true },
   },

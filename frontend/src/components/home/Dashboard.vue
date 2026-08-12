@@ -378,7 +378,6 @@ export default {
   methods: {
     ...mapActions([
       "createFolder",
-      "deleteFolder",
       "setEventFolder",
       "updateFolder",
       "createNew",
