@@ -2400,6 +2400,22 @@ hover does not exist, the same card opens on tap.
   the card's wrapper** and asserts `mouseOverRespondent` still emits, because "tidying" either
   listener to match the other would silently stop the grid following the pointer, on a page that
   still renders perfectly.
+- **Its avatar carries no card, and finding out why is the most useful thing in this item.** The
+  first version wrapped it, and the wrapper was **unreachable**: the select-respondent checkbox is
+  absolutely positioned over that exact 16px square (and fades *in* on row hover), so
+  `elementFromPoint` at the avatar's centre returns the checkbox `INPUT`. The card was correct in
+  the DOM, correct in a mount test, and could never open for a human. It looked fine in this
+  check too, because the check's own hover helper uses `dispatchEvent`, which **bypasses hit
+  testing by definition**. What caught it was moving a real pointer with
+  `Input.dispatchMouseEvent`. So the name carries the card and the avatar does not.
+- **That produced a new assertion, and the first draft of it was worthless.**
+  `check:routes` now hit-tests **every** `[data-member-hover]` — is the element under its own
+  centre the trigger itself? The first version measured with no viewport set (the desktop-routes
+  loop that sets one is skipped under `--only`), so every trigger landed off-screen, none was
+  tested, and it reported **PASS while the bug was still in the tree**. It now scrolls each trigger
+  to the centre first and **fails when it tested nothing**, and it was verified in both directions —
+  red with the avatar wrapped (`1/2 covered: A under INPUT`), green without. An assertion that has
+  never been seen to fail is not evidence.
 - **The byline in Lists is the entry's history, and all three names on it are hoverable** — who
   wrote it, who it is for, who last ticked it. The entry stores an id for each (`userId`,
   `assigneeId`, `checkedBy`), so none of them is ever matched by name; two members who share one
@@ -2440,6 +2456,16 @@ a production build clean, and `browser-check.sh --dev` **ALL PASS** including th
 unscoped match would pass with the card broken), and the avatar measured at 96px in a real browser.
 Screenshotted at 1280 and at 390px: 200x218 on the phone, no horizontal scroll; and on the event
 page, where the card lands in the sidebar above the respondent with the schedule grid unobscured.
+
+Two of the check's own assertions were flaky before they were trustworthy, both for the same
+reason and both worth knowing: an overlay is **animated**, so it is measured at the wrong moment
+unless you wait for the thing you are actually asserting. The avatar read **68px** mid-scale
+(`getBoundingClientRect` reports the transformed box — a real measurement of a real element at the
+wrong instant, which is the most convincing kind of wrong number), and the card's text read empty
+on a slow pass because the poll stopped at "is there any text yet?" rather than at the assertion's
+own predicate. Both now poll on what they assert, with the component's 500ms open delay as a floor
+and a ceiling beyond which a genuinely broken card still fails. Confirmed stable over three
+section runs and two full runs.
 
 **Deployed `190b452`**, then the respondents list, the Lists byline history and the `accountId()`
 guard followed. Post-deploy verification on production was assert-only by design — this feature's

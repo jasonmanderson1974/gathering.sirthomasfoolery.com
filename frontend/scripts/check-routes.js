@@ -94,6 +94,10 @@ if (!rawBase || !COOKIE || !EVENT_ID) {
 const BASE = rawBase.replace(/\/$/, "")
 const HOST = new URL(BASE).hostname
 
+// The hover card's own open delay (MemberHoverCard.OPEN_DELAY_MS). Nothing can
+// appear before this, so it is a floor to wait out rather than a timeout.
+const OPEN_DELAY_FLOOR_MS = 600
+
 const DESKTOP = { width: 1280, height: 900, mobile: false }
 const PHONE = { width: 390, height: 844, mobile: true }
 
@@ -126,6 +130,51 @@ const hoverMember = (n = 0) => `(() => {
   if (els.length <= ${n}) return 'ONLY ' + els.length + ' TRIGGER(S)'
   els[${n}].dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }))
   return 'ok'
+})()`
+
+/**
+ * How many hover-card triggers a real pointer could never reach.
+ *
+ * A trigger can sit perfectly in the DOM, wrap the right person, pass every
+ * mount test — and be covered by something absolutely positioned on top of it,
+ * at which point it can never open. That is not hypothetical: the respondents
+ * list positions its select-respondent checkbox over the 16px avatar and fades
+ * it in on row hover, so a card wrapped round that avatar was dead on arrival.
+ * Nothing else in the repo can see this. The `dom` tier has no layout and
+ * therefore no hit testing, and `dispatchEvent` on an element bypasses hit
+ * testing by definition — which is why the check's own hover helper, which must
+ * use it, cannot double as this assertion.
+ *
+ * `elementFromPoint` at the trigger's centre is the browser's own answer to
+ * "what would the mouse hit here". Triggers scrolled outside the viewport are
+ * skipped rather than counted: they have no meaningful centre, and being
+ * below the fold is not the same defect.
+ */
+const hoverTriggerReachability = `(() => {
+  const covered = []
+  let tested = 0
+  for (const el of document.querySelectorAll('[data-member-hover]')) {
+    // Scrolled to the middle first, so the centre being tested is genuinely
+    // inside the viewport. Without this the whole check degrades to "every
+    // trigger was off-screen, nothing to test" and passes over the bug — which
+    // is how the first version of this assertion managed to stay green while
+    // the respondents-list avatar was provably unreachable.
+    el.scrollIntoView({ block: 'center', inline: 'center' })
+    const r = el.getBoundingClientRect()
+    if (r.width === 0 || r.height === 0) continue
+    const cx = r.left + r.width / 2
+    const cy = r.top + r.height / 2
+    if (cx < 0 || cy < 0 || cx >= window.innerWidth || cy >= window.innerHeight) continue
+    tested++
+    const top = document.elementFromPoint(cx, cy)
+    if (!top || !(el === top || el.contains(top))) {
+      covered.push(
+        ((el.innerText || '').trim().slice(0, 16) || '(no text)') +
+          ' under ' + (top ? top.tagName : 'nothing')
+      )
+    }
+  }
+  return JSON.stringify({ tested, covered })
 })()`
 
 /**
@@ -515,6 +564,41 @@ async function shoot(cdp, label) {
   }
 }
 
+/**
+ * Reports whether every hover-card trigger on the current page can actually be
+ * hit by a pointer — and refuses to pass when it tested nothing.
+ *
+ * The "tested > 0" half is not belt-and-braces. The first version of this
+ * assertion had no viewport set (the desktop-routes loop that sets one is
+ * skipped under `--only`), so every trigger measured off-screen, none was
+ * tested, and it reported PASS while the respondents-list avatar was provably
+ * unreachable. An assertion that cannot fail is worse than no assertion,
+ * because it gets quoted as evidence.
+ */
+async function reportReachability(cdp, label) {
+  const raw = await evaluate(cdp, hoverTriggerReachability)
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch (e) {
+    report(
+      false,
+      `${label} — every trigger is reachable by a pointer`,
+      `${raw}`
+    )
+    return
+  }
+  report(
+    parsed.tested > 0 && parsed.covered.length === 0,
+    `${label} — every trigger is reachable by a pointer`,
+    parsed.tested === 0
+      ? "tested none — no trigger was on screen, so this proved nothing"
+      : `${parsed.covered.length}/${
+          parsed.tested
+        } covered: ${parsed.covered.join("; ")}`
+  )
+}
+
 async function setViewport(cdp, vp) {
   await cdp("Emulation.setDeviceMetricsOverride", {
     width: vp.width,
@@ -708,6 +792,10 @@ async function main() {
 
     if (selected("member hover card")) {
       console.log("\n--- member hover card ---")
+      // Set explicitly: the desktop-routes loop that normally does this is
+      // skipped under `--only`, and every geometry assertion below is
+      // meaningless without a known viewport.
+      await setViewport(cdp, DESKTOP)
       // The Fellowship is the one page guaranteed to render a trigger for every
       // member of the seeded club, whatever else is or isn't in the fixture.
       await visit(cdp, events, `${BASE}/fellowship`, "fellowship (hover)", {
@@ -718,12 +806,24 @@ async function main() {
       report(hovered === "ok", "member hover card — trigger present", hovered)
 
       if (hovered === "ok") {
-        // Longer than the component's own 500ms open delay, with room for the
-        // roll fetch and the overlay's transition. The delay is deliberate
-        // behaviour, so this cannot be tightened without testing something
-        // other than what a person experiences.
-        await sleep(1400)
-        const text = await evaluate(cdp, hoverCardText)
+        // Polled rather than slept, with the component's own 500ms open delay
+        // as a FLOOR and ~5s as the ceiling. A flat wait was enough in a
+        // one-section run and not in a full one, where the card has the roll
+        // fetch and an overlay transition to get through on a busier page —
+        // which surfaced as an empty card and read like a broken feature.
+        // Polled on THIS assertion's own predicate, not on a proxy for it
+        // ("is there any text yet?"), which is what made it flaky: the card
+        // renders its avatar before its text lays out, so a poll that stopped
+        // at "non-empty" could still read an empty string on a slow pass. The
+        // component's 500ms open delay is a floor to wait out first; ~6s is the
+        // ceiling, after which a genuinely broken card fails as it should.
+        await sleep(OPEN_DELAY_FLOOR_MS)
+        let text = ""
+        for (let waited = 0; waited < 6000; waited += 250) {
+          text = await evaluate(cdp, hoverCardText)
+          if (typeof text === "string" && /\+15550100/.test(text)) break
+          await sleep(250)
+        }
         report(
           typeof text === "string" && /\+15550100/.test(text),
           "member hover card — opens with the member's details",
@@ -731,19 +831,47 @@ async function main() {
         )
         // The 96px avatar is the request; a card that rendered the 40px byline
         // avatar would satisfy every other line here.
+        //
+        // Scoped to the VISIBLE overlay, not to the first `.v-overlay__content`
+        // in document order. Vuetify leaves overlay containers in the DOM, so
+        // the loose selector could measure an avatar belonging to some other
+        // (closed) overlay entirely — which is what it did on a full run while
+        // passing on a single-section one.
+        //
+        // Polled until it settles, because Vuetify SCALES the overlay in and
+        // `getBoundingClientRect` reports the transformed box. Measured the
+        // instant the text appears it reads 68px mid-animation — a real
+        // measurement of a real element at the wrong moment, which is the most
+        // convincing kind of wrong number.
+        const measureAvatar = `(() => {
+            const panel = [...document.querySelectorAll('.v-overlay__content')]
+              .filter((e) => e.getBoundingClientRect().height > 0)[0]
+            if (!panel) return 'NO CARD'
+            const av = panel.querySelector('.v-avatar')
+            if (!av) return 'NO AVATAR'
+            return Math.round(av.getBoundingClientRect().width)
+          })()`
+        let avatarPx = await evaluate(cdp, measureAvatar)
+        for (let waited = 0; waited < 2000 && avatarPx !== 96; waited += 200) {
+          await sleep(200)
+          avatarPx = await evaluate(cdp, measureAvatar)
+        }
         report(
-          (await evaluate(
-            cdp,
-            `(() => {
-              const img = document.querySelector('.v-overlay__content .v-avatar')
-              if (!img) return 'NO AVATAR'
-              return Math.round(img.getBoundingClientRect().width)
-            })()`
-          )) === 96,
-          "member hover card — avatar at the Settings size"
+          avatarPx === 96,
+          "member hover card — avatar at the Settings size",
+          `measured ${avatarPx}`
         )
         await shoot(cdp, "member-hover-card")
       }
+
+      await reportReachability(cdp, "member hover card")
+
+      // The event page is where triggers share rows with controls, so it is
+      // where being covered by one is likely rather than theoretical.
+      await visit(cdp, events, `${BASE}/e/${EVENT_ID}`, "event (hover)", {
+        ready: buttonMatching("/^Discussion/"),
+      })
+      await reportReachability(cdp, "event page")
     }
 
     const phonePages = [

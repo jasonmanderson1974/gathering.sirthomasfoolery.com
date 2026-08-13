@@ -299,7 +299,13 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
   row, which *is* its own toggle. `RespondentsList` shares a gesture and still works, because the
   two listeners are different events: the row highlights availability on `@mouseover`, which
   **bubbles** and so still fires from inside the card's wrapper, while the card opens on
-  `mouseenter`, which does not. Three things to know before touching it:
+  `mouseenter`, which does not. Its **name** carries the card and its **avatar deliberately does
+  not** — the select-respondent checkbox is positioned absolutely over that 16px square, so a
+  pointer aimed there hits the checkbox and a card wrapped round the avatar can never open. That
+  fault is invisible to every tier but a real browser (no layout ⇒ no hit testing), which is why
+  `check:routes` now asserts that **every** `[data-member-hover]` is what `elementFromPoint`
+  returns at its own centre — and refuses to pass when it tested none, having once gone green doing
+  exactly that. Three things to know before touching it:
   **the details are joined client-side, not read off the object beside it** — the server blanks
   `Phone` on every event payload (`stripSensitiveUserFields`) and drops the email too for comment
   authors, so the card reads `store/people.js`, filled from `/admin/allowlist` for member+ and from

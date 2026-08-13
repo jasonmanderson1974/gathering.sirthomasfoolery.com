@@ -68,9 +68,14 @@ describe("RespondentsList — hover card alongside the grid highlight", () => {
     expect(emitted[0][1]).toBe(BART._id)
   })
 
-  it("wraps both the avatar and the name for an account", async () => {
+  it("wraps the name only — the avatar is covered by the checkbox", async () => {
+    // ONE, not two. The select-respondent checkbox is positioned absolutely
+    // over the 16px avatar, so a card there could never open for a real
+    // pointer. This tier cannot see that (no layout ⇒ no hit testing), which is
+    // why the count is pinned here and the reachability of every trigger is
+    // asserted in `check:routes`, where there is a real browser to ask.
     await mountList([BART])
-    expect(triggers().length).toBe(2)
+    expect(triggers().length).toBe(1)
   })
 
   it("leaves a guest alone — their id is their own name", async () => {

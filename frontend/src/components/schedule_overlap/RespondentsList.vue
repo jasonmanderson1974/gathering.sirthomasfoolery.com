@@ -95,18 +95,21 @@
             >
               <div class="tw-relative tw-flex tw-items-center">
                 <div class="tw-ml-1 tw-mr-3">
-                  <!-- The row's own @mouseover still fires: it BUBBLES, so
-                       hovering the card's wrapper highlights this respondent's
-                       availability exactly as before. The card's own trigger is
-                       `mouseenter`, which does not bubble, so the two listeners
-                       never see each other's events. -->
-                  <MemberHoverCard
+                  <!-- NO hover card on this avatar, and it is not an oversight:
+                       the select-respondent checkbox below is positioned
+                       absolutely over this exact 16px square (and fades IN on
+                       row hover), so a real pointer aimed here lands on the
+                       checkbox, never on the avatar. A card wrapped round it
+                       looks correct in the DOM, passes a mount test — which has
+                       no layout and so no hit testing — and can never open.
+                       Verified with Input.dispatchMouseEvent: elementFromPoint
+                       at this centre returns the checkbox INPUT. The name
+                       beside it carries the card instead. -->
+                  <UserAvatarContent
                     v-if="!isGuest(user)"
-                    :user-id="user._id"
-                    :fallback="user"
-                  >
-                    <UserAvatarContent :user="user" :size="16" />
-                  </MemberHoverCard>
+                    :user="user"
+                    :size="16"
+                  ></UserAvatarContent>
                   <v-avatar v-else :size="16">
                     <v-icon size="small">mdi-account</v-icon>
                   </v-avatar>
