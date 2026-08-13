@@ -327,7 +327,11 @@ const routes = (eventId) => [
     path: "/settings",
     assertions: [
       ["renders", "document.querySelectorAll('#app *').length > 100"],
-      ["offers avatar upload", buttonMatching("/add photo/i")],
+      // Either label — `Settings.vue` renders `hasAvatar ? "Change photo" :
+      // "Add photo"`, so pinning to "Add photo" asserted the seed fixture's
+      // avatar-less account rather than the control existing. It failed against
+      // an account that has a photo, which is not a defect.
+      ["offers avatar upload", buttonMatching("/(add|change) photo/i")],
       ["offers calendar linking", buttonMatching("/add calendar/i")],
       ["offers account deletion", buttonMatching("/delete account/i")],
     ],
@@ -354,7 +358,31 @@ const routes = (eventId) => [
     name: "chronicle",
     path: "/chronicle",
     assertions: [
-      ["renders", "document.querySelectorAll('#app *').length > 100"],
+      // An element count asserted the environment's DATA VOLUME, not the view.
+      // `Chronicle.vue` has three states — loading, empty, entries — and 100 is
+      // above what a real but modest chronicle produces: production renders
+      // several entries in 71 elements and failed this, while the seed
+      // fixture's chronicle clears 100 comfortably. So it passed on the fixture
+      // and nowhere else.
+      //
+      // Assert the two things that are actually the view's job instead: it
+      // mounted (the header is outside all three branches, so it is the one
+      // stable marker), and it is no longer loading. That is state-independent
+      // — empty and populated both pass, a page stuck on the spinner does not —
+      // and it still works as this route's readiness signal (see `ready`
+      // below), since the header only appears once the view mounts.
+      //
+      // It deliberately does NOT assert that entries exist: `Chronicle.vue`
+      // catches a failed `/chronicle` fetch and sets `entries = []` without
+      // logging, so an outage and an empty chronicle are the same DOM. Nothing
+      // here can tell them apart — not even "no console errors" — and an
+      // assertion implying otherwise would be false comfort.
+      [
+        "renders",
+        `/A record of gatherings past/i` +
+          `.test(document.body.innerText.replace(/\\s+/g, ' ')) &&` +
+          ` document.querySelectorAll('.v-progress-circular').length === 0`,
+      ],
     ],
   },
   {
@@ -362,7 +390,14 @@ const routes = (eventId) => [
     path: `/e/${eventId}`,
     assertions: [
       ["renders", "document.querySelectorAll('#app *').length > 400"],
-      ["offers availability entry", buttonMatching("/mark availability/i")],
+      // Either label — `Event.vue` renders `userHasResponded ? "Edit
+      // availability" : "Mark availability"`. Pinning to "Mark" asserted that
+      // the signed-in member had not yet responded to this event, which is
+      // fixture state, not behaviour.
+      [
+        "offers availability entry",
+        buttonMatching("/(mark|edit) availability/i"),
+      ],
       ["offers scheduling", buttonMatching("/schedule event/i")],
       ["shows the band tab row", buttonMatching("/^Discussion/")],
       ["exactly one band panel visible", `${visibleBandPanels} === 1`],
