@@ -2708,7 +2708,7 @@ sat empty.
 
 ## PART P — toolchain (opened 2026-08-13)
 
-### P1 — eight new Go stdlib advisories, and production is built on the affected version · **P1 · S** — OPEN
+### P1 — eight new Go stdlib advisories, and production is built on the affected version · **P1 · S** — DONE 2026-08-13
 
 `dependency-audit.yml` went red on 2026-08-13. **Not caused by the commit it failed on** — Part O
 touched neither `server/go.mod` nor `server/go.sum`, so the dependency graph is byte-identical to
@@ -2734,6 +2734,24 @@ toolchain bump, not a code change:
 
 Note L15's warning while doing it: a `toolchain` line in `go.mod` is a floor, not a pin —
 `GOTOOLCHAIN=go1.26.x` is what pins. Do not downgrade this shared box.
+
+**Done.** The build box went 1.26.5 → **1.26.6** (checksum verified against go.dev's own manifest;
+the previous tree is kept at `/usr/local/go1.26.5-backup`, so the way back is a `mv`), and
+production was redeployed on it — which is the step that actually patches the running binary, since
+`deploy.sh` builds here. `scripts/dependency-audit.sh` is back to `GO-2026-5932` alone, so the
+allowlist needed no change: every one of the eight was a standard-library finding that a patched
+toolchain simply removes.
+
+**The interesting half was CI, and it is why this was reported at all.** All three workflows pinned
+`go-version: "1.25"` while production is built on the 1.26 line. govulncheck grades the standard
+library of the toolchain it runs under, so **the audit was reporting on a stdlib we do not ship** —
+it could as easily have stayed green while production was vulnerable, which is the more dangerous
+direction of the same skew. All three now track 1.26.
+
+`go.mod`'s `go 1.25.0` is deliberately unchanged: that is the LANGUAGE level, and lowering the
+toolchain to match it would have been the wrong fix to the wrong number. The 1.25 line's own fix
+(1.25.13) exists, so pinning CI back there would also have worked — matching the build box is what
+makes the gate mean something.
 
 ---
 

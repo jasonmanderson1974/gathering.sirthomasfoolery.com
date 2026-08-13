@@ -90,7 +90,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          # Kept in step with backend-ci and dependency-audit — all three now
+          # track the line production is built with (P1).
+          go-version: "1.26"
           cache-dependency-path: server/go.sum
 
       # Preinstalled on the GitHub-hosted Ubuntu images, but assert it rather

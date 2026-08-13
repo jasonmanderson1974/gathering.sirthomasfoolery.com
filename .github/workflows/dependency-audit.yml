@@ -55,7 +55,15 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          # The line PRODUCTION IS BUILT WITH, not the one go.mod names as its
+          # language floor. deploy.sh builds on the dev box, which is on the
+          # 1.26 line, and govulncheck reports against the toolchain it runs
+          # under — so auditing 1.25 here graded a standard library we do not
+          # ship. That is how eight stdlib advisories (P1) were reported against
+          # a binary that may or may not have had them. Keep this in step with
+          # the build box; the minor line is enough, the patch resolves to the
+          # newest, which is what carries the fixes.
+          go-version: "1.26"
           cache-dependency-path: server/go.sum
 
       # npm audit reads package-lock.json and does not need node_modules, but

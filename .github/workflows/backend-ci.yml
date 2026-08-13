@@ -39,7 +39,11 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          # Matches the build box and dependency-audit.yml. go.mod's `go 1.25.0`
+          # stays as it is: that is the LANGUAGE level, not the toolchain, and
+          # lowering the toolchain to match it would put CI on a standard
+          # library production never runs.
+          go-version: "1.26"
           cache-dependency-path: server/go.sum
 
       # Compiles the whole server (main package + all its imports). The one-off
