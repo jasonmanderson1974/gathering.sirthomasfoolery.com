@@ -25,7 +25,22 @@ export const registerServiceWorker = ({ onUpdateReady } = {}) => {
 
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register(SW_URL)
+      // updateViaCache: "none" — the browser must go to the network for this
+      // script and its imports on every update check, never to the HTTP cache.
+      //
+      // Not belt-and-braces. Verified against production: Cloudflare's default
+      // Browser Cache TTL REWRITES our `Cache-Control: no-cache` on this file
+      // to `max-age=14400`, because it applies to any extension it considers
+      // cacheable and only defers to the origin when the origin asks for
+      // LONGER (the hashed bundles keep their `immutable`, which is how J4
+      // survives). The default here is "imports", which happens to bypass the
+      // cache for the main script anyway — but the whole rollback story rests
+      // on this file always being refetchable, and that must not depend on a
+      // default we did not choose or on a CDN setting we do not control from
+      // this repo.
+      const registration = await navigator.serviceWorker.register(SW_URL, {
+        updateViaCache: "none",
+      })
 
       registration.addEventListener("updatefound", () => {
         const installing = registration.installing

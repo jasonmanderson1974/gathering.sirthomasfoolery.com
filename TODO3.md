@@ -2593,6 +2593,14 @@ asserts the registration and every cache are gone and the app still renders with
 rollback" was not a claim worth making on the strength of having written the file, given that the
 failure it guards against is unrecoverable.
 
+**Found by the post-deploy curl, not by anything in the repo:** Cloudflare's default Browser Cache
+TTL rewrites the worker's `Cache-Control: no-cache` to `max-age=14400` on the live site. It applies
+to every extension it treats as cacheable and defers to the origin only when the origin asks for
+longer — so the hashed bundles keep `immutable` (J4 intact) and `robots.txt` and the worker do not.
+The registration now passes `updateViaCache: "none"`, which takes the browser to the network for
+this script on every update check whatever the header says. An edge cache rule bypassing
+`/service-worker.js` would also fix it but is a dashboard change, so the repo does not depend on one.
+
 `check-routes.js` gains an `offline` section — the only tier that can check any of this, since the
 unit tiers have no worker, no Cache Storage and no navigation. It asserts the worker's own response
 headers (the direct guard on J11's trap), that the shell and route chunks are cached, and that a

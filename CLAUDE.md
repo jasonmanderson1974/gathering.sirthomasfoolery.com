@@ -333,6 +333,15 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
     worker served as `text/html` fails its update check **on the MIME type** rather than updating,
     and this server answers any unmatched path with the SPA shell as `text/html`. Get it wrong and
     the client is pinned to a dead build with no remedy. `service_worker_route_test.go` asserts it.
+  - **Cloudflare rewrites that `no-cache` and we cannot fix it from this repo.** Measured on
+    production: its default Browser Cache TTL turns the worker's header into `max-age=14400`,
+    because it applies to any extension it thinks cacheable and only defers to the origin when the
+    origin asks for **longer** — which is why the hashed bundles keep their `immutable` and J4 is
+    unaffected, while `robots.txt` and the worker are rewritten. The registration therefore passes
+    **`updateViaCache: "none"`** (`utils/offline/sw.js`), forcing the browser to the network for
+    this script on every update check regardless. A Cloudflare cache rule bypassing
+    `/service-worker.js` would fix it at the edge too, but that is a dashboard change, so don't
+    assume it exists — re-check with `curl -I` after any CDN change.
   - **No `skipWaiting` on install.** A deploy deletes the previous build's hashed chunks, so a
     worker taking over mid-session could leave a running tab asking for a chunk the new precache
     does not name. The new worker waits and `App.vue` offers a "new version — reload" snackbar.
