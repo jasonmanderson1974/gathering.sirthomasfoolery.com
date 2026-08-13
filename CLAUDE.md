@@ -295,9 +295,11 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
   `components/general/MemberHoverCard.vue` wraps an avatar or a name and opens a card — 96px avatar,
   nickname, real name, email, phone — after 500ms of hover, or on tap where there is no hover. That
   one rule is what keeps it out of the assignee picker, the mention autocomplete, the invite composer
-  and the expense form, where the gesture is already spoken for; out of `RespondentsList`, where
-  hovering highlights that member's availability in the grid a card would cover; and out of the
-  Settle Up balance row, which *is* its own toggle. Three things to know before touching it:
+  and the expense form, where the gesture is already spoken for; and out of the Settle Up balance
+  row, which *is* its own toggle. `RespondentsList` shares a gesture and still works, because the
+  two listeners are different events: the row highlights availability on `@mouseover`, which
+  **bubbles** and so still fires from inside the card's wrapper, while the card opens on
+  `mouseenter`, which does not. Three things to know before touching it:
   **the details are joined client-side, not read off the object beside it** — the server blanks
   `Phone` on every event payload (`stripSensitiveUserFields`) and drops the email too for comment
   authors, so the card reads `store/people.js`, filled from `/admin/allowlist` for member+ and from

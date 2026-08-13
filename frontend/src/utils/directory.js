@@ -36,6 +36,26 @@ export const indexDirectory = (rows) => {
   return byId
 }
 
+/**
+ * An account id fit to look up, or "" when there isn't one.
+ *
+ * The zero check is not defensive padding. A non-pointer `primitive.ObjectID`
+ * cannot be omitted by `omitempty` — it is a [12]byte, which encoding/json never
+ * considers empty — so an entry with no author serializes `userId` as
+ * **24 zeros**, and that reads as a real id everywhere that only checks for
+ * presence. `EventListItem.AssigneeId` is a POINTER specifically to dodge this;
+ * `UserId` and `Comment.UserId` are not, so anything taking an id off a list
+ * entry has to filter the zero itself.
+ *
+ * Left as a hex-string test rather than a length/format test: a legacy row can
+ * hold a guest's NAME in an id field, and a name is not an account either.
+ */
+export const accountId = (id) => {
+  const hex = typeof id === "string" ? id.trim() : ""
+  if (!hex || /^0+$/.test(hex)) return ""
+  return /^[0-9a-f]{24}$/i.test(hex) ? hex : ""
+}
+
 /** Trimmed "First Last", or "" when neither half is set. */
 const realNameOf = (source) =>
   `${(source.firstName ?? "").trim()} ${(source.lastName ?? "").trim()}`.trim()

@@ -112,7 +112,10 @@ describe("EventLists — the assignee control", () => {
   // The split rule, both halves in one test: no control, but the name is there.
   it("shows a guest who an entry is for, and no way to change it", async () => {
     const wrapper = await mountLists(
-      { canAssign: false, lists: [checklist({ assigneeName: "Bart Renfrew" })] },
+      {
+        canAssign: false,
+        lists: [checklist({ assigneeName: "Bart Renfrew" })],
+      },
       MEMBER,
       "guest"
     )
@@ -126,7 +129,9 @@ describe("EventLists — the assignee control", () => {
     const wrapper = await mountLists({
       canAssign: true,
       assignees: [BART],
-      lists: [checklist({ assigneeId: BART._id, assigneeName: "Bart Renfrew" })],
+      lists: [
+        checklist({ assigneeId: BART._id, assigneeName: "Bart Renfrew" }),
+      ],
     })
     await expandList(wrapper)
 
@@ -158,9 +163,27 @@ describe("EventLists — the assignee control", () => {
       kind: "checklist",
       items: [
         { _id: "p1", text: "Sleeping", order: 1024, userId: MEMBER._id },
-        { _id: "c1", text: "1 Tent", parentId: "p1", order: 1024, userId: MEMBER._id },
-        { _id: "c2", text: "2 Cots", parentId: "p1", order: 2048, userId: MEMBER._id },
-        { _id: "g1", text: "Pump", parentId: "c1", order: 1024, userId: MEMBER._id },
+        {
+          _id: "c1",
+          text: "1 Tent",
+          parentId: "p1",
+          order: 1024,
+          userId: MEMBER._id,
+        },
+        {
+          _id: "c2",
+          text: "2 Cots",
+          parentId: "p1",
+          order: 2048,
+          userId: MEMBER._id,
+        },
+        {
+          _id: "g1",
+          text: "Pump",
+          parentId: "c1",
+          order: 1024,
+          userId: MEMBER._id,
+        },
         { _id: "solo", text: "Cooking", order: 2048, userId: MEMBER._id },
       ],
     }
@@ -215,7 +238,9 @@ describe("EventLists — the assignee control", () => {
     const wrapper = await mountLists({
       canAssign: true,
       assignees: [BART],
-      lists: [checklist({ assigneeId: BART._id, assigneeName: "Bart Renfrew" })],
+      lists: [
+        checklist({ assigneeId: BART._id, assigneeName: "Bart Renfrew" }),
+      ],
     })
     await expandList(wrapper)
 
@@ -234,7 +259,9 @@ describe("EventLists — the assignee control", () => {
     const wrapper = await mountLists({
       canAssign: true,
       assignees: [BART],
-      lists: [checklist({ assigneeId: BART._id, assigneeName: "Bart Renfrew" })],
+      lists: [
+        checklist({ assigneeId: BART._id, assigneeName: "Bart Renfrew" }),
+      ],
     })
     await expandList(wrapper)
 
@@ -372,5 +399,67 @@ describe("EventLists — the derived Assigned list", () => {
     await settle(wrapper)
 
     expect(wrapper.emitted("toggle-item-checked")[0][0].sourceListId).toBeNull()
+  })
+})
+
+/*
+ * The byline is the entry's history — who wrote it, who it is for, who last
+ * ticked it — and N3 made each of those three a hover-card trigger.
+ *
+ * Worth pinning because the failure is invisible: the ids come off the entry
+ * (`userId`, `assigneeId`, `checkedBy`) while the names beside them are only
+ * snapshots, so a wrong or missing id produces a byline that reads perfectly
+ * and simply never opens anything.
+ */
+describe("EventLists — the byline is hoverable", () => {
+  // 24-hex, because `accountId()` requires it — that is how it tells an id from
+  // a guest's name. The short ids the fixtures above use would be rejected.
+  const AUTHOR_ID = "6a7df273e5a28be5086551b1"
+  const ASSIGNEE_ID = "6a7df273e5a28be5086551b2"
+  const CHECKER_ID = "6a7df273e5a28be5086551b3"
+
+  const triggers = () => document.querySelectorAll("[data-member-hover]")
+
+  it("makes all three of author, assignee and checker hoverable", async () => {
+    const wrapper = await mountLists({
+      canAssign: true,
+      assignees: [BART],
+      lists: [
+        checklist({
+          userId: AUTHOR_ID,
+          authorName: "Bilbo Baggins",
+          assigneeId: ASSIGNEE_ID,
+          assigneeName: "Bart Renfrew",
+          checked: true,
+          checkedBy: CHECKER_ID,
+          checkedByName: "Ada King",
+        }),
+      ],
+    })
+    await expandList(wrapper)
+
+    expect(rowText()).toContain("Bilbo Baggins")
+    expect(rowText()).toContain("For Bart Renfrew")
+    expect(rowText()).toContain("Checked by Ada King")
+    // Three on the byline. The assignee PICKER deliberately isn't one of them —
+    // it is a control, not a display.
+    expect(triggers().length).toBe(3)
+  })
+
+  it("leaves an authorless entry's byline inert", async () => {
+    // 24 zeros is what a non-pointer ObjectID serializes to when unset, so this
+    // is the shape a real authorless entry arrives in — not a hypothetical.
+    const wrapper = await mountLists({
+      lists: [
+        checklist({
+          userId: "000000000000000000000000",
+          authorName: "Someone Long Gone",
+        }),
+      ],
+    })
+    await expandList(wrapper)
+
+    expect(rowText()).toContain("Someone Long Gone")
+    expect(triggers().length).toBe(0)
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { indexDirectory, personDetail } from "./directory"
+import { accountId, indexDirectory, personDetail } from "./directory"
 
 /*
  * The join behind the hover card (N3).
@@ -9,6 +9,38 @@ import { indexDirectory, personDetail } from "./directory"
  * feature didn't ship" rather than as a bug. So the id-space cases below are
  * the point of the file, not padding.
  */
+
+describe("accountId", () => {
+  it("rejects the zero ObjectID", () => {
+    // The one that matters. `EventListItem.UserId` is a NON-pointer
+    // primitive.ObjectID, and `omitempty` cannot omit a [12]byte — so an entry
+    // with no author arrives as 24 zeros, not as an absent field. Anything
+    // testing only for presence would open a card over nobody.
+    expect(accountId("000000000000000000000000")).toBe("")
+  })
+
+  it("rejects a name sitting where an id belongs", () => {
+    // Legacy rows key a guest by their NAME. A guest respondent's `_id` is
+    // literally their first name (see RespondentsList.isGuest).
+    expect(accountId("Percival")).toBe("")
+    expect(accountId("Percival Thorne")).toBe("")
+  })
+
+  it("rejects nothing at all", () => {
+    expect(accountId("")).toBe("")
+    expect(accountId(null)).toBe("")
+    expect(accountId(undefined)).toBe("")
+  })
+
+  it("passes a real id through, either case", () => {
+    expect(accountId("6a7df273e5a28be5086551b8")).toBe(
+      "6a7df273e5a28be5086551b8"
+    )
+    expect(accountId("6A7DF273E5A28BE5086551B8")).toBe(
+      "6A7DF273E5A28BE5086551B8"
+    )
+  })
+})
 
 describe("indexDirectory", () => {
   it("keys on userId, not on the allowlist row's own _id", () => {

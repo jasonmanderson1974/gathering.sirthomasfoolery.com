@@ -21,9 +21,18 @@ import MemberHoverCard from "@/components/general/MemberHoverCard.vue"
 import { cleanupDom, mountApp } from "@/test/mount"
 import { apiCalls, calledApi, mockApi } from "@/test/api"
 
+/**
+ * A real-SHAPED account id, not "acct-1", and that matters: `accountId()`
+ * requires 24 hex characters precisely so it can tell an id from a name — a
+ * guest respondent's `_id` is literally their first name, and an authorless
+ * list entry arrives as 24 zeros. A convenient short fixture id would take the
+ * card down a path production never uses.
+ */
+const ACCT = "6a7df273e5a28be5086551b8"
+
 const MEMBER = {
   _id: "invite-row-1",
-  userId: "acct-1",
+  userId: ACCT,
   email: "bart@example.test",
   phone: "5551234567",
   firstName: "Bartholomew",
@@ -39,7 +48,7 @@ const MEMBER = {
  * card is anchored on until the public profile arrives.
  */
 const BYLINE = {
-  _id: "acct-1",
+  _id: ACCT,
   firstName: "Bartholomew",
   lastName: "Fitzwilliam",
 }
@@ -101,7 +110,7 @@ afterEach(() => {
 
 describe("MemberHoverCard", () => {
   it("shows the roll's details for a member+ viewer", async () => {
-    const wrapper = await mountCard({ userId: "acct-1" })
+    const wrapper = await mountCard({ userId: ACCT })
     await hover(wrapper)
 
     const panel = card()
@@ -115,7 +124,7 @@ describe("MemberHoverCard", () => {
   })
 
   it("renders the avatar at the size the Settings page uses", async () => {
-    const wrapper = await mountCard({ userId: "acct-1" })
+    const wrapper = await mountCard({ userId: ACCT })
     await hover(wrapper)
 
     // 96px is the whole point of "same as what's in Settings" — a card that
@@ -126,13 +135,13 @@ describe("MemberHoverCard", () => {
   })
 
   it("does not open before the delay has elapsed", async () => {
-    const wrapper = await mountCard({ userId: "acct-1" })
+    const wrapper = await mountCard({ userId: ACCT })
     await hover(wrapper, 200)
     expect(card()).toBeNull()
   })
 
   it("fetches the roll once no matter how many cards are hovered", async () => {
-    const wrapper = await mountCard({ userId: "acct-1" })
+    const wrapper = await mountCard({ userId: ACCT })
     await hover(wrapper)
     activator().dispatchEvent(new Event("mouseenter"))
     await vi.advanceTimersByTimeAsync(600)
@@ -142,34 +151,34 @@ describe("MemberHoverCard", () => {
   })
 
   it("sends a guest to the public profile and NEVER to the roll", async () => {
-    mockApi("/users/acct-1", {
-      _id: "acct-1",
+    mockApi(`/users/${ACCT}`, {
+      _id: ACCT,
       firstName: "Bartholomew",
       lastName: "Fitzwilliam",
       nickname: "Bart",
     })
 
     const wrapper = await mountCard(
-      { userId: "acct-1", fallback: BYLINE },
+      { userId: ACCT, fallback: BYLINE },
       AS_GUEST
     )
     await hover(wrapper)
 
-    expect(calledApi("/users/acct-1")).toBe(true)
+    expect(calledApi(`/users/${ACCT}`)).toBe(true)
     // The assertion this file exists for.
     expect(calledApi("/admin/allowlist")).toBe(false)
   })
 
   it("gives a guest a card with names but no contact details", async () => {
-    mockApi("/users/acct-1", {
-      _id: "acct-1",
+    mockApi(`/users/${ACCT}`, {
+      _id: ACCT,
       firstName: "Bartholomew",
       lastName: "Fitzwilliam",
       nickname: "Bart",
     })
 
     const wrapper = await mountCard(
-      { userId: "acct-1", fallback: BYLINE },
+      { userId: ACCT, fallback: BYLINE },
       AS_GUEST
     )
     await hover(wrapper)
@@ -194,6 +203,28 @@ describe("MemberHoverCard", () => {
     expect(trigger()).toBeTruthy()
   })
 
+  it("stays inert for a zero ObjectID, which is what 'no author' looks like", async () => {
+    // `EventListItem.UserId` is a non-pointer ObjectID and `omitempty` cannot
+    // omit a [12]byte, so an entry nobody authored arrives as 24 zeros rather
+    // than as an absent field. Treating that as an id opens a card over nobody.
+    const wrapper = await mountCard({
+      userId: "000000000000000000000000",
+      name: "Percival Thorne",
+    })
+    await hover(wrapper)
+
+    expect(card()).toBeNull()
+    expect(activator()).toBeNull()
+  })
+
+  it("stays inert when a name is sitting where an id belongs", async () => {
+    // A guest respondent's `_id` IS their first name.
+    const wrapper = await mountCard({ userId: "Percival", name: "Percival" })
+    await hover(wrapper)
+
+    expect(card()).toBeNull()
+  })
+
   it("takes a pre-resolved row without looking anything up", async () => {
     // Fellowship and the Roll already hold the allowlist; re-fetching it to
     // render a card over the row it came from would be absurd.
@@ -209,8 +240,8 @@ describe("MemberHoverCard", () => {
     mockApi("/admin/allowlist", () => new Promise(() => {}))
 
     const wrapper = await mountCard({
-      userId: "acct-1",
-      fallback: { _id: "acct-1", firstName: "Ada", lastName: "Lovelace" },
+      userId: ACCT,
+      fallback: { _id: ACCT, firstName: "Ada", lastName: "Lovelace" },
     })
     await hover(wrapper)
 

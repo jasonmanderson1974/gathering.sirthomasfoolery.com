@@ -548,6 +548,7 @@ import LocationInput from "@/components/LocationInput.vue"
 import ConfirmDeleteDialog from "@/components/general/ConfirmDeleteDialog.vue"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
 import MemberHoverCard from "@/components/general/MemberHoverCard.vue"
+import { accountId } from "@/utils/directory"
 import {
   flattenListItems,
   canAddChild,
@@ -941,27 +942,45 @@ export default {
      * The same byline, as segments, each carrying the account id behind it when
      * there is one (N3).
      *
-     * Only the assignee has one: `assigneeId` is stored on the entry, while the
-     * author and the checker are name SNAPSHOTS with no id field beside them —
-     * so those two stay inert rather than being matched by name, which would
-     * put the wrong person's telephone number on screen for any two members
-     * who share a name.
+     * This line is the entry's history — who wrote it, who it is for, who last
+     * ticked it — and all three are hoverable, because the entry stores an id
+     * for each: `userId`, `assigneeId`, `checkedBy`. The names beside them are
+     * only DisplayName() snapshots, so nothing here is ever matched by name;
+     * two members who share one would otherwise get each other's telephone
+     * number.
+     *
+     * `userId` and `checkedBy` go through `accountId()` on the way in. That is
+     * load-bearing for `userId` in particular: it is a NON-pointer ObjectID on
+     * the model, which `omitempty` cannot omit, so an entry with no author
+     * arrives as 24 zeros rather than as an absent field.
      */
     bylinePartsOf(list, item) {
       const parts = this.isVirtual(list)
         ? [item.sourceListName ? { text: `from ${item.sourceListName}` } : null]
         : [
-            item.authorName ? { text: item.authorName } : null,
+            item.authorName
+              ? {
+                  text: item.authorName,
+                  userId: accountId(item.userId),
+                  name: item.authorName,
+                }
+              : null,
             assigneeLabel(item)
               ? {
                   text: assigneeLabel(item),
-                  userId: item.assigneeId ?? "",
+                  userId: accountId(item.assigneeId),
                   name: item.assigneeName,
                 }
               : null,
           ]
       const checked = this.checkLabel(item)
-      if (checked) parts.push({ text: checked })
+      if (checked) {
+        parts.push({
+          text: checked,
+          userId: accountId(item.checkedBy),
+          name: item.checkedByName,
+        })
+      }
       return parts.filter(Boolean)
     },
     isMine(item) {

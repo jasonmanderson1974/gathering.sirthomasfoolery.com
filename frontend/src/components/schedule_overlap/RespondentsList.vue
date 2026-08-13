@@ -95,11 +95,18 @@
             >
               <div class="tw-relative tw-flex tw-items-center">
                 <div class="tw-ml-1 tw-mr-3">
-                  <UserAvatarContent
+                  <!-- The row's own @mouseover still fires: it BUBBLES, so
+                       hovering the card's wrapper highlights this respondent's
+                       availability exactly as before. The card's own trigger is
+                       `mouseenter`, which does not bubble, so the two listeners
+                       never see each other's events. -->
+                  <MemberHoverCard
                     v-if="!isGuest(user)"
-                    :user="user"
-                    :size="16"
-                  ></UserAvatarContent>
+                    :user-id="user._id"
+                    :fallback="user"
+                  >
+                    <UserAvatarContent :user="user" :size="16" />
+                  </MemberHoverCard>
                   <v-avatar v-else :size="16">
                     <v-icon size="small">mdi-account</v-icon>
                   </v-avatar>
@@ -118,7 +125,23 @@
                 />
               </div>
               <div class="tw-flex tw-flex-col">
+                <MemberHoverCard
+                  v-if="!isGuest(user)"
+                  :user-id="user._id"
+                  :fallback="user"
+                >
+                  <div
+                    class="tw-mr-1 tw-transition-all"
+                    :class="respondentClass(user._id)"
+                  >
+                    {{
+                      displayName(user) +
+                      (respondentIfNeeded(user._id) ? "*" : "")
+                    }}
+                  </div>
+                </MemberHoverCard>
                 <div
+                  v-else
                   class="tw-mr-1 tw-transition-all"
                   :class="respondentClass(user._id)"
                 >
@@ -345,6 +368,7 @@
 <script>
 import { _delete, isPhone, displayName } from "@/utils"
 import UserAvatarContent from "../UserAvatarContent.vue"
+import MemberHoverCard from "@/components/general/MemberHoverCard.vue"
 import { mapActions } from "vuex"
 import EventOptions from "./EventOptions.vue"
 import OverflowGradient from "@/components/OverflowGradient.vue"
@@ -355,6 +379,7 @@ export default {
 
   components: {
     UserAvatarContent,
+    MemberHoverCard,
     EventOptions,
     OverflowGradient,
     ExportCsvMenu,

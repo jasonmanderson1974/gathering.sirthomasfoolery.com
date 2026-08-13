@@ -2384,18 +2384,36 @@ hover does not exist, the same card opens on tap.
 - **One rule decides every call site: the card attaches where a person is being _displayed_, never
   where a person is being _selected_.** That keeps it out of the assignee picker, the mention
   autocomplete, the invite composer and the expense form, where hover and click are already spoken
-  for by the act of choosing someone. It is also why `RespondentsList` is untouched — hovering a
-  respondent highlights their availability in the grid, and a card would cover the grid it is
-  explaining — and why the Settle Up balance row is named as an exception in its own markup: the row
-  *is* the toggle, so on a phone a card there would expand the breakdown and open a card on one
-  finger. Wired: comments (row + thread header), the RSVP roster, the checklist byline, expense
-  totals / "paid by" / splits, Settle Up payments, and the two roll views.
+  for by the act of choosing someone. It is also why the Settle Up balance row is named as an
+  exception in its own markup: the row *is* the toggle, so on a phone a card there would expand the
+  breakdown and open a card on one finger. Wired: comments (row + thread header), the RSVP roster,
+  the checklist byline, expense totals / "paid by" / splits, Settle Up payments, the respondents
+  list, and the two roll views.
+- **`RespondentsList` shares a gesture and works anyway, because the two listeners are different
+  events.** Hovering a respondent highlights their availability in the grid; the worry was that a
+  card would cover the grid it is explaining, and that the two hovers would fight. Neither happens.
+  The row highlights on `@mouseover`, which **bubbles**, so it still fires while the pointer is
+  inside the card's wrapper; the card opens on `mouseenter`, which does not bubble and so is never
+  triggered by anything the row does. Both are live at once. The card also lands in the sidebar
+  above the name rather than over the grid — screenshotted at 1280 to confirm, since that was the
+  objection. `RespondentsList.spec.js` exists for this one overlap: it dispatches `mouseover` **at
+  the card's wrapper** and asserts `mouseOverRespondent` still emits, because "tidying" either
+  listener to match the other would silently stop the grid following the pointer, on a page that
+  still renders perfectly.
+- **The byline in Lists is the entry's history, and all three names on it are hoverable** — who
+  wrote it, who it is for, who last ticked it. The entry stores an id for each (`userId`,
+  `assigneeId`, `checkedBy`), so none of them is ever matched by name; two members who share one
+  would otherwise get each other's telephone number.
 - **It never opens over a bare name.** A guest respondent, a deleted author, a legacy name-keyed
   RSVP and an unclaimed invitation all reach `personDetail` with a name and no account behind it,
   and it returns null — the trigger renders with no wrapper and no behaviour at all. A 96px monogram
   over nothing looks like a bug on a page that is working. Ids are taken only where they are
   provably an account's (`comment.author?._id`, not `comment.userId`, which holds a guest's *name*
-  on legacy rows).
+  on legacy rows), and every id goes through **`accountId()`**, which rejects a **zero ObjectID**
+  and anything that is not 24 hex characters. That guard is not padding: a non-pointer
+  `primitive.ObjectID` cannot be omitted by `omitempty` — it is a [12]byte — so an entry with no
+  author arrives as **24 zeros** rather than as an absent field, and a guest respondent's `_id` is
+  literally their first name. Both would otherwise open a card over nobody, and both are asserted.
 - **The bootstrap case is what the first build got wrong**, and it is worth recording because it
   looks like it cannot happen: a site holding an id and a name string but no user object resolved to
   "nothing to show", so no hover target mounted, so the lookup that would have filled it in never
@@ -2415,12 +2433,24 @@ hover does not exist, the same card opens on tap.
   cannot see that split at all — it signs in as one superAdmin — so the "never calls the roll"
   assertion in the spec is the only thing covering it.
 
-Verified: 468 unit tests green across both tiers (20 new), `check:vuetify-props`, eslint, prettier and
+Verified: 479 unit tests green across both tiers (31 new), `check:vuetify-props`, eslint, prettier and
 a production build clean, and `browser-check.sh --dev` **ALL PASS** including the new
 `member hover card` section — trigger present, card opens carrying the member's telephone (asserted
 *scoped to `.v-overlay__content`*, since the Fellowship page prints every phone anyway and an
 unscoped match would pass with the card broken), and the avatar measured at 96px in a real browser.
-Screenshotted at 1280 and at 390px: 200x218 on the phone, no horizontal scroll.
+Screenshotted at 1280 and at 390px: 200x218 on the phone, no horizontal scroll; and on the event
+page, where the card lands in the sidebar above the respondent with the schedule grid unobscured.
+
+**Deployed `190b452`**, then the respondents list, the Lists byline history and the `accountId()`
+guard followed. Post-deploy verification on production was assert-only by design — this feature's
+whole payload is other members' real names, addresses and telephone numbers, so
+`verify_n3_prod.js` logs counts, booleans and shape tests (`/\S+@\S+/`) and never a field value, and
+takes no screenshot. On the live club: card opens, names the member, carries a `mailto:` and a
+`tel:`, avatar 96px, **no console errors and no Vue warnings**. A follow-up probe over six
+gatherings confirmed the join actually works rather than merely not erroring — 20 triggers on the
+checklist gathering, 2 on another, and 0 on gatherings whose only avatars are the deliberately
+excluded ones, which is the answer that distinguishes "nothing to show" from a silently broken
+lookup.
 
 ---
 
