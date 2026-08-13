@@ -231,7 +231,23 @@ export const getListAssignees = (eventId) => {
  * My Lists under "Assigned", derived at read time rather than copied — so there
  * is nothing else to write and nothing to keep in step.
  */
-export const setListItemAssignee = (eventId, listId, itemId, assigneeId) => {
+export const setListItemAssignee = (
+  eventId,
+  listId,
+  itemId,
+  assigneeId,
+  assigneeName = ""
+) => {
+  // assigneeName is carried for the OFFLINE path only: the server resolves the
+  // display name itself, but a queued assign has to render one until it syncs.
+  return offlineWrite(
+    "listItem.assign",
+    { eventId, listId, itemId, assigneeId: assigneeId ?? "", assigneeName },
+    () => _setListItemAssignee(eventId, listId, itemId, assigneeId)
+  )
+}
+
+const _setListItemAssignee = (eventId, listId, itemId, assigneeId) => {
   return put(`/events/${eventId}/lists/${listId}/items/${itemId}/assignee`, {
     assigneeId: assigneeId ?? "",
   })

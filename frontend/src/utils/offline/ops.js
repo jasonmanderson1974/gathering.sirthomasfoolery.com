@@ -252,6 +252,36 @@ export const OPS = {
       ),
   },
 
+  // Assigning cascades to the whole subtree, on the server (N1) and therefore
+  // here too — `withDescendants` is the same walk the offline delete uses.
+  //
+  // Note what is NOT mirrored: N2's Undo. The snapshot of who previously held
+  // each entry lives on the SERVER, which is the only reason an undo can
+  // restore a member the cascade pushed out of the assignable pool. A queued
+  // assign returns no undoToken, so `offerAssignUndo` shows no button — which
+  // is the honest outcome, because offline there is nothing holding the
+  // snapshot to undo from.
+  "listItem.assign": {
+    send: (op, id) =>
+      put(
+        `/events/${op.eventId}/lists/${id(op.listId)}/items/${id(op.itemId)}/assignee`,
+        { assigneeId: op.assigneeId ?? "" }
+      ),
+    apply: (op) =>
+      mutateSharedList(op.eventId, op.listId, (items) => {
+        const branch = withDescendants(items, op.itemId)
+        return items.map((item) =>
+          branch.has(item?._id)
+            ? {
+                ...item,
+                assigneeId: op.assigneeId || undefined,
+                assigneeName: op.assigneeId ? op.assigneeName : undefined,
+              }
+            : item
+        )
+      }),
+  },
+
   /* ---- Settle Up ---- */
 
   "expense.add": {

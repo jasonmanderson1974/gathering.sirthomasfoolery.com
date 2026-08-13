@@ -10,6 +10,10 @@ describe("isCacheable", () => {
       "/events/652f1a9b8c4d3e2f10a9b8c7",
       "/events/abc123",
       "/events/abc123/lists",
+      // Cached since assigning works offline: without the pool the picker
+      // offers nothing but "Unassigned", which reads as broken rather than
+      // unavailable. Reported from a real phone.
+      "/events/abc123/lists/assignees",
       "/events/abc123/expenses",
       "/events/abc123/expenses/participants",
       "/events/abc123/my-lists",
@@ -30,7 +34,6 @@ describe("isCacheable", () => {
       "/user/calendars?timeMin=1&timeMax=2",
       "/events/abc123/calendar-availabilities?timeMin=1",
       "/auth/status",
-      "/events/abc123/lists/assignees",
       "/users/652f1a9b8c4d3e2f10a9b8c7",
       "/user/events/abc/set-folder",
     ]

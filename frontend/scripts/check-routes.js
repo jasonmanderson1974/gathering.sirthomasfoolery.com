@@ -928,8 +928,12 @@ async function runOfflineChecks(cdp, events) {
     "event @offline — says it is offline"
   )
 
-  // The three surfaces this feature exists for.
-  for (const tab of ["Discussion", "Lists", "Settle Up"]) {
+  // The three surfaces this feature exists for, plus the two private tabs —
+  // which do NOT ride along in the event payload and so were empty offline
+  // until the prefetch warmed them (reported from a real phone, after
+  // installing to the home screen and switching to airplane mode without
+  // having opened them first).
+  for (const tab of ["Discussion", "Lists", "My Lists", "My Notes", "Settle Up"]) {
     const clicked = await evaluate(cdp, clickButton(`/^${tab}( |$)/`))
     if (clicked !== "ok") {
       report(false, `${tab} @offline — reachable`, clicked)
@@ -941,6 +945,56 @@ async function runOfflineChecks(cdp, events) {
       `${tab} @offline — its panel is the one showing`
     )
   }
+  // My Lists must have CONTENT offline, not just a panel: the panel renders
+  // either way, and "the tab is showing" was exactly the assertion that would
+  // have passed while the tab sat empty.
+  await evaluate(cdp, clickButton("/^My Lists( |$)/"))
+  await sleep(1200)
+  report(
+    (await evaluate(
+      cdp,
+      `(async () => {
+        const res = await caches.keys()
+        return new Promise((resolve) => {
+          const req = indexedDB.open("timeful-offline")
+          req.onsuccess = () => {
+            const db = req.result
+            const tx = db.transaction("apiCache", "readonly")
+            const all = tx.objectStore("apiCache").getAllKeys()
+            all.onsuccess = () =>
+              resolve(all.result.some((k) => String(k).includes("/my-lists")))
+            all.onerror = () => resolve(false)
+          }
+          req.onerror = () => resolve(false)
+        })
+      })()`
+    )) === true,
+    "My Lists @offline — was cached before the signal went"
+  )
+
+  // The assignee picker had nothing but "Unassigned" offline until its pool was
+  // cached, which reads as every member having vanished rather than as a
+  // feature being unavailable.
+  report(
+    (await evaluate(
+      cdp,
+      `(async () => {
+        return new Promise((resolve) => {
+          const req = indexedDB.open("timeful-offline")
+          req.onsuccess = () => {
+            const tx = req.result.transaction("apiCache", "readonly")
+            const all = tx.objectStore("apiCache").getAllKeys()
+            all.onsuccess = () =>
+              resolve(all.result.some((k) => String(k).includes("/lists/assignees")))
+            all.onerror = () => resolve(false)
+          }
+          req.onerror = () => resolve(false)
+        })
+      })()`
+    )) === true,
+    "assignee pool @offline — cached, so the picker offers real members"
+  )
+
   await shoot(cdp, "event-offline")
 
   await visit(cdp, events, `${BASE}/home`, "home @offline", {

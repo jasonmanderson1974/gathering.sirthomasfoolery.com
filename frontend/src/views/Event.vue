@@ -423,6 +423,7 @@ import {
 } from "@/utils"
 import { mapActions, mapState, mapMutations, mapGetters } from "vuex"
 import { staleAt } from "@/utils/offline/cache"
+import { prefetchOpenGathering } from "@/utils/offline/prefetch"
 import { formatAge } from "@/utils/offline/age"
 import dayjs from "dayjs"
 import utcPlugin from "dayjs/plugin/utc"
@@ -1100,11 +1101,24 @@ export default {
      */
     async onAssignListItem({ listId, itemId, assigneeId }) {
       const id = this.event.shortId ?? this.event._id
+      // Looked up here, while the picker's list is in hand, because an assign
+      // made offline has no server round trip to resolve the name for it.
+      const assignee = this.listAssignees.find((u) => u._id === assigneeId)
+      const assigneeName = assignee ? displayNameOf(assignee) : ""
       try {
-        const res = await setListItemAssignee(id, listId, itemId, assigneeId)
+        const res = await setListItemAssignee(
+          id,
+          listId,
+          itemId,
+          assigneeId,
+          assigneeName
+        )
         await this.refreshLists()
+        // No-op for a queued assign: it returns no undoToken, and there is no
+        // server-side snapshot offline for an undo to restore from.
         this.offerAssignUndo(res, assigneeId)
       } catch (err) {
+        if (err?.offline) return
         this.showError("Could not assign that entry. Please try again.")
       }
     },
@@ -1577,6 +1591,10 @@ export default {
     // Not awaited and not in `promises`: the mention picker is a convenience on
     // one tab of the page, so it must never hold up the calendar grid.
     this.fetchMentionables()
+
+    // Warm the reads this gathering's other tabs will want if the signal goes.
+    // Fire-and-forget, behind everything above.
+    prefetchOpenGathering(this.event?.shortId ?? this.event?._id)
 
     // Nor is the ledger (F22) — but it IS read on arrival rather than when its
     // tab is opened, because the sidebar summary has to be right for someone

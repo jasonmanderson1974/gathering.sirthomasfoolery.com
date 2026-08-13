@@ -77,24 +77,51 @@ export const prefetchGatherings = async (
     const active = events.filter((event) => event && !event.isArchived)
 
     for (const event of active) {
-      // Rechecked each time round rather than once at the top — losing signal
-      // mid-warm is the ordinary case on a phone, and there is no point
-      // grinding through a dozen failing requests to discover it.
-      if (isOffline()) break
-
       const id = event.shortId ?? event._id
       if (!id) continue
 
-      // The event payload first: it is the one that carries the discussion and
-      // the lists, so a warm-up cut short still leaves the page readable.
-      await quietly(`/events/${id}`)
-      await quietly(`/events/${id}/expenses`)
+      // Ordered by what a page needs first, and checked between EVERY read
+      // rather than once per gathering: losing signal mid-warm is the ordinary
+      // case on a phone, and there is no point grinding through the rest of a
+      // gathering's reads to rediscover it.
+      //
+      // The two private tabs are here because they are NOT in the event
+      // payload — they live in their own collections precisely so nothing can
+      // leak them — so unlike the shared lists they are simply absent offline
+      // unless fetched in their own right. That gap is what left My Lists empty
+      // for a member who installed to the home screen, opened a gathering and
+      // switched to airplane mode without having opened that tab first.
+      const reads = ["", "/expenses", "/my-lists", "/my-notes"]
+      for (const suffix of reads) {
+        if (isOffline()) break
+        await quietly(`/events/${id}${suffix}`)
+      }
+      if (isOffline()) break
       await pause(pauseMs)
     }
     lastRunAt = Date.now()
   } finally {
     running = false
   }
+}
+
+/**
+ * Warms the reads that only matter on the gathering actually being looked at.
+ *
+ * Kept out of the sweep above deliberately: multiplied across every active
+ * gathering these would double the warm-up for lists almost nobody will open,
+ * whereas on the page in front of you they are the difference between being
+ * able to add an expense offline and not. Called from Event.vue on arrival.
+ *
+ * `participants` is the one that earns its place: the expense form needs the
+ * people to split between, so without it Settle Up is readable offline but not
+ * writable — and Settle Up is the tab this whole feature was asked for.
+ */
+export const prefetchOpenGathering = async (eventId) => {
+  if (!eventId || isOffline()) return
+  await quietly(`/events/${eventId}/expenses/participants`)
+  await quietly(`/events/${eventId}/lists/assignees`)
+  await quietly(`/events/${eventId}/mentionables`)
 }
 
 /** Test seam. */

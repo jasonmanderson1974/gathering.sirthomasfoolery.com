@@ -186,6 +186,104 @@ describe("a gathering known by two ids", () => {
   })
 })
 
+describe("assigning offline", () => {
+  const withBranch = () =>
+    writeCache(`/events/${EVENT}`, {
+      _id: EVENT,
+      lists: [
+        {
+          _id: LIST,
+          items: [
+            { _id: "parent", text: "Drinks" },
+            { _id: "child", text: "Port", parentId: "parent" },
+            { _id: "grandchild", text: "Decanter", parentId: "child" },
+            { _id: "other", text: "Cheese" },
+          ],
+        },
+      ],
+    })
+
+  // The server takes the whole subtree (N1), so the cached copy must too — or
+  // the page shows one entry assigned and its children still free, which is not
+  // what will come back on the next refetch.
+  it("cascades to the whole subtree, as the server does", async () => {
+    await withBranch()
+    offline()
+    await enqueue("listItem.assign", {
+      eventId: EVENT,
+      listId: LIST,
+      itemId: "parent",
+      assigneeId: "member-1",
+      assigneeName: "Ambrose",
+    })
+
+    const items = (await readCache(`/events/${EVENT}`)).body.lists[0].items
+    const held = Object.fromEntries(items.map((i) => [i._id, i.assigneeId]))
+    expect(held).toEqual({
+      parent: "member-1",
+      child: "member-1",
+      grandchild: "member-1",
+      other: undefined,
+    })
+  })
+
+  it("renders a name straight away, without waiting for the server", async () => {
+    await withBranch()
+    offline()
+    await enqueue("listItem.assign", {
+      eventId: EVENT,
+      listId: LIST,
+      itemId: "parent",
+      assigneeId: "member-1",
+      assigneeName: "Ambrose",
+    })
+
+    const items = (await readCache(`/events/${EVENT}`)).body.lists[0].items
+    expect(items.find((i) => i._id === "parent").assigneeName).toBe("Ambrose")
+  })
+
+  // Clearing cascades too — un-assigning a parent is a reset, not an undo.
+  it("clears the whole subtree when assigned to nobody", async () => {
+    await withBranch()
+    offline()
+    await enqueue("listItem.assign", {
+      eventId: EVENT,
+      listId: LIST,
+      itemId: "parent",
+      assigneeId: "member-1",
+      assigneeName: "Ambrose",
+    })
+    await enqueue("listItem.assign", {
+      eventId: EVENT,
+      listId: LIST,
+      itemId: "parent",
+      assigneeId: "",
+      assigneeName: "",
+    })
+
+    const items = (await readCache(`/events/${EVENT}`)).body.lists[0].items
+    expect(items.every((i) => !i.assigneeId)).toBe(true)
+  })
+
+  it("sends the assignment on reconnect", async () => {
+    await withBranch()
+    offline()
+    await enqueue("listItem.assign", {
+      eventId: EVENT,
+      listId: LIST,
+      itemId: "parent",
+      assigneeId: "member-1",
+      assigneeName: "Ambrose",
+    })
+
+    online()
+    const result = await drain()
+    expect(result.sent).toBe(1)
+    const call = seen.find((c) => c.route.endsWith("/assignee"))
+    expect(call.body).toEqual({ assigneeId: "member-1" })
+  })
+})
+
 describe("flushing on reconnect", () => {
   it("sends what was queued, in the order it was made", async () => {
     offline()

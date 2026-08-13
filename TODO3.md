@@ -2673,6 +2673,37 @@ never notifying anyone.
 `check-routes.js` asserts the whole round trip in a real browser: a comment typed with the network
 off appears on the page immediately, and after reconnecting is on the **server exactly once**.
 
+### O6 — two gaps found on a real phone · **P2 · S** — DONE 2026-08-13
+
+Reported after installing to an Android home screen, opening a gathering and switching to airplane
+mode without visiting the other tabs first. Both were real, and neither was visible to any check we
+had, because every one of them opened the tabs while online first.
+
+- **My Lists (and My Notes) were empty.** Both routes were cacheable, but the prefetch warmed only
+  `/events/:id` and `/events/:id/expenses`. Unlike the shared lists, these do **not** ride along in
+  the event payload — they live in their own collections precisely so `GET /events/:id` cannot leak
+  them (F19/F20) — so they are absent offline unless fetched in their own right. The sweep now warms
+  them for every active gathering, and a new `prefetchOpenGathering` warms the reads that only
+  matter on the page being looked at: `expenses/participants` (without which Settle Up is readable
+  offline but not writable, on the tab this feature was asked for) and `mentionables`.
+- **The assignee picker offered nothing but "Unassigned."** O5 deliberately left assigning out of
+  the write queue, and `lists/assignees` off the cache allowlist with it — but the result reads as
+  though every member had vanished rather than as a feature being unavailable. **Reversed on the
+  user's call: assigning works offline now.** The cascade reducer is the same `withDescendants`
+  walk the offline delete already used, and clearing cascades too, so un-assigning stays a reset
+  rather than an undo. **N2's Undo is deliberately NOT mirrored**: the snapshot of who previously
+  held each entry lives on the server, which is the only thing that lets an undo restore a member
+  the cascade pushed out of the assignable pool. A queued assign returns no `undoToken`, so
+  `offerAssignUndo` shows no button — the honest outcome, since offline there is no snapshot to
+  restore from. If the assignee has left the pool by the time it syncs, the server refuses it and
+  the queue reports it rather than applying it quietly.
+
+Also found while fixing: the sweep only re-checked the connection **between gatherings**, so losing
+signal mid-gathering ground through the rest of its reads to rediscover it. It now checks between
+every read. `check:routes` asserts My Lists and the assignee pool are cached before the signal goes
+— not merely that their panels render, which was the assertion that would have passed while the tab
+sat empty.
+
 ---
 
 ## PART P — toolchain (opened 2026-08-13)

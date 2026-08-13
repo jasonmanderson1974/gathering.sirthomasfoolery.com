@@ -24,10 +24,6 @@ const ID = "[A-Za-z0-9_-]+"
         the member's real calendar — far more than reading a gathering needs.
     /auth/status
         A liveness probe. A cached answer is worse than no answer.
-    /events/:id/lists/assignees
-        The pool for the assignee picker, and assigning is disabled offline
-        (the cascade holds a server-side undo snapshot). The assignments
-        themselves ride along inside the event payload and still render.
     /users/:id
         The public profile behind a guest's hover card. Members come from
         /admin/allowlist, which is cached; a guest's card is the one hover that
@@ -40,6 +36,11 @@ const CACHEABLE = [
   /^\/user\/folders$/,
   new RegExp(`^/events/${ID}$`),
   new RegExp(`^/events/${ID}/lists$`),
+  // The pool for the assignee picker. Cached because assigning DOES work
+  // offline now: without it the picker offers nothing but "Unassigned", which
+  // reads as though every member had vanished rather than as a feature being
+  // unavailable. Reported from a real phone.
+  new RegExp(`^/events/${ID}/lists/assignees$`),
   new RegExp(`^/events/${ID}/expenses$`),
   new RegExp(`^/events/${ID}/expenses/participants$`),
   new RegExp(`^/events/${ID}/my-lists$`),

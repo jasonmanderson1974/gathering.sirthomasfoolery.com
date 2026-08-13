@@ -57,6 +57,18 @@ describe("prefetchGatherings", () => {
     expect(await readCache("/events/bbb/expenses")).not.toBeNull()
   })
 
+  // The two private tabs live in their own collections rather than on the event
+  // (deliberately — it is what makes them impossible to leak through
+  // GET /events/:id), so they are absent offline unless fetched in their own
+  // right. Reported from a real phone: My Lists was empty after installing,
+  // opening a gathering and switching to airplane mode.
+  it("caches My Lists and My Notes, which do not ride along with the event", async () => {
+    await run(EVENTS)
+
+    expect(await readCache("/events/aaa/my-lists")).not.toBeNull()
+    expect(await readCache("/events/aaa/my-notes")).not.toBeNull()
+  })
+
   it("leaves archived gatherings alone", async () => {
     await run(EVENTS)
     expect(routes).not.toContain("/events/zzz")
@@ -88,7 +100,10 @@ describe("prefetchGatherings", () => {
     })
 
     await run(EVENTS)
-    expect(routes.length).toBeLessThan(4)
+    // Intent, not a count: it must give up rather than work through the rest of
+    // the sweep. The second gathering is never reached at all.
+    expect(routes.some((r) => r.includes("bbb"))).toBe(false)
+    expect(routes.length).toBeLessThan(EVENTS.length * 4)
   })
 
   it("survives a gathering that fails without abandoning the rest", async () => {
