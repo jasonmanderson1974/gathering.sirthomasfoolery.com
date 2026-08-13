@@ -36,6 +36,32 @@ import "@fontsource-variable/cormorant-garamond/wght-italic.css"
 import "@fontsource-variable/eb-garamond"
 import "@fontsource-variable/eb-garamond/wght-italic.css"
 import "./index.css"
+import { initOffline } from "./utils/offline/boot"
+
+// Before the app mounts, and so before the router guard makes its first
+// request: restores the cache namespace for the remembered member, so a cold
+// boot with no connection can answer that request from disk instead of
+// bouncing a signed-in member to /sign-in.
+initOffline({
+  onFlushed: ({ sent, dropped }) => {
+    // Reported, never silent. A write that was refused on reconnect is one the
+    // member believes they made; leaving that on the floor is the worst thing
+    // this queue could do.
+    if (dropped.length > 0) {
+      store.dispatch(
+        "showError",
+        dropped.length === 1
+          ? `One change could not be saved — ${dropped[0].reason}.`
+          : `${dropped.length} changes could not be saved.`
+      )
+    } else if (sent > 0) {
+      store.dispatch(
+        "showInfo",
+        sent === 1 ? "Your change has been saved." : `${sent} changes saved.`
+      )
+    }
+  },
+})
 
 const app = createApp(App)
 

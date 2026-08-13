@@ -77,7 +77,34 @@ func deleteList(coll *mongo.Collection, filter bson.M, listId primitive.ObjectID
 }
 
 // insertListItem appends an item to a list.
+//
+// When the item carries a ClientId the push guards itself against having
+// already happened (O4). An array element cannot be uniquely indexed inside its
+// parent, so the guarantee is carried by the filter instead — and because this
+// is a single-document update, that guard is evaluated atomically with the
+// push. A caller's own pre-check cannot do this job: two replays of the same
+// queued write, arriving together, would both read a list without the item and
+// both proceed.
+//
+// A ModifiedCount of 0 therefore means EITHER the list is gone OR this item is
+// already on it; the caller distinguishes by re-reading. That ambiguity is
+// deliberate — resolving it here would cost a second query on every add.
 func insertListItem(coll *mongo.Collection, filter bson.M, listId primitive.ObjectID, item models.EventListItem) (bool, error) {
+	if item.ClientId != "" {
+		guarded := bson.M{}
+		for key, value := range filter {
+			guarded[key] = value
+		}
+		// "no list with this id already holds an item with this clientId".
+		// $elemMatch is required rather than a dotted path: the dotted form
+		// would match an items.clientId from a DIFFERENT list on the same
+		// document, and refuse a legitimate add.
+		guarded["lists"] = bson.M{"$not": bson.M{"$elemMatch": bson.M{
+			"_id":            listId,
+			"items.clientId": item.ClientId,
+		}}}
+		filter = guarded
+	}
 	res, err := coll.UpdateOne(context.Background(), filter,
 		bson.M{"$push": bson.M{"lists.$[l].items": item}},
 		arrayFilterOptions(bson.M{"l._id": listId}),

@@ -167,6 +167,32 @@ func Init() func() {
 		Keys: bson.M{"userId": 1},
 	})
 
+	// Idempotent creates for the offline write queue (O4).
+	//
+	// These two indexes ARE the guarantee, not an optimization. The create path
+	// looks the clientId up before inserting, but a lookup followed by an insert
+	// is not atomic: two replays of the same queued write, arriving together on
+	// a reconnect, can both miss and both insert. The unique constraint is what
+	// makes the second one fail — and db.InsertWithClientId turns that failure
+	// into "here is the row the other one wrote", which is the correct answer.
+	//
+	// PARTIAL, on clientId existing: every document written before O4, and every
+	// write from a client that doesn't send one, has no clientId at all. A plain
+	// unique index would collapse all of those into a single allowed document
+	// per event — i.e. it would let exactly one comment exist per gathering.
+	clientIdKeys := bson.D{{Key: "eventId", Value: 1}, {Key: "clientId", Value: 1}}
+	clientIdOptions := options.Index().SetUnique(true).SetPartialFilterExpression(
+		bson.M{"clientId": bson.M{"$exists": true}},
+	)
+	ensureIndex("comments (eventId, clientId) unique", CommentsCollection, mongo.IndexModel{
+		Keys:    clientIdKeys,
+		Options: clientIdOptions,
+	})
+	ensureIndex("expenses (eventId, clientId) unique", ExpensesCollection, mongo.IndexModel{
+		Keys:    clientIdKeys,
+		Options: clientIdOptions,
+	})
+
 	// Return a function to close the connection
 	return func() {
 		if err := Client.Disconnect(ctx); err != nil {

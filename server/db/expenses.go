@@ -104,6 +104,33 @@ func InsertExpense(expense models.Expense) error {
 	return err
 }
 
+// FindExpenseByClientId returns an expense this member already entered on this
+// event under `clientId` — an earlier attempt at the same queued create (O4).
+//
+// Note the owner field is `createdBy`, not `paidBy`: who queued the write is
+// who may replay it, and those are deliberately different people sometimes (one
+// member may log an expense another fronted).
+func FindExpenseByClientId(
+	eventId primitive.ObjectID,
+	clientId string,
+	createdBy primitive.ObjectID,
+	into *models.Expense,
+) (bool, error) {
+	return FindByClientId(ExpensesCollection, eventId, clientId, "createdBy", createdBy, into)
+}
+
+// InsertExpenseIdempotent inserts, unless the same clientId won a race first —
+// in which case `raced` is filled with the winner and `existed` is true.
+func InsertExpenseIdempotent(expense models.Expense, raced *models.Expense) (bool, error) {
+	if expense.ClientId == "" {
+		return false, InsertExpense(expense)
+	}
+	return InsertWithClientId(
+		ExpensesCollection, expense,
+		expense.EventId, expense.ClientId, "createdBy", expense.CreatedBy, raced,
+	)
+}
+
 // UpdateExpense applies the changed fields and appends one history entry
 // atomically. `fields` holds only what actually changed — a no-op edit calls
 // this with nothing and is rejected by the caller before it gets here.

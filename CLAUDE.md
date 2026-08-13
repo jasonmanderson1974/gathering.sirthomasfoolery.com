@@ -318,8 +318,66 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
 - **`src/utils/index.js` is an `export *` barrel imported by ~40 components.** Don't add modules with
   heavy or DOM-dependent dependencies to it (e.g. `utils/markdown.js`, which pulls in DOMPurify);
   import those directly by path.
-- There is **no service worker**, and no client of this origin can be holding one — the PWA was deliberately removed upstream (`f857320`, 2025-06-24), 13 months before this fork's first deploy (`cd1f103b`, 2026-07-22). Do not reintroduce one casually — **web push was closed won't-do on 2026-08-10** (TODO2 G3, closure
-  recorded in `TODO3.md`), so bringing a worker back means reversing a decision, not picking up a plan. Upstream's `kill-sw.js` was deleted from the repo root in J11: it was never served, and it was aimed at *schej.it's* stale registrations, not ours. If a PWA is ever shipped **and then removed**, the kill switch has to be served at the **registered script URL** — Vue CLI's plugin registers `/service-worker.js` — because that is the only URL a stale worker ever re-fetches. A file at `/kill-sw.js` would unregister nothing, and the SPA fallback makes the do-nothing case permanent: `GET /service-worker.js` returns `index.html` as `text/html`, so the update check fails on MIME type and the stale worker survives instead of 404ing itself away.
+- **There IS a service worker now, and it is precache-only** (Part O, offline support). It caches
+  the app shell and the build's hashed assets so the app opens with no connection, and it
+  **never touches `/api`** — every byte of gathering data lives in IndexedDB under
+  `src/utils/offline/`, keyed by user and wiped on sign-out, because a worker cache is far harder
+  to scope and clear on an invite-only club's app. Source is `frontend/src/service-worker.js`
+  (InjectManifest via `workbox-webpack-plugin` in `vue.config.js`); it is built and registered in
+  **production only**, so `npm run serve` and the `--dev` browser-check leg have no worker at all.
+  Four rules hold it together, and none is optional:
+  - **It must be emitted and served at exactly `/service-worker.js`.** That is the only URL a
+    stale worker ever re-fetches, and therefore the only place a kill switch can work.
+  - **`server/main.go` serves it explicitly** (`registerServiceWorkerRoute`, skipped by the static
+    walk) with `Cache-Control: no-cache` and a JavaScript content type. Both are load-bearing: a
+    worker served as `text/html` fails its update check **on the MIME type** rather than updating,
+    and this server answers any unmatched path with the SPA shell as `text/html`. Get it wrong and
+    the client is pinned to a dead build with no remedy. `service_worker_route_test.go` asserts it.
+  - **No `skipWaiting` on install.** A deploy deletes the previous build's hashed chunks, so a
+    worker taking over mid-session could leave a running tab asking for a chunk the new precache
+    does not name. The new worker waits and `App.vue` offers a "new version — reload" snackbar.
+  - **`deploy/kill-service-worker.js` is the rollback.** Copy it over `frontend/dist/service-worker.js`
+    and deploy; it unregisters, empties every cache and reloads clients. **Deleting the worker does
+    NOT undo it** — the SPA fallback answers the request with HTML, so the update check fails and
+    the stale worker survives. **`scripts/kill-switch-drill.sh` rehearses this against a real
+    browser holding a real worker** — run it before shipping any change to the worker, not after
+    something breaks. It needs a non-`--dev` stack left up with `KEEP_STACK=1`, and it leaves that
+    stack's worker replaced, so tear the stack down afterwards.
+  This reverses the old "no service worker" rule but **not** the web-push won't-do (TODO2 G3, closed
+  2026-08-10): that was closed for lack of established value, and offline reading is a different
+  feature that was asked for. Web push is still closed. History, still true: the PWA was removed
+  upstream in `f857320` (2025-06-24), 13 months before this fork's first deploy, and upstream's
+  `kill-sw.js` was deleted in J11 because it was never served and aimed at *schej.it's* clients.
+- **Offline WRITES are queued, and two things make that safe** (Part O, O4/O5). Server side, every
+  replayable create takes a client-supplied **`clientId` stored on the document** — a replay returns
+  the original row instead of making a second one, which for an expense is the difference between a
+  duplicate and a permanently wrong balance. The **partial unique indexes in `db/init.go` are the
+  guarantee**, not an optimization: lookup-then-insert loses the race when two replays arrive
+  together, and `db.InsertWithClientId` converts the duplicate-key error into the winning row. They
+  are partial on `clientId` existing, or they would mean "one comment per gathering". A list item is
+  an array element and cannot be uniquely indexed, so those carry the guard in the `$push` filter
+  instead. Client side, `src/utils/offline/queue.js` flushes serially on reconnect; a queued op also
+  applies a **pure reducer to the cached payload** (`ops.js`), so the existing
+  `await service(); await refreshEvent()` pattern reads the change back out and **no call site
+  changed** — the repo's deliberately non-optimistic convention is intact. Assignee changes, item
+  reordering, receipt uploads, availability, RSVP and polls are deliberately NOT queued.
+- **A gathering is cached under TWO ids and anything touching the cache must handle both.**
+  `GetEventByEitherId` accepts the Mongo `_id` or the short id, and the app uses both — the router
+  param is whichever was in the link, while `Event.vue`'s write handlers address it as
+  `shortId ?? _id`. So `/events/<shortId>` and `/events/<mongoId>` are two cache entries for one
+  gathering. A reducer that edited only the caller's spelling edited the copy nobody was looking at,
+  and an offline comment appeared to vanish; `cache.js` learns the pairing from the payload
+  (`eventAliases`) and reducers apply to every spelling. Every unit test used one spelling — only
+  the browser check caught it.
+- **Offline reads go through one choke point**, `fetchMethod` in `src/utils/fetch_utils.js`. A
+  `fetch` rejection there is normalized to `err.offline = true` — that single tag is what lets the
+  router guard tell "no signal" from a 401 (it used to bounce a signed-in member to `/sign-in`),
+  and what stops `setAuthUser(null)` being committed over a lost connection. Cacheable routes are
+  an **explicit allowlist** in `src/utils/offline/policy.js`, not "every GET": each entry is member
+  data written to a phone's disk, so the list is meant to stay short enough to audit. Entries are
+  keyed by `userId` and deep-copied in and out — `GET /events/:id` is caller-dependent (emails
+  stripped for non-owners, members-only threads filtered for guests, blind availability privatized
+  per session), and views mutate their payloads in place.
 
 ### Frontend ↔ backend contract
 - Same-origin in production: a **Cloudflare Tunnel** (`cloudflared` dialling out from the host) → Go on `127.0.0.1:3002`; Go serves `/api/*` and falls through to `index.html` for SPA routes. There is no reverse proxy on the host — Caddy was never the real setup, and `Caddyfile.example` is deleted. See `DEPLOYMENT.md`.

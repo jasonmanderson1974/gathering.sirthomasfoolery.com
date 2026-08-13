@@ -1,4 +1,5 @@
 import { get, post, put, _delete } from "../fetch_utils"
+import { offlineWrite } from "../offline/writes"
 import { serverURL } from "@/constants"
 
 /**
@@ -43,11 +44,30 @@ export const getExpenseParticipants = (eventId) => {
  * the preview that mirrors it.
  */
 export const createExpense = (eventId, payload) => {
+  // `preview` is what the reducer renders in the ledger until the real row
+  // arrives. Split resolution stays the server's job — splitEvenlyPreview
+  // mirrors it for the form, and money is integer cents on both sides.
+  return offlineWrite(
+    "expense.add",
+    { eventId, payload, preview: { ...payload } },
+    () => _createExpense(eventId, payload)
+  )
+}
+
+const _createExpense = (eventId, payload) => {
   return post(`/events/${eventId}/expenses`, payload)
 }
 
 /** Rewrite an expense. Same payload as createExpense. */
 export const updateExpense = (eventId, expenseId, payload) => {
+  return offlineWrite(
+    "expense.edit",
+    { eventId, expenseId, payload, preview: { ...payload } },
+    () => _updateExpense(eventId, expenseId, payload)
+  )
+}
+
+const _updateExpense = (eventId, expenseId, payload) => {
   return put(`/events/${eventId}/expenses/${expenseId}`, payload)
 }
 
@@ -56,6 +76,12 @@ export const updateExpense = (eventId, expenseId, payload) => {
  * the ledger and the balances, but its change history is kept.
  */
 export const deleteExpense = (eventId, expenseId) => {
+  return offlineWrite("expense.delete", { eventId, expenseId }, () =>
+    _deleteExpense(eventId, expenseId)
+  )
+}
+
+const _deleteExpense = (eventId, expenseId) => {
   return _delete(`/events/${eventId}/expenses/${expenseId}`)
 }
 

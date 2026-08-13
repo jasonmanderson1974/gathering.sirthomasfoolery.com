@@ -1,5 +1,12 @@
 # Build stage
-FROM node:18-alpine AS builder
+#
+# Node 20, matching every CI workflow (backend-ci, frontend-ci, browser-ci all
+# pin node-version: 20). It was 18 here, which is a different toolchain from the
+# one CI and the deploy box build with — and it bit: workbox-webpack-plugin
+# pulls in a package that reads the global `crypto`, which only exists from
+# Node 19, so the service worker built fine everywhere except in this image.
+# Keep this in step with the workflows.
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 

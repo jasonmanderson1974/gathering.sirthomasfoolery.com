@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -191,6 +192,21 @@ func findEventList(event *models.Event, listId string) (*models.EventList, bool)
 func findListItem(list *models.EventList, itemId string) (*models.EventListItem, bool) {
 	for i := range list.Items {
 		if list.Items[i].Id.Hex() == itemId {
+			return &list.Items[i], true
+		}
+	}
+	return nil, false
+}
+
+// findListItemByClientId locates an item an earlier attempt at the same queued
+// create already added (O4). Empty clientIds never match, so an ordinary add —
+// which carries none — cannot collide with another ordinary add.
+func findListItemByClientId(list *models.EventList, clientId string) (*models.EventListItem, bool) {
+	if clientId == "" {
+		return nil, false
+	}
+	for i := range list.Items {
+		if list.Items[i].ClientId == clientId {
 			return &list.Items[i], true
 		}
 	}
@@ -506,6 +522,9 @@ func addEventListItem(c *gin.Context) {
 		Text string `json:"text" binding:"required"`
 		// Optional: the item this one hangs under. Absent means top-level.
 		ParentId string `json:"parentId"`
+		// Optional. Sent by the offline write queue so a replayed add puts one
+		// entry on the list rather than two (O4).
+		ClientId string `json:"clientId"`
 	}{}
 	if err := c.Bind(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
@@ -528,6 +547,17 @@ func addEventListItem(c *gin.Context) {
 		c.JSON(http.StatusNotFound, responses.Error{Error: errListNotFound})
 		return
 	}
+
+	clientId := strings.TrimSpace(payload.ClientId)
+
+	// Already added? Return that entry rather than a second one (O4). Free —
+	// the list is already in hand from the event read above. The push itself
+	// carries the same guard, for the two-replays-at-once case this cannot see.
+	if existing, already := findListItemByClientId(list, clientId); already {
+		c.JSON(http.StatusOK, existing)
+		return
+	}
+
 	// Advisory cap: it is measured against the event as read, so two
 	// simultaneous adds at the boundary can both pass and land at 101. That is
 	// a guardrail against a runaway list, not a security boundary, and the
@@ -569,6 +599,7 @@ func addEventListItem(c *gin.Context) {
 		UserId:     user.Id,
 		AuthorName: user.DisplayName(),
 		CreatedAt:  primitive.NewDateTimeFromTime(time.Now()),
+		ClientId:   clientId,
 	}
 
 	modified, err := db.InsertEventListItem(event.Id, list.Id, item)
@@ -578,6 +609,20 @@ func addEventListItem(c *gin.Context) {
 		return
 	}
 	if !modified {
+		// Two possibilities, and they need different answers: the list was
+		// deleted between the read and the write, or a concurrent replay of
+		// this same queued add won the race and the push guard refused. Only a
+		// re-read can tell them apart, and it only runs in this rare path.
+		if clientId != "" {
+			if fresh, freshErr := db.GetEventById(event.Id.Hex()); freshErr == nil && fresh != nil {
+				if freshList, listStillThere := findEventList(fresh, list.Id.Hex()); listStillThere {
+					if existing, already := findListItemByClientId(freshList, clientId); already {
+						c.JSON(http.StatusOK, existing)
+						return
+					}
+				}
+			}
+		}
 		// The list was deleted between the read and the write.
 		c.JSON(http.StatusNotFound, responses.Error{Error: errListNotFound})
 		return

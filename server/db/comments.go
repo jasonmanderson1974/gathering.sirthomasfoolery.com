@@ -70,6 +70,32 @@ func InsertComment(comment models.Comment) error {
 	return err
 }
 
+// FindCommentByClientId returns a comment this author already wrote on this
+// event under `clientId` — i.e. the result of an earlier attempt at the same
+// queued create (O4).
+func FindCommentByClientId(
+	eventId primitive.ObjectID,
+	clientId string,
+	userId string, // Comment.UserId is a string on this model, not an ObjectID
+	into *models.Comment,
+) (bool, error) {
+	return FindByClientId(CommentsCollection, eventId, clientId, "userId", userId, into)
+}
+
+// InsertCommentIdempotent inserts, unless the same clientId won a race first —
+// in which case `raced` is filled with the winner and `existed` is true.
+//
+// A comment with no clientId cannot collide, so it takes the plain path.
+func InsertCommentIdempotent(comment models.Comment, raced *models.Comment) (bool, error) {
+	if comment.ClientId == "" {
+		return false, InsertComment(comment)
+	}
+	return InsertWithClientId(
+		CommentsCollection, comment,
+		comment.EventId, comment.ClientId, "userId", comment.UserId, raced,
+	)
+}
+
 // UpdateCommentText rewrites a comment's text and the mentions parsed out of it
 // (F7).
 //

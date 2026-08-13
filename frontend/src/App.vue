@@ -2,6 +2,27 @@
   <v-app>
     <AutoSnackbar color="error" :text="error" />
     <AutoSnackbar color="tw-bg-blue" :text="info" />
+    <OfflineBanner :offline="offline" :below-header="showHeader" />
+
+    <!-- A new build has installed and is waiting. Its own snackbar rather than
+         the app-wide AutoSnackbar for the reason N2's undo gives: AutoSnackbar
+         takes a bare string and hard-codes a close button into its actions
+         slot, so an action would mean routing a callback through Vuex.
+
+         The prompt is not cosmetic. The worker deliberately does NOT
+         skipWaiting on install — a deploy deletes the previous build's hashed
+         chunks, so taking over mid-session could leave this very tab asking for
+         a chunk the new precache does not name. So the member is asked, and
+         nothing changes under them until they say yes. -->
+    <v-snackbar v-model="updateReady" :timeout="-1" location="bottom">
+      A new version of The Fellowship is ready.
+      <template #actions>
+        <v-btn variant="text" class="tw-text-brass" @click="applyUpdate">
+          Reload
+        </v-btn>
+        <v-btn variant="text" @click="updateReady = false">Later</v-btn>
+      </template>
+    </v-snackbar>
     <SignInNotSupportedDialog v-model="webviewDialog" />
     <NewDialog
       v-model="newDialogOptions.show"
@@ -172,6 +193,12 @@ import SignInNotSupportedDialog from "@/components/SignInNotSupportedDialog.vue"
 import isWebview from "is-ua-webview"
 import NewDialog from "./components/NewDialog.vue"
 import SirThomasFoolery from "@/components/general/SirThomasFoolery.vue"
+import OfflineBanner from "@/components/general/OfflineBanner.vue"
+import { isOffline, onOfflineChange } from "@/utils/offline/status"
+import {
+  applyServiceWorkerUpdate,
+  registerServiceWorker,
+} from "@/utils/offline/sw"
 
 export default {
   name: "App",
@@ -188,16 +215,20 @@ export default {
     AuthUserMenu,
     SignInNotSupportedDialog,
     NewDialog,
+    OfflineBanner,
   },
 
   data: () => ({
     mounted: false,
     loaded: false,
     webviewDialog: false,
+    // Not reactive state — just somewhere to keep the unsubscribe handle.
+    unsubscribeOffline: null,
+    updateReady: false,
   }),
 
   computed: {
-    ...mapState(["authUser", "error", "info", "newDialogOptions"]),
+    ...mapState(["authUser", "error", "info", "newDialogOptions", "offline"]),
     ...mapGetters(["canCreateEvents"]),
     isPhone() {
       return isPhone(this.$vuetify)
@@ -225,7 +256,11 @@ export default {
   },
 
   methods: {
-    ...mapMutations(["setAuthUser"]),
+    ...mapMutations(["setAuthUser", "setOffline"]),
+    applyUpdate() {
+      this.updateReady = false
+      applyServiceWorkerUpdate()
+    },
     ...mapActions(["getEvents", "createNew"]),
     _createNew() {
       this.createNew()
@@ -242,11 +277,26 @@ export default {
   },
 
   async created() {
+    // Mirror the connectivity signal into the store so any view can read it.
+    // Seeded before subscribing, because the very first request may already
+    // have failed by the time this runs.
+    this.setOffline(isOffline())
+    this.unsubscribeOffline = onOfflineChange((offline) =>
+      this.setOffline(offline)
+    )
+
+    // Production-only, and failure here costs offline support and nothing else.
+    registerServiceWorker({ onUpdateReady: () => (this.updateReady = true) })
+
     await get("/user/profile")
       .then((authUser) => {
         this.setAuthUser(authUser)
       })
-      .catch(() => {
+      .catch((err) => {
+        // A lost signal is not evidence of being signed out. Clearing authUser
+        // here would render the whole app signed-out over a cached session
+        // that is still valid; the router guard has already accepted it.
+        if (err?.offline) return
         this.setAuthUser(null)
       })
       .finally(() => {
@@ -262,6 +312,8 @@ export default {
     this.mounted = true
   },
 
-  beforeUnmount() {},
+  beforeUnmount() {
+    this.unsubscribeOffline?.()
+  },
 }
 </script>

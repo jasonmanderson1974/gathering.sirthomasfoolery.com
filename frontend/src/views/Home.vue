@@ -96,7 +96,9 @@ export default {
       .then((authUser) => {
         this.setAuthUser(authUser)
       })
-      .catch(() => {
+      .catch((err) => {
+        // A lost signal is not evidence of being signed out; see Event.vue.
+        if (err?.offline) return
         this.setAuthUser(null)
       })
   },

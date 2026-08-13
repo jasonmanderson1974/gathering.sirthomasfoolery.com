@@ -33,7 +33,13 @@ const (
 
 // Expense is one cost incurred on a gathering.
 type Expense struct {
-	Id      primitive.ObjectID `json:"_id"     bson:"_id,omitempty"`
+	Id primitive.ObjectID `json:"_id"     bson:"_id,omitempty"`
+
+	// ClientId makes this create replayable — see models.Comment.ClientId for
+	// the mechanism. It matters most here: a replayed expense does not merely
+	// duplicate a row, it DOUBLE-BOOKS MONEY, and every balance in Settle Up is
+	// wrong from then on until someone notices and deletes one by hand.
+	ClientId string `json:"clientId,omitempty" bson:"clientId,omitempty"`
 	EventId primitive.ObjectID `json:"eventId" bson:"eventId"`
 
 	// CreatedBy is the ownership key for editing ("members may edit their own

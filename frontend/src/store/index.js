@@ -14,6 +14,10 @@ import {
   updateFolder,
 } from "../utils/services/FolderService"
 import { archiveEvent } from "../utils/services/EventService"
+import { setCacheUser } from "../utils/offline/cache"
+import { rememberSession } from "../utils/offline/session"
+import { setOfflineViewer } from "../utils/offline/writes"
+import { prefetchGatherings } from "../utils/offline/prefetch"
 
 export default createStore({
   state: {
@@ -21,6 +25,10 @@ export default createStore({
     info: "",
 
     authUser: null,
+
+    // Whether the server is currently unreachable. Driven by real request
+    // outcomes rather than navigator.onLine — see utils/offline/status.js.
+    offline: false,
 
     events: [],
     folders: [],
@@ -53,6 +61,29 @@ export default createStore({
 
     setAuthUser(state, authUser) {
       state.authUser = authUser
+
+      // The one place the app learns who is signed in, so it is where the
+      // offline layer is told too. Both calls matter on the NEXT cold boot:
+      // the remembered id is how the router knows to offer cached data before
+      // the server can be asked, and it is the key the cache is stored under.
+      //
+      // Only the positive case is handled here, deliberately. `setAuthUser(null)`
+      // is committed from three failure catches (App.vue, Home.vue, Event.vue)
+      // that fire on a transient error or an offline boot; tearing the cache
+      // down there would destroy the data the member is about to read. Teardown
+      // belongs where the session is KNOWN to be over — see endOfflineSession.
+      // Told either way: the write queue's reducers render the author of a
+      // comment made offline, and a stale name there would outlive the session
+      // that produced it.
+      setOfflineViewer(authUser)
+      if (authUser?._id) {
+        rememberSession(authUser._id)
+        setCacheUser(authUser._id)
+      }
+    },
+
+    setOffline(state, offline) {
+      state.offline = offline
     },
 
     setEvents(state, events) {
@@ -148,16 +179,34 @@ export default createStore({
       if (state.authUser) {
         return Promise.allSettled([get("/user/folders"), get("/user/events")])
           .then(([folders, events]) => {
-            if (
-              folders.status === "fulfilled" &&
-              events.status === "fulfilled"
-            ) {
+            // Committed independently. These used to be all-or-nothing, so one
+            // failing read blanked the whole dashboard even though the other
+            // had arrived — and offline, where a cached copy of one may exist
+            // without the other, that is the ordinary case rather than a rare
+            // one.
+            if (folders.status === "fulfilled") {
               commit("setFolders", folders.value)
-              commit("setEvents", events.value)
-            } else {
-              dispatch("showError", "There was a problem fetching events!")
-              console.error(folders.reason, events.reason)
             }
+            if (events.status === "fulfilled") {
+              commit("setEvents", events.value)
+              // Warm the cache for every active gathering, so the one they
+              // want on the train is there whether or not they happened to
+              // open it. Not awaited: it runs behind the dashboard, not in
+              // front of it.
+              prefetchGatherings(events.value)
+            }
+
+            const failures = [folders, events]
+              .filter((r) => r.status === "rejected")
+              .map((r) => r.reason)
+            if (failures.length === 0) return
+            // Being offline is not a problem to shout about — the offline
+            // banner already says so, and a snackbar reading "there was a
+            // problem" over perfectly good cached data is just noise.
+            if (failures.every((reason) => reason?.offline)) return
+
+            dispatch("showError", "There was a problem fetching events!")
+            console.error(...failures)
           })
           .catch((err) => {
             dispatch("showError", "There was a problem fetching events!")

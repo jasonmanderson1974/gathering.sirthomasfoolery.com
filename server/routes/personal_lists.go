@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -373,6 +374,9 @@ func addPersonalListItem(c *gin.Context) {
 		Text string `json:"text" binding:"required"`
 		// Optional: the item this one hangs under. Absent means top-level.
 		ParentId string `json:"parentId"`
+		// Optional. Sent by the offline write queue so a replayed add puts one
+		// entry on the list rather than two (O4).
+		ClientId string `json:"clientId"`
 	}{}
 	if err := c.Bind(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
@@ -393,6 +397,16 @@ func addPersonalListItem(c *gin.Context) {
 	if !found {
 		return
 	}
+
+	clientId := strings.TrimSpace(payload.ClientId)
+
+	// Already added? Return that entry rather than a second one (O4) — the same
+	// arrangement as the shared lists, sharing the same guarded $push.
+	if existing, already := findListItemByClientId(list, clientId); already {
+		c.JSON(http.StatusOK, existing)
+		return
+	}
+
 	if len(list.Items) >= maxItemsPerList {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: errListFull})
 		return
@@ -427,6 +441,7 @@ func addPersonalListItem(c *gin.Context) {
 		Order:     maxOrderInList(list) + listItemOrderStep,
 		UserId:    ctx.UserId,
 		CreatedAt: primitive.NewDateTimeFromTime(time.Now()),
+		ClientId:  clientId,
 	}
 
 	modified, err := db.InsertPersonalListItem(ctx.UserId, ctx.EventId, list.Id, item)
@@ -436,8 +451,22 @@ func addPersonalListItem(c *gin.Context) {
 		return
 	}
 	if !modified {
-		// The list was deleted between the read and the write — from another tab,
-		// since there is only one person who could have done it.
+		// Either the list was deleted between the read and the write — from
+		// another tab, since there is only one person who could have done it —
+		// or a concurrent replay of this add won and the push guard refused.
+		if clientId != "" {
+			if fresh, freshErr := db.GetPersonalLists(ctx.UserId, ctx.EventId); freshErr == nil {
+				for i := range fresh {
+					if fresh[i].Id != list.Id {
+						continue
+					}
+					if existing, already := findListItemByClientId(&fresh[i], clientId); already {
+						c.JSON(http.StatusOK, existing)
+						return
+					}
+				}
+			}
+		}
 		c.JSON(http.StatusNotFound, responses.Error{Error: errListNotFound})
 		return
 	}

@@ -11,7 +11,22 @@ import "go.mongodb.org/mongo-driver/bson/primitive"
 // hidden, along with all of its replies, from anyone below member (see
 // Role.CanSeeMembersOnly).
 type Comment struct {
-	Id      primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
+	Id primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
+
+	// ClientId makes a create REPLAYABLE (TODO3 O4). A client that queues writes
+	// while offline has to be able to send the same create twice — the first
+	// attempt may have reached the server and had its response lost — and
+	// without this every replay makes a second comment.
+	//
+	// Minted by the client (a UUID) and stored, so the guarantee survives a
+	// server restart, which an in-process idempotency store would not: a queue
+	// may flush hours after it was filled. See db.EnsureIndexes for the partial
+	// unique index that makes it a guarantee rather than a hope, and
+	// routes/idempotency.go for the shared create path.
+	//
+	// Absent on everything written before O4 and on any client that doesn't send
+	// one, which behaves exactly as it always did.
+	ClientId string `json:"clientId,omitempty" bson:"clientId,omitempty"`
 	EventId primitive.ObjectID `json:"eventId" bson:"eventId"`
 
 	// UserId is the author's user id hex. Legacy rows may instead hold a guest's

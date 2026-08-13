@@ -272,6 +272,15 @@ const (
 type EventListItem struct {
 	Id   primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
 	Text string             `json:"text" bson:"text,omitempty"`
+
+	// ClientId makes adding an item replayable — see models.Comment.ClientId.
+	//
+	// Enforced differently from the two collection-backed creates, because an
+	// item is an ARRAY ELEMENT and Mongo cannot uniquely index one within its
+	// parent. Instead the $push carries its own guard (`items.clientId: {$ne:
+	// …}`), which is atomic because it is a single-document update. The same
+	// type backs the private lists (models.PersonalLists), so both paths get it.
+	ClientId string `json:"clientId,omitempty" bson:"clientId,omitempty"`
 	// ParentId is nil for a top-level item. A POINTER, not a bare ObjectID:
 	// omitempty can't omit a [12]byte array, so a zero id would serialize as 24
 	// zeros and read back as a real parent. Items written before nesting existed

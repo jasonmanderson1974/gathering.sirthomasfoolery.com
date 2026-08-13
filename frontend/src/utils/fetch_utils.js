@@ -1,4 +1,6 @@
 import { serverURL, errors } from "@/constants"
+import { readCacheAsResponse, writeCache } from "@/utils/offline/cache"
+import { noteNetworkFailure, noteNetworkSuccess } from "@/utils/offline/status"
 
 /* 
   Fetch utils
@@ -38,6 +40,26 @@ const sessionEndedCodes = [
 const authProbeRoutes = ["/user/profile"]
 const isAuthProbe = (route) =>
   authProbeRoutes.some((r) => route === r || route.startsWith(r + "?"))
+
+// `fetch` rejects — rather than resolving with a bad status — when the request
+// never reached the server at all: offline, DNS failure, a dropped connection,
+// CORS. That arrives as a bare `TypeError: Failed to fetch` carrying no
+// `.status` and no `.error`, so every call site doing `switch (err.error)` fell
+// straight through to `default` with no way to say what happened, and the
+// router guard could not tell it from a 401 — which is what bounced a signed-in
+// member to /sign-in the moment their phone lost signal.
+//
+// Normalizing it here, at the one function every API call in the app passes
+// through, is what lets everything downstream simply ask `err.offline`.
+const networkError = (cause) => {
+  const err = new Error(
+    `Network request failed - ${cause?.message ?? String(cause)}`
+  )
+  err.offline = true
+  err.error = errors.Offline
+  err.cause = cause
+  return err
+}
 export const get = (route) => {
   return fetchMethod("GET", route)
 }
@@ -74,8 +96,20 @@ export const fetchMethod = (method, route, body = {}) => {
     params.body = JSON.stringify(body)
   }
 
-  return fetch(url, params)
+  const request = fetch(url, params)
+    // Chained onto fetch itself, deliberately: this must catch the transport
+    // failure only. An error thrown by the response handler below (a non-2xx,
+    // a JSON parse failure) is a real answer from the server and must not be
+    // relabelled as offline.
+    .catch((cause) => {
+      noteNetworkFailure()
+      throw networkError(cause)
+    })
     .then(async (res) => {
+      // We got an answer. Any answer, including a 500, proves the server is
+      // reachable — which is a stronger signal than navigator.onLine, and the
+      // one that clears a captive portal's false "online".
+      noteNetworkSuccess()
       const text = await res.text()
 
       // Parse JSON if text is not empty
@@ -131,7 +165,29 @@ export const fetchMethod = (method, route, body = {}) => {
 
       return returnValue
     })
+
+  // Writes are passed straight through in this phase; only reads are cached.
+  if (method !== "GET") return request
+
+  return request
     .then((data) => {
+      // Fire and forget. A member should never wait on the cache to read a
+      // page, and writeCache swallows its own failures (a full disk on a phone
+      // is an expected outcome, not an error worth surfacing).
+      writeCache(route, data).catch(() => {})
       return data
+    })
+    .catch(async (err) => {
+      // Only a transport failure may be answered from cache. A 403, a 404 or a
+      // 500 is the server's real answer and must reach the call site unchanged
+      // — serving stale data over a genuine "you may not see this" would be a
+      // permissions bug wearing an offline costume.
+      if (err?.offline) {
+        const cached = await readCacheAsResponse(route)
+        // The value carries its own age (see `staleAt`), so call sites that
+        // want to say "last updated ..." can, and the rest need no changes.
+        if (cached !== null) return cached
+      }
+      throw err
     })
 }

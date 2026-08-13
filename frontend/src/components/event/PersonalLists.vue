@@ -119,7 +119,9 @@ export default {
         this.lists = (await getPersonalLists(this.eventId)) ?? []
         this.$emit("loaded", this.lists.length)
       } catch (err) {
-        this.showError("Could not load your lists. Please try again.")
+        if (!err?.offline) {
+          this.showError("Could not load your lists. Please try again.")
+        }
       } finally {
         this.refreshing = false
       }

@@ -241,7 +241,9 @@ export default {
         this.savedAt = note.updatedAt ?? null
       } catch (err) {
         this.loaded = false // let opening the tab again retry
-        this.showError("Could not load your notes. Please try again.")
+        if (!err?.offline) {
+          this.showError("Could not load your notes. Please try again.")
+        }
       } finally {
         this.loading = false
       }

@@ -18,6 +18,8 @@ import { serverURL } from "@/constants"
 let handlers = []
 /** Every call made since the current test began. */
 let calls = []
+/** When set, every call fails at the transport layer instead of answering. */
+let offline = false
 
 /**
  * Answers `route` with `response`.
@@ -46,10 +48,21 @@ const matches = (pattern, route) =>
     ? pattern.test(route)
     : route === pattern || route.startsWith(pattern + "?")
 
-/** Installs the fake and clears both handlers and the call log. */
+/**
+ * Cuts the connection. Every subsequent call rejects the way a real `fetch`
+ * does when the request never leaves the device — which is a different thing
+ * from an error response, and the distinction the whole offline layer is built
+ * on. Calls are still logged, so a test can assert the attempt was made.
+ */
+export function mockOffline(value = true) {
+  offline = value
+}
+
+/** Installs the fake and clears handlers, the call log and the offline flag. */
 export function resetApi() {
   handlers = []
   calls = []
+  offline = false
   globalThis.fetch = fakeFetch
 }
 
@@ -59,6 +72,8 @@ async function fakeFetch(url, params = {}) {
   const method = params.method || "GET"
   const body = params.body ? JSON.parse(params.body) : undefined
   calls.push({ method, route, body })
+
+  if (offline) throw new TypeError("Failed to fetch")
 
   const handler = handlers.find((h) => matches(h.route, route))
 

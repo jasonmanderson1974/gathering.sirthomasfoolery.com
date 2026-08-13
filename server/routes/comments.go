@@ -173,6 +173,10 @@ func addComment(c *gin.Context) {
 	payload := struct {
 		Text     string `json:"text" binding:"required"`
 		ThreadId string `json:"threadId"`
+		// Optional. Sent by the offline write queue so a replayed create makes
+		// one comment rather than two (O4). Absent from every other caller,
+		// which behaves exactly as before.
+		ClientId string `json:"clientId"`
 	}{}
 	if err := c.Bind(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, responses.Error{Error: err.Error()})
@@ -215,6 +219,25 @@ func addComment(c *gin.Context) {
 		threadId = &root.Id
 	}
 
+	clientId := strings.TrimSpace(payload.ClientId)
+
+	// Already posted? Return that one rather than making a second (O4). Checked
+	// before any work is done, and note this must answer with the SAME shape as
+	// a fresh create — the client is reconciling a queued write, and a bare 200
+	// would leave it unable to map its temporary id onto the real one.
+	if clientId != "" {
+		var existing models.Comment
+		found, err := db.FindCommentByClientId(event.Id, clientId, viewer.UserId, &existing)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+			return
+		}
+		if found {
+			c.JSON(http.StatusOK, existing)
+			return
+		}
+	}
+
 	comment := models.Comment{
 		Id:         primitive.NewObjectID(),
 		EventId:    event.Id,
@@ -224,12 +247,22 @@ func addComment(c *gin.Context) {
 		Text:       text,
 		CreatedAt:  primitive.NewDateTimeFromTime(time.Now()),
 		ThreadId:   threadId,
+		ClientId:   clientId,
 		// Parsed from the sanitized text, so truncation can't leave a half token
 		// counting as a mention (F7).
 		Mentions: validateMentions(parseMentions(text), event, user),
 	}
-	if err := db.InsertComment(comment); err != nil {
+	var raced models.Comment
+	existed, err := db.InsertCommentIdempotent(comment, &raced)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
+	if existed {
+		// Two replays landed together and the other one won. Nothing was
+		// written here, so notifyMentions must NOT run — the winner already
+		// sent them, and sending again is the duplicate this is all preventing.
+		c.JSON(http.StatusOK, raced)
 		return
 	}
 

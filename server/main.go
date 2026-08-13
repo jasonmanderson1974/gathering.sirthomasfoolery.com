@@ -51,6 +51,61 @@ import (
 // even though the bundles it points at are pinned for a year.
 var contentHashedAsset = regexp.MustCompile(`\.[0-9a-f]{8}\.`)
 
+// serviceWorkerFile is the one filename in the build that gets its own route.
+//
+// It is NOT content-hashed, and it must never be: a service worker is fetched
+// by name, and that name is the only URL a browser ever revisits to find out
+// whether the worker changed. Leaving it to the static walk would work by
+// accident — StaticFile sets no Cache-Control and Go infers the JavaScript type
+// from the extension — but "by accident" is not good enough here.
+//
+// If a browser is allowed to hold a stale copy of this file, that client is
+// pinned to the build the stale worker precached, and the usual remedy does not
+// apply: deleting the file does not produce a 404, because the SPA fallback
+// answers any unmatched path with index.html as text/html, so the worker's
+// update check fails on the MIME type and it survives instead. The kill switch
+// in deploy/kill-service-worker.js is the way out, and it only works if this
+// URL is always freshly fetchable. Hence the explicit no-cache.
+const serviceWorkerFile = "service-worker.js"
+
+// registerServiceWorkerRoute serves the service worker, if the build produced
+// one, with the headers that keep it replaceable. Reports whether it registered.
+//
+// Split out of main() so it can be tested: the headers here are the difference
+// between "a bad worker can be withdrawn" and "a bad worker is permanent", and
+// that is not something to verify by reading. The static walk skips this
+// filename, so there is no route conflict; a build made before the worker
+// existed simply has no such file and the path falls through to the SPA handler
+// exactly as it always did.
+func registerServiceWorkerRoute(router *gin.Engine, frontendDist string) bool {
+	swPath := filepath.Join(frontendDist, serviceWorkerFile)
+	if _, err := os.Stat(swPath); err != nil {
+		return false
+	}
+
+	serve := func(c *gin.Context) {
+		// no-cache, not no-store: the browser may keep a copy, but it must
+		// revalidate before using it. That is what keeps the NEXT worker —
+		// including the kill switch — reachable on every update check.
+		c.Header("Cache-Control", "no-cache")
+		// Set explicitly rather than inferred from the extension. A worker
+		// served as anything but a JavaScript type fails its update check on
+		// the MIME type, which is the exact failure mode that would make a bad
+		// worker permanent.
+		c.Header("Content-Type", "text/javascript; charset=utf-8")
+		// Lets a worker at this path control the whole origin. Redundant while
+		// it is served from the root, and it stops a future move breaking
+		// registration silently.
+		c.Header("Service-Worker-Allowed", "/")
+		c.File(swPath)
+	}
+
+	// Both verbs, matching what StaticFile would have registered.
+	router.GET("/"+serviceWorkerFile, serve)
+	router.HEAD("/"+serviceWorkerFile, serve)
+	return true
+}
+
 func init() {
 	// AddExtensionType only errors on an extension not starting with ".", which
 	// none of these can be — discard deliberately rather than leave it unchecked.
@@ -206,7 +261,7 @@ func main() {
 		if err != nil {
 			return err
 		}
-		if !d.IsDir() && d.Name() != "index.html" {
+		if !d.IsDir() && d.Name() != "index.html" && d.Name() != serviceWorkerFile {
 			// Get the path relative to frontendDist
 			relPath, err := filepath.Rel(frontendDist, path)
 			if err != nil || relPath == "" || relPath == "." {
@@ -231,6 +286,8 @@ func main() {
 	if err != nil {
 		logger.StdErr.Printf("Warning: failed to walk frontend dist: %s", err)
 	}
+
+	registerServiceWorkerRoute(router, frontendDist)
 
 	indexPath := filepath.Join(frontendDist, "index.html")
 	if _, err := os.Stat(indexPath); err == nil {

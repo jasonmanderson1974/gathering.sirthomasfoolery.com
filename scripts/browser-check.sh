@@ -340,5 +340,9 @@ CHECK_ARGS=()
 # check's own header for what the sections are called. Passed through rather
 # than interpreted here: one place decides what a section is.
 [ -n "${ONLY:-}" ] && CHECK_ARGS+=(--only "$ONLY")
+# The service worker registers in production builds only, so the offline
+# section has nothing to assert against webpack-dev-server. Told rather than
+# guessed, so it can skip with a printed reason instead of passing hollowly.
+[ -n "$DEV_BUILD" ] && CHECK_ARGS+=(--dev-server)
 npm --prefix "$ROOT/frontend" run --silent check:routes -- \
   "$CHECK_BASE" "$COOKIE" "$EVENT_ID" "${CHECK_ARGS[@]}"

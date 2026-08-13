@@ -15,6 +15,9 @@ export const serverURL =
 // Errors enum
 export const errors = Object.freeze({
   JsonError: "json-error",
+  // Not a server error code — the request never reached the server. Minted
+  // client-side by fetch_utils so a call site can tell "no network" from a 401.
+  Offline: "offline",
   NotSignedIn: "not-signed-in",
   UserDoesNotExist: "user-does-not-exist",
   EventNotFound: "event-not-found",

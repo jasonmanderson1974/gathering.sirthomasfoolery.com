@@ -53,6 +53,13 @@ func TestInitCreatesDeclaredIndexes(t *testing.T) {
 		{db.ExpensesCollection, "expenses: the ledger listing", bson.D{{Key: "eventId", Value: 1}, {Key: "date", Value: -1}}},
 		{db.ExpenseReceiptsCollection, "expenseReceipts: by expense", bson.D{{Key: "expenseId", Value: 1}}},
 		{db.ExpenseReceiptsCollection, "expenseReceipts: photo sweep on delete", bson.D{{Key: "eventId", Value: 1}}},
+
+		// O4. These two are not for speed — they ARE the idempotency guarantee.
+		// db.InsertWithClientId's whole duplicate-key arm is unreachable without
+		// them, so a replayed create would quietly insert a second row: a
+		// duplicate comment, or a double-booked expense.
+		{db.CommentsCollection, "comments: one per clientId (idempotent create)", bson.D{{Key: "eventId", Value: 1}, {Key: "clientId", Value: 1}}},
+		{db.ExpensesCollection, "expenses: one per clientId (idempotent create)", bson.D{{Key: "eventId", Value: 1}, {Key: "clientId", Value: 1}}},
 	}
 
 	for _, tc := range cases {

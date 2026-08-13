@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router"
 import Landing from "@/views/Landing"
 import { setUnauthorizedHandler } from "@/utils/fetch_utils"
+import { endOfflineSession } from "@/utils/offline/session"
 import store from "@/store"
 
 const routes = [
@@ -136,6 +137,10 @@ router.beforeEach(async (to, from, next) => {
 // roll) drops the cached user and sends them to sign-in with a way back.
 setUnauthorizedHandler(() => {
   store.commit("setAuthUser", null)
+  // The server has told us this session is over — struck from the roll, signed
+  // out elsewhere, account deleted. That is a confirmed answer, not a network
+  // hiccup, so the cached copy of their gatherings must not outlive it.
+  endOfflineSession()
   // Router 4 makes currentRoute a ref, hence `.value`. Reading it without that
   // yields the ref object itself, whose `.name` is undefined — which would look
   // exactly like the placeholder case below and silently disable this handler.

@@ -340,6 +340,11 @@ type expensePayload struct {
 		UserId      string `json:"userId"`
 		AmountCents int64  `json:"amountCents"`
 	} `json:"splits"`
+
+	// Optional, and only ever read by createExpense. Sent by the offline write
+	// queue so a replayed create books the money ONCE (O4). An edit needs no
+	// equivalent: it is absolute state, so replaying it is harmless.
+	ClientId string `json:"clientId"`
 }
 
 // resolvedExpense is a validated payload: everything checked, names filled in,
@@ -535,10 +540,31 @@ func createExpense(c *gin.Context) {
 		return
 	}
 
+	clientId := strings.TrimSpace(payload.ClientId)
+
+	// Already booked? Hand back the row rather than booking it twice (O4). This
+	// is the single most damaging replay in the app: a duplicated expense does
+	// not just add a row, it makes every balance in Settle Up wrong until
+	// somebody spots it and deletes one by hand.
+	if clientId != "" {
+		var existing models.Expense
+		found, err := db.FindExpenseByClientId(event.Id, clientId, user.Id, &existing)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+			return
+		}
+		if found {
+			existing.CanEdit = true
+			c.JSON(http.StatusOK, existing)
+			return
+		}
+	}
+
 	now := primitive.NewDateTimeFromTime(time.Now())
 	expense := models.Expense{
 		Id:            primitive.NewObjectID(),
 		EventId:       event.Id,
+		ClientId:      clientId,
 		CreatedBy:     user.Id,
 		CreatedByName: user.DisplayName(),
 		PaidBy:        resolved.PaidBy,
@@ -553,8 +579,16 @@ func createExpense(c *gin.Context) {
 		History:       []models.ExpenseChange{newExpenseChange(user, models.ExpenseActionCreated, now, nil)},
 	}
 
-	if err := db.InsertExpense(expense); err != nil {
+	var raced models.Expense
+	existed, err := db.InsertExpenseIdempotent(expense, &raced)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, responses.Error{Error: errs.Internal})
+		return
+	}
+	if existed {
+		// Two replays arrived together and the other won. Nothing was written.
+		raced.CanEdit = true
+		c.JSON(http.StatusOK, raced)
 		return
 	}
 

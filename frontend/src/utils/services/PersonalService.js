@@ -1,4 +1,5 @@
 import { get, post, patch, put, _delete } from "../fetch_utils"
+import { offlineWrite } from "../offline/writes"
 
 /**
  * The private tabs on a gathering: My Lists (F19) and My Notes (F20).
@@ -39,21 +40,53 @@ export const deletePersonalList = (eventId, listId) => {
 
 /** Add an entry. payload: {text, parentId?} — parentId nests it. */
 export const addPersonalListItem = (eventId, listId, payload) => {
+  return offlineWrite(
+    "personalItem.add",
+    { eventId, listId, text: payload.text, parentId: payload.parentId || null },
+    () => _addPersonalListItem(eventId, listId, payload)
+  )
+}
+
+const _addPersonalListItem = (eventId, listId, payload) => {
   return post(`/events/${eventId}/my-lists/${listId}/items`, payload)
 }
 
 /** Rewrite an entry's text. payload: {text} */
 export const editPersonalListItem = (eventId, listId, itemId, payload) => {
+  return offlineWrite(
+    "personalItem.edit",
+    { eventId, listId, itemId, text: payload.text },
+    () => _editPersonalListItem(eventId, listId, itemId, payload)
+  )
+}
+
+const _editPersonalListItem = (eventId, listId, itemId, payload) => {
   return put(`/events/${eventId}/my-lists/${listId}/items/${itemId}`, payload)
 }
 
 /** Delete an entry and everything nested under it. */
 export const deletePersonalListItem = (eventId, listId, itemId) => {
+  return offlineWrite(
+    "personalItem.delete",
+    { eventId, listId, itemId },
+    () => _deletePersonalListItem(eventId, listId, itemId)
+  )
+}
+
+const _deletePersonalListItem = (eventId, listId, itemId) => {
   return _delete(`/events/${eventId}/my-lists/${listId}/items/${itemId}`)
 }
 
 /** Tick or untick a checklist entry. */
-export const setPersonalListItemChecked = (
+export const setPersonalListItemChecked = (eventId, listId, itemId, checked) => {
+  return offlineWrite(
+    "personalItem.check",
+    { eventId, listId, itemId, checked },
+    () => _setPersonalListItemChecked(eventId, listId, itemId, checked)
+  )
+}
+
+const _setPersonalListItemChecked = (
   eventId,
   listId,
   itemId,
@@ -96,5 +129,11 @@ export const getPersonalNote = (eventId) => {
  * @returns {Promise<{text: string, updatedAt: number|null}>}
  */
 export const savePersonalNote = (eventId, text) => {
+  return offlineWrite("note.save", { eventId, text }, () =>
+    _savePersonalNote(eventId, text)
+  )
+}
+
+const _savePersonalNote = (eventId, text) => {
   return put(`/events/${eventId}/my-notes`, { text })
 }

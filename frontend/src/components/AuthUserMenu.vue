@@ -83,6 +83,7 @@ import UserAvatarContent from "@/components/UserAvatarContent"
 import { mapState, mapMutations, mapGetters } from "vuex"
 import { post, isPhone, displayName } from "@/utils"
 import TeamsNotReadyDialog from "./TeamsNotReadyDialog.vue"
+import { endOfflineSession } from "@/utils/offline/session"
 
 export default {
   name: "AuthUserMenu",
@@ -113,8 +114,19 @@ export default {
     ...mapMutations(["setAuthUser"]),
     displayName,
     async signOut() {
-      await post("/auth/sign-out")
+      // Best-effort, because signing out must work with no connection. A
+      // member handing their phone to someone, or losing it, cannot be told
+      // "not while you're offline" — and the local copy of their gatherings
+      // and ledger is exactly what they'd want gone. The cookie is dropped
+      // locally either way, and the server session expires on its own.
+      try {
+        await post("/auth/sign-out")
+      } catch (err) {
+        if (!err?.offline) throw err
+      }
       this.setAuthUser(null)
+      // Awaited: the reload must not race the wipe.
+      await endOfflineSession()
       location.reload()
     },
     goToSettings() {

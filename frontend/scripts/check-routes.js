@@ -68,7 +68,18 @@ function takeOption(name) {
   return value
 }
 
+function takeFlag(name) {
+  const at = args.indexOf(name)
+  if (at === -1) return false
+  args.splice(at, 1)
+  return true
+}
+
 const SHOTS = takeOption("--shots")
+// Set by browser-check.sh --dev. The service worker registers in production
+// builds only (see utils/offline/sw.js), so the offline section has nothing to
+// assert against a webpack-dev-server and says so rather than passing hollowly.
+const DEV_SERVER = takeFlag("--dev-server")
 const ONLY_SOURCE = takeOption("--only")
 // Built once so a bad pattern fails here, naming itself, rather than on the
 // first section it is tested against.
@@ -686,6 +697,266 @@ async function visit(cdp, events, url, label, { expected = null, ready } = {}) {
   await shoot(cdp, label)
 }
 
+/* ---------------------------------------------------------------- *
+ * Offline
+ *
+ * The only tier that can check any of this. The unit tiers have no service
+ * worker, no Cache Storage, no real IndexedDB and no navigation — so "the app
+ * opens with the network switched off" is a claim only a real browser can
+ * settle.
+ *
+ * The header assertions are not decoration either. A service worker served as
+ * text/html fails its update check on the MIME type rather than updating, and
+ * because this server answers any unmatched path with the SPA shell, that is
+ * one deleted file away at all times. A client in that state is pinned to a
+ * dead build and cannot be rescued by deploying anything except a replacement
+ * at that exact URL. These two lines are the guard on it.
+ * ---------------------------------------------------------------- */
+
+const OFFLINE_ON = {
+  offline: true,
+  latency: 0,
+  downloadThroughput: 0,
+  uploadThroughput: 0,
+}
+const OFFLINE_OFF = {
+  offline: false,
+  latency: 0,
+  downloadThroughput: -1,
+  uploadThroughput: -1,
+}
+
+/** The worker is registered, active, and controlling this page. */
+const swControlling = `(async () => {
+  if (!("serviceWorker" in navigator)) return false
+  const reg = await navigator.serviceWorker.ready
+  return !!reg.active && !!navigator.serviceWorker.controller
+})()`
+
+/** The shell and the build's own chunks made it into Cache Storage. */
+const shellCached = `(async () => {
+  const names = await caches.keys()
+  if (names.length === 0) return false
+  const shell = await caches.match("/")
+  return !!shell
+})()`
+
+const precachedChunkCount = `(async () => {
+  const names = await caches.keys()
+  let n = 0
+  for (const name of names) {
+    const keys = await (await caches.open(name)).keys()
+    n += keys.filter((r) => /\\/js\\/.*\\.js/.test(new URL(r.url).pathname)).length
+  }
+  return n
+})()`
+
+/**
+ * How /service-worker.js is actually served, read from the page so the real
+ * response headers are what gets asserted rather than what the config says.
+ */
+const serviceWorkerHeaders = `(async () => {
+  const res = await fetch("/service-worker.js", { cache: "no-store" })
+  return {
+    status: res.status,
+    type: res.headers.get("content-type") || "",
+    cache: res.headers.get("cache-control") || "",
+  }
+})()`
+
+async function runOfflineChecks(cdp, events) {
+  if (DEV_SERVER) {
+    // Announced, never silent. A section that quietly passed zero assertions
+    // is the failure mode this whole file is built to avoid.
+    report(true, "offline — SKIPPED on the dev server (no worker registered)")
+    return
+  }
+
+  // Warm everything the offline load will need: the worker installs and
+  // precaches, and the app caches the gathering it reads.
+  await visit(cdp, events, `${BASE}/e/${EVENT_ID}`, "event (warming)", {
+    ready: buttonMatching("/^Discussion/"),
+  })
+
+  // How the worker is actually served. This has to come AFTER a navigation:
+  // the fetch is issued from the page, and on a fresh browser the section
+  // would otherwise run it against about:blank — which is how these three
+  // assertions passed in a full run and failed under `--only offline`, the
+  // exact order-dependence that makes a section untrustworthy.
+  const headers = await evaluate(cdp, serviceWorkerHeaders)
+  report(
+    headers?.status === 200,
+    "service worker — served",
+    `status ${headers?.status}`
+  )
+  report(
+    /javascript/i.test(headers?.type || "") &&
+      !/text\/html/i.test(headers?.type || ""),
+    "service worker — served as JavaScript, not the SPA shell",
+    `content-type: ${headers?.type}`
+  )
+  report(
+    /no-cache|no-store|max-age=0/i.test(headers?.cache || ""),
+    "service worker — always revalidated, so it can be replaced",
+    `cache-control: ${headers?.cache}`
+  )
+
+  const controlling = await evaluate(cdp, swControlling)
+  report(controlling === true, "service worker — registered and controlling")
+
+  report((await evaluate(cdp, shellCached)) === true, "app shell — cached")
+
+  const chunks = await evaluate(cdp, precachedChunkCount)
+  report(
+    typeof chunks === "number" && chunks > 5,
+    "route chunks — precached, so a cold offline load can boot",
+    `found ${chunks}`
+  )
+
+  // ---- a write made with no connection, and what becomes of it ----
+  //
+  // The queue's own rules are unit-tested; what only a browser can settle is
+  // that a comment typed offline appears on the page, survives the connection
+  // coming back, and arrives at the server exactly once.
+  // Unique per run. A constant marker counts every previous run's comment too
+  // (the fixture is not reset between REUSE runs), which reads as "it arrived
+  // three times" when it arrived once, three runs ago.
+  const marker = `offline-check-${Date.now().toString(36)}`
+
+  // Done here, on the page just warmed above, rather than after the cold-load
+  // pass: this is about a write made while reading, which is when one actually
+  // gets made. Discussion is the default tab on arrival.
+  await cdp("Network.emulateNetworkConditions", OFFLINE_ON)
+  await sleep(500)
+
+  // Driven through the UI rather than through internals: the point is that the
+  // existing, unmodified call sites work offline, and reaching past them into
+  // the store would test the queue while skipping the thing being claimed.
+  const composed = await evaluate(
+    cdp,
+    `(() => {
+      // BY PLACEHOLDER, not "the first visible textarea" — the event
+      // description editor is also a textarea and sits above this one on the
+      // page, so the loose selector types the comment into the description and
+      // then reports a broken feature.
+      const box = [...document.querySelectorAll('textarea')].find(
+        (el) =>
+          el.offsetParent !== null &&
+          /add a message/i.test(el.getAttribute('placeholder') || '')
+      )
+      if (!box) return 'NO COMPOSER'
+      // The native setter, because Vue tracks the property rather than the
+      // attribute: assigning box.value directly leaves the model untouched and
+      // the Post button disabled.
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype, 'value'
+      )?.set
+      setter.call(box, ${JSON.stringify(marker)})
+      box.dispatchEvent(new Event('input', { bubbles: true }))
+      return 'ok'
+    })()`
+  )
+
+  if (composed !== "ok") {
+    // Said out loud rather than skipped silently — a section that quietly
+    // checks nothing is the failure mode this file exists to avoid.
+    report(true, `offline write — SKIPPED (${composed} on the Discussion tab)`)
+  } else {
+    await sleep(400)
+    const posted = await evaluate(cdp, clickButton("/^Post$/i"))
+    report(posted === "ok", "offline write — the compose button is usable", posted)
+    await sleep(1500)
+    report(
+      (await evaluate(cdp, hasText(new RegExp(marker)))) === true,
+      "offline write — appears on the page straight away"
+    )
+    await shoot(cdp, "event-offline-write")
+
+    // Reconnect, and let boot.js's drain run.
+    await cdp("Network.emulateNetworkConditions", OFFLINE_OFF)
+    await sleep(4000)
+
+    // Read it back from the SERVER, bypassing every cache, and count it.
+    const onServer = await evaluate(
+      cdp,
+      `(async () => {
+        const res = await fetch("/api/events/${EVENT_ID}", { cache: "no-store" })
+        const event = await res.json()
+        const hits = (event.comments || [])
+          .filter((c) => (c.text || "").includes(${JSON.stringify(marker)}))
+        return hits.length
+      })()`
+    )
+    report(onServer === 1, "offline write — reached the server exactly once", `found ${onServer}`)
+  }
+
+
+  // Let the dashboard's prefetch finish; it is what makes gatherings readable
+  // that this browser never opened.
+  await visit(cdp, events, `${BASE}/home`, "home (warming)", {
+    ready: buttonMatching("/call a gathering/i"),
+  })
+  // The prefetch deliberately waits for an idle moment (up to 2s) before it
+  // starts, then walks the gatherings one at a time. Long enough to cover both.
+  await sleep(6000)
+
+  // ---- the actual question ----
+  await cdp("Network.emulateNetworkConditions", OFFLINE_ON)
+
+  // A cold load: not a reload of a live page, but a fresh navigation with the
+  // network switched off, which is what a member opening the app on a train
+  // actually does.
+  await visit(cdp, events, `${BASE}/e/${EVENT_ID}`, "event @offline", {
+    ready: buttonMatching("/^Discussion/"),
+    // The browser reports every blocked request. Those are the point of the
+    // exercise, not a fault — but anything else still fails.
+    expected:
+      /Failed to fetch|ERR_INTERNET_DISCONNECTED|ERR_NETWORK_CHANGED|ERR_FAILED/i,
+  })
+
+  report(
+    (await evaluate(cdp, "location.pathname")).includes(`/e/${EVENT_ID}`),
+    "event @offline — stayed on the gathering, not bounced to sign-in"
+  )
+  report(
+    (await evaluate(cdp, "document.querySelectorAll('#app *').length > 200")) ===
+      true,
+    "event @offline — renders"
+  )
+  report(
+    (await evaluate(cdp, hasText(/Offline/i))) === true,
+    "event @offline — says it is offline"
+  )
+
+  // The three surfaces this feature exists for.
+  for (const tab of ["Discussion", "Lists", "Settle Up"]) {
+    const clicked = await evaluate(cdp, clickButton(`/^${tab}( |$)/`))
+    if (clicked !== "ok") {
+      report(false, `${tab} @offline — reachable`, clicked)
+      continue
+    }
+    await sleep(800)
+    report(
+      (await evaluate(cdp, visibleBandPanels)) === 1,
+      `${tab} @offline — its panel is the one showing`
+    )
+  }
+  await shoot(cdp, "event-offline")
+
+  await visit(cdp, events, `${BASE}/home`, "home @offline", {
+    ready: buttonMatching("/call a gathering/i"),
+    expected:
+      /Failed to fetch|ERR_INTERNET_DISCONNECTED|ERR_NETWORK_CHANGED|ERR_FAILED/i,
+  })
+  report(
+    (await evaluate(cdp, "location.pathname")) === "/home",
+    "home @offline — stayed signed in"
+  )
+  await shoot(cdp, "home-offline")
+
+  await cdp("Network.emulateNetworkConditions", OFFLINE_OFF)
+}
+
 // Everything `--only` can select, counted so a filtered run can say what it
 // left out rather than leaving the reader to infer it from a short log.
 let skipped = 0
@@ -896,7 +1167,21 @@ async function main() {
         )
       }
     }
+
+    if (selected("offline")) {
+      console.log("\n--- offline ---")
+      await setViewport(cdp, DESKTOP)
+      await runOfflineChecks(cdp, events)
+    }
   } finally {
+    // Whatever happened above, hand the browser back connected. A throw
+    // part-way through the offline section would otherwise leave the emulation
+    // in place for anything that runs after it.
+    try {
+      await cdp("Network.emulateNetworkConditions", OFFLINE_OFF)
+    } catch {
+      // The page is already gone; nothing to restore.
+    }
     close()
   }
 

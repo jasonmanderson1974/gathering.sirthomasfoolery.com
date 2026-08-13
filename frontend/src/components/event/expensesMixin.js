@@ -56,7 +56,12 @@ export default {
       try {
         this.expenses = (await getExpenses(id)) ?? []
       } catch (err) {
-        this.showError("Could not load the expenses. Please try again.")
+        // Offline with no cached ledger. "Please try again" is the wrong
+        // advice when there is nothing to try again with, and the offline
+        // banner has already said why.
+        if (!err?.offline) {
+          this.showError("Could not load the expenses. Please try again.")
+        }
       } finally {
         this.refreshingExpenses = false
       }

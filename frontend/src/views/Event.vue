@@ -99,6 +99,18 @@
 
         <div class="tw-mx-auto tw-max-w-5xl tw-flex-1 lg:tw-order-1">
           <div v-if="!isSettingSpecificTimes" class="tw-mx-4">
+            <!-- How old the copy on screen is. Shown only when this page came
+                 off the cache, and it earns its place mainly for Settle Up:
+                 reading a figure without knowing it may predate the last three
+                 expenses is worse than knowing the page is stale. -->
+            <div
+              v-if="cachedAgeLabel"
+              class="tw-mb-2 tw-flex tw-items-center tw-gap-1.5 tw-text-xs tw-opacity-60"
+            >
+              <v-icon size="14">mdi-cloud-off-outline</v-icon>
+              <span>Saved copy — last updated {{ cachedAgeLabel }}</span>
+            </div>
+
             <!-- Title, chips, date, and action buttons -->
             <EventHeader
               :event="event"
@@ -338,6 +350,31 @@
       />
     </div>
 
+    <!-- No connection, and this gathering was never cached on this device.
+         Without this the page rendered as an empty document: the block above is
+         `v-if="event"`, and the created() hook used to swallow every error that
+         wasn't EventNotFound. -->
+    <div
+      v-else-if="unavailableOffline"
+      class="tw-mt-16 tw-flex tw-flex-col tw-items-center tw-px-6 tw-text-center"
+    >
+      <v-icon size="48" class="tw-mb-4 tw-text-brass">mdi-cloud-off-outline</v-icon>
+      <div class="tw-font-head tw-text-xl tw-text-parchment">
+        This gathering is not available offline
+      </div>
+      <div class="tw-mt-2 tw-max-w-sm tw-text-sm tw-opacity-70">
+        It has not been read on this device since you were last connected. It
+        will open as soon as you have a signal again.
+      </div>
+      <v-btn
+        variant="outlined"
+        class="tw-mt-6"
+        @click="$router.replace({ name: 'home' })"
+      >
+        Back to your gatherings
+      </v-btn>
+    </div>
+
     <!-- Undo for a cascading assignment (N2).
 
          Its OWN snackbar rather than the app-wide AutoSnackbar: that one takes a
@@ -385,6 +422,8 @@ import {
   viewportWidth,
 } from "@/utils"
 import { mapActions, mapState, mapMutations, mapGetters } from "vuex"
+import { staleAt } from "@/utils/offline/cache"
+import { formatAge } from "@/utils/offline/age"
 import dayjs from "dayjs"
 import utcPlugin from "dayjs/plugin/utc"
 import timezonePlugin from "dayjs/plugin/timezone"
@@ -489,6 +528,10 @@ export default {
   data: () => ({
     fromEditEvent: false,
 
+    // No connection and no cached copy of this gathering. Distinct from
+    // `event === null`, which is also the state during a normal load.
+    unavailableOffline: false,
+
     choiceDialog: false,
     webviewDialog: false,
     guestDialog: false,
@@ -553,6 +596,18 @@ export default {
   computed: {
     ...mapState(["authUser"]),
     ...mapGetters(["canInvite", "canManageUsers"]),
+
+    /**
+     * How old this page's data is, or null when it came from the network.
+     *
+     * `staleAt` reads a marker fetch_utils puts on a value it served from
+     * cache. Note a successful `refreshLists` replaces `this.event` with a
+     * spread copy, which drops the marker — correctly, since at that point the
+     * lists on screen are live.
+     */
+    cachedAgeLabel() {
+      return formatAge(staleAt(this.event))
+    },
     /**
      * A computed, not an inline `event.lists ?? []` in the template: an inline
      * fallback allocates a fresh array on every render, which changes the
@@ -1162,7 +1217,12 @@ export default {
       try {
         this.event = { ...this.event, lists: await getLists(id) }
       } catch (err) {
-        this.showError("Could not refresh the lists. Please try again.")
+        // Offline, the lists already on screen came with the cached event and
+        // are the best copy there is — so a failed refresh has changed nothing
+        // and is not worth a snackbar.
+        if (!err?.offline) {
+          this.showError("Could not refresh the lists. Please try again.")
+        }
       } finally {
         this.refreshingLists = false
       }
@@ -1437,7 +1497,12 @@ export default {
           }
         })
         .catch((err) => {
-          console.error(err)
+          // The calendar overlay is the one part of this page that genuinely
+          // cannot work offline: its reads are keyed by time range, so they are
+          // deliberately not cached (see utils/offline/policy.js). Being
+          // unreachable is the expected outcome there, not a fault worth
+          // logging on every load.
+          if (!err?.offline) console.error(err)
           this.calendarPermissionGranted = false
         })
     },
@@ -1500,6 +1565,13 @@ export default {
           this.$router.replace({ name: "home" })
           return
       }
+      // Offline AND never cached on this device. Everything below needs the
+      // network too, so there is nothing further to try — render the
+      // explanation instead of the empty document this used to leave behind.
+      if (err?.offline) {
+        this.unavailableOffline = true
+        return
+      }
     }
 
     // Not awaited and not in `promises`: the mention picker is a convenience on
@@ -1525,7 +1597,13 @@ export default {
       .then((authUser) => {
         this.setAuthUser(authUser)
       })
-      .catch(() => {
+      .catch((err) => {
+        // Offline is not evidence of being signed out. Clearing authUser here
+        // would fire the watcher below — dropping the ledger and resetting the
+        // open tab — over a lost signal, on a session that is still perfectly
+        // valid. A real answer from the server still clears it, and a genuine
+        // session-ended 401 is handled by fetch_utils either way.
+        if (err?.offline) return
         this.setAuthUser(null)
       })
   },

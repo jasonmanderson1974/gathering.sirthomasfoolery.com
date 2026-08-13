@@ -1,4 +1,5 @@
 import { get, post, patch, put, _delete } from "../fetch_utils"
+import { offlineWrite } from "../offline/writes"
 
 export const archiveEvent = (eventId, archive) => {
   return post(`/events/${eventId}/archive`, {
@@ -38,17 +39,39 @@ export const clearRsvp = (eventId) => {
 
 /** Post a comment, or a reply when threadId is set. payload: {text, threadId?} */
 export const addComment = (eventId, payload) => {
+  return offlineWrite(
+    "comment.add",
+    { eventId, text: payload.text, threadId: payload.threadId || null },
+    () => _addComment(eventId, payload)
+  )
+}
+
+const _addComment = (eventId, payload) => {
   return post(`/events/${eventId}/comments`, payload)
 }
 
 /** Edit your own comment. payload: {text} */
 export const editComment = (eventId, commentId, payload) => {
+  return offlineWrite(
+    "comment.edit",
+    { eventId, commentId, text: payload.text },
+    () => _editComment(eventId, commentId, payload)
+  )
+}
+
+const _editComment = (eventId, commentId, payload) => {
   return put(`/events/${eventId}/comments/${commentId}`, payload)
 }
 
 /** Delete a comment (own, or any if you're the owner). Deleting a thread root
  *  also deletes its replies. */
 export const deleteComment = (eventId, commentId) => {
+  return offlineWrite("comment.delete", { eventId, commentId }, () =>
+    _deleteComment(eventId, commentId)
+  )
+}
+
+const _deleteComment = (eventId, commentId) => {
   return _delete(`/events/${eventId}/comments/${commentId}`)
 }
 
@@ -133,11 +156,27 @@ export const deleteList = (eventId, listId) => {
  * three levels deep.
  */
 export const addListItem = (eventId, listId, payload) => {
+  return offlineWrite(
+    "listItem.add",
+    { eventId, listId, text: payload.text, parentId: payload.parentId || null },
+    () => _addListItem(eventId, listId, payload)
+  )
+}
+
+const _addListItem = (eventId, listId, payload) => {
   return post(`/events/${eventId}/lists/${listId}/items`, payload)
 }
 
 /** Edit one of your own items. payload: {text} */
 export const editListItem = (eventId, listId, itemId, payload) => {
+  return offlineWrite(
+    "listItem.edit",
+    { eventId, listId, itemId, text: payload.text },
+    () => _editListItem(eventId, listId, itemId, payload)
+  )
+}
+
+const _editListItem = (eventId, listId, itemId, payload) => {
   return put(`/events/${eventId}/lists/${listId}/items/${itemId}`, payload)
 }
 
@@ -146,11 +185,25 @@ export const editListItem = (eventId, listId, itemId, payload) => {
  * or above). The subtree goes with it, including children someone else added.
  */
 export const deleteListItem = (eventId, listId, itemId) => {
+  return offlineWrite("listItem.delete", { eventId, listId, itemId }, () =>
+    _deleteListItem(eventId, listId, itemId)
+  )
+}
+
+const _deleteListItem = (eventId, listId, itemId) => {
   return _delete(`/events/${eventId}/lists/${listId}/items/${itemId}`)
 }
 
 /** Tick or untick a checklist item (any signed-in user). */
 export const setListItemChecked = (eventId, listId, itemId, checked) => {
+  return offlineWrite(
+    "listItem.check",
+    { eventId, listId, itemId, checked },
+    () => _setListItemChecked(eventId, listId, itemId, checked)
+  )
+}
+
+const _setListItemChecked = (eventId, listId, itemId, checked) => {
   return put(`/events/${eventId}/lists/${listId}/items/${itemId}/checked`, {
     checked,
   })

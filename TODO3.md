@@ -2478,6 +2478,193 @@ checklist gathering, 2 on another, and 0 on gatherings whose only avatars are th
 excluded ones, which is the answer that distinguishes "nothing to show" from a silently broken
 lookup.
 
+### N4 — the hover card's own assertion fails only on a full run, and lies about why · **P2 · S** — OPEN
+
+`check:routes`' **"member hover card — opens with the member's details"** fails on a full run while
+passing under every `--only` subset tried (`hover` alone, `fellowship|hover`, `dialogs|hover`,
+`event|hover`, `home|settings|admin|fellowship|hover`). Two consecutive full runs failed
+identically, so it is not simple flakiness — it is something about the full sequence.
+
+**Not a regression from Part O.** Confirmed by stashing every Part O change and running the full
+`--dev` leg on a clean tree at `7612c5f`, where it fails the same way. Worth stating plainly
+because the natural assumption is that the offline work caused it: it did not. (It also passed on a
+full `--dev` run earlier the same day on the same clean tree, so the trigger is environmental or
+load-dependent rather than purely code-dependent.)
+
+**Two separate problems, and the second is why the first is hard to read:**
+
+1. **The card genuinely does not open.** Diagnostics on the failing run show the overlay present
+   but `visibility: hidden` — Vuetify's closed state — with the `v-card` inside it already
+   rendered, so the menu had opened at some point and closed again. It is still hidden after a
+   **25-second** poll, so this is not the assertion being impatient.
+2. **The failure message hides that.** `hoverCardText` filters panels on
+   `getBoundingClientRect().height > 0`, which does **not** exclude a `visibility: hidden` element
+   — a hidden overlay still has a box. So the closed card is counted as the one visible panel and
+   its `innerText` is `""`, and the check reports `card said:` with nothing after it, instead of
+   the `NO CARD` it has a branch for. Fix this first whatever else is done: it costs one predicate
+   and turns an empty string into a statement.
+
+Note the neighbouring assertions are compromised by the same filter and should be re-read once (1)
+is understood — **"avatar at the Settings size" passes by measuring the hidden card's avatar**, so
+it is not currently evidence that the card opened.
+
+---
+
+## PART O — offline support (opened 2026-08-13)
+
+The club is used on phones, where the connection is intermittent and iOS evicts backgrounded tabs
+aggressively. Asked for directly: read a gathering — discussion, lists, and **especially Settle
+Up** — with no signal, and make changes that sync on reconnect.
+
+**This reverses the standing "no service worker" rule, deliberately and with the decision's own
+reasoning checked.** `TODO2.md` G3 was closed won't-do on 2026-08-10 for **web push**, on the
+grounds that its value "was never established". Offline reading is a different feature and its
+value was established by being asked for, so per the closed section's own rule this gets fresh IDs
+rather than reopening G3. **Web push remains closed.** J11's warning applies in full and is
+answered in O3 rather than argued with.
+
+### O1 — the app is useless, and misleading, without a connection · **P1 · M** — DONE 2026-08-13
+
+Four separate faults, all silent:
+
+- `fetchMethod` rejects a transport failure with a bare `TypeError` carrying no `.status` and no
+  `.error`, so every call site doing `switch (err.error)` fell through to `default` with nothing to
+  say.
+- The router guard could not tell that from a 401, so **an offline boot bounced a signed-in member
+  to `/sign-in`** — an invite-only app telling a member with a valid 30-day session that they were
+  signed out.
+- `Event.vue`'s body is `v-if="event"` and its `catch` handled only `EventNotFound`, so an offline
+  load rendered an **empty document**: no error, no explanation, nothing logged.
+- `getEvents` committed nothing unless **both** `/user/folders` and `/user/events` succeeded, which
+  offline is the ordinary case rather than a rare one.
+
+Fixed at the one choke point every API call already passes. `err.offline` is the tag everything
+else keys off. Reads are cached in IndexedDB (`src/utils/offline/`) behind an **explicit route
+allowlist** — not "every GET", because each entry is member data on a phone's disk and the list
+should stay short enough to audit. Keyed by `userId` and deep-copied in and out, because
+`GET /events/:id` is caller-dependent and because views mutate their payloads in place.
+
+**Found on implementation:** three `setAuthUser(null)` calls live in *failure* catches (`App.vue`,
+`Home.vue`, `Event.vue`). Wiring the cache teardown into the mutation would have wiped the cache
+exactly when it was needed, so teardown is paired explicitly in `endOfflineSession` and called only
+where the session is *known* to be over. Sign-out is also best-effort now: a member must be able to
+wipe local data with no signal.
+
+### O2 — you can only read what you happened to open · **P2 · S** — DONE 2026-08-13
+
+Caching on visit sounds thriftier and is the wrong trade: the gathering you want on the train is
+the one you did *not* open while you had signal. After `/user/events`, every non-archived gathering
+and its ledger are warmed. **Found on implementation:** this fires from `getEvents`, which runs on
+*every* full page load, so without a delay it put a burst of background requests alongside the ones
+the page was blocked on. It now waits for `requestIdleCallback` (2s ceiling) before starting.
+
+### O3 — nothing can open offline, because the shell is `no-store` · **P1 · M** — DONE 2026-08-13
+
+The SPA shell is served `no-cache, no-store, must-revalidate` and every route is a lazy chunk, so
+without a worker an offline cold load gets the browser's error page — and on a phone that is the
+case that matters. A worker is the only way, so the narrowest possible one: precache the shell and
+the build's hashed assets, `/api` never touched, no data logic. See `CLAUDE.md` for the four rules
+that hold it together (registered URL, explicit Go route with `no-cache` + JS MIME, no
+`skipWaiting`, and a rehearsed kill switch).
+
+**Found on implementation, three things:**
+
+- **The shell cannot be precached from disk.** `dist/index.html` is a Go `html/template` — it still
+  contains its actions, which the server fills per request. Precaching the file would cache the
+  template source and render its braces at people. The worker fetches the server's rendered `/`
+  instead, on install and on activate.
+- **`public/index.html` is templated twice and neither engine skips HTML comments.** An empty
+  lodash interpolation written *inside a comment warning about this very hazard* failed the build
+  with a bare `SyntaxError: Unexpected token ')'` naming no file. The comment now spells the
+  delimiters out in words.
+- **`frontend/Dockerfile` was on `node:18-alpine` while all three CI workflows pin Node 20.** A
+  transitive workbox dependency reads the global `crypto`, which only exists from Node 19, so the
+  worker built everywhere except in the check's own image. Bumped to 20; keep it in step.
+
+Precache weight was 7.4MB unexcluded — 3MB of that the `eot`/`ttf`/`woff` fallbacks beside faces we
+also ship as woff2, plus subsets for alphabets this club does not write in. Excluding those brings
+it to **3.3MB across 45 files** with nothing lost offline. Note the anchor on `/\.(eot|ttf|woff)$/`:
+`.woff2` must not match, or the icon font goes with them and all 69 `mdi-*` glyphs render as blank
+squares with nothing logged (the L8 failure).
+
+**The kill switch is rehearsed, not merely written** — `scripts/kill-switch-drill.sh` deploys it
+over a live worker in the check stack, forces the update check a real client would make, and
+asserts the registration and every cache are gone and the app still renders without one. "We have a
+rollback" was not a claim worth making on the strength of having written the file, given that the
+failure it guards against is unrecoverable.
+
+`check-routes.js` gains an `offline` section — the only tier that can check any of this, since the
+unit tiers have no worker, no Cache Storage and no navigation. It asserts the worker's own response
+headers (the direct guard on J11's trap), that the shell and route chunks are cached, and that a
+**cold load with the network switched off** renders the event page with Discussion, Lists and
+Settle Up all reachable. It **skips with a printed reason** on the `--dev` leg, where no worker is
+registered, rather than passing hollowly.
+
+### O4 — no create is replayable, so a queued write double-books money · **P1 · M** — DONE 2026-08-13
+
+Every create minted `primitive.NewObjectID()` server-side with no idempotency mechanism anywhere,
+so replaying a queued write duplicated a comment or **double-booked an expense** — every balance in
+Settle Up wrong from then on.
+
+A client-supplied `clientId` is stored **on the document**, not carried as an `Idempotency-Key`
+header: the header would need `cors.Config.AllowHeaders` widened for the cross-origin dev setup,
+and a separate store would have to survive a restart, which an in-process one like `assignUndoStore`
+does not — a queue may flush hours after it was filled. On the document it is durable for free.
+
+**The partial unique indexes ARE the guarantee, not an optimization.** The handler looks the
+clientId up before inserting, but lookup-then-insert is not atomic: two replays arriving together
+on a reconnect both miss and both insert. `db.InsertWithClientId` turns the resulting duplicate-key
+error into "here is the row the other one wrote", which is the correct answer.
+`TestInsertExpenseIdempotent_ConcurrentReplaysInsertOnce` fires eight at once and asserts one row.
+
+Three things found on implementation:
+
+- **PARTIAL on `clientId` existing, or the index means "one comment per gathering".** Every document
+  written before O4, and every write from a client that sends no clientId, has no such field; a
+  plain unique index would collapse all of them into one allowed document per event.
+- **No dated migration script.** The repo's post-L11 convention is that indexes are declared in
+  `db/init.go` and created at every boot, so a migration folder would be a second place for them to
+  drift from. `db/indexes_test.go` asserts both new indexes exist.
+- **A list item is an array element and cannot be uniquely indexed inside its parent.** Those creates
+  carry the guard in the `$push` filter instead (`items.clientId: {$ne: …}`), which is atomic
+  because it is a single-document update. A `ModifiedCount` of 0 then means either "list gone" or
+  "already added", and the route re-reads to tell them apart — one query, in a rare path.
+
+### O5 — offline writes · **P1 · L** — DONE 2026-08-13
+
+A durable FIFO in IndexedDB, flushed serially on reconnect. In scope, matching the three surfaces
+asked for: comments (add/edit/delete), shared list items (add/edit/delete/tick), My Lists items,
+My Notes, and expenses (add/edit/delete). Deliberately **out**, and still refused offline: assignee
+changes (the cascade holds a server-side undo snapshot and validates against a pool it mutates
+itself), item reordering, receipt uploads, thread tagging, availability, RSVP, polls, event settings.
+
+**The reducers are the design decision.** This codebase is deliberately non-optimistic — every
+handler does `await service(); await refreshEvent()`. Rather than rewrite ~30 call sites to update
+local state, a queued op applies a pure reducer to the **cached payload**, so the refetch each
+handler already does reads the change straight back out. Not one call site changed.
+
+Three faults found on implementation, two of them real bugs:
+
+- **The queue had no in-memory fallback.** Unlike the cache it went straight to IndexedDB, so in
+  Safari private browsing it would have silently discarded writes the member had already been shown
+  as saved. It now mirrors the cache: memory is the working copy, IndexedDB is durability.
+- **The temp-id map was per-flush.** A create flushes, the cached page still shows the temporary id
+  until something refetches, and an edit made offline the next day addressed a dead id. The mapping
+  is persisted now, and `enqueue` resolves incoming ids through it as well as `flush`.
+- **A gathering is cached under TWO ids** — `_id` and `shortId`, since `GetEventByEitherId` accepts
+  both and the app uses both (the router param is whichever was in the link; the write handlers use
+  `shortId ?? _id`). A reducer editing only the caller's spelling edited the copy nobody was looking
+  at, and an offline comment appeared to vanish. **Only the browser check found this**; every unit
+  test used one spelling. The cache now learns the pairing from the payload and reducers apply to
+  every alias.
+
+The mention-email limit (`routes/mention_emails.go`, per author per hour) is handled by spacing
+comment creates on flush — a batch would otherwise exhaust it invisibly, saving the comments while
+never notifying anyone.
+
+`check-routes.js` asserts the whole round trip in a real browser: a comment typed with the network
+off appears on the page immediately, and after reconnecting is on the **server exactly once**.
+
 ---
 
 ## Workflow rules
