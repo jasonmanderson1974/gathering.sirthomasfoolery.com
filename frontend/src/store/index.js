@@ -2,6 +2,12 @@ import { createStore } from "vuex"
 import { get } from "@/utils"
 import { roleGetters } from "./role_getters"
 import {
+  peopleActions,
+  peopleGetters,
+  peopleMutations,
+  peopleState,
+} from "./people"
+import {
   createFolder,
   deleteFolder,
   setEventFolder,
@@ -19,6 +25,9 @@ export default createStore({
     events: [],
     folders: [],
 
+    // The Fellowship, cached by account id, for the hover card (N3).
+    ...peopleState(),
+
     // Feature flags
     daysOnlyEnabled: true,
     overlayAvailabilitiesEnabled: true,
@@ -32,6 +41,7 @@ export default createStore({
   },
   getters: {
     ...roleGetters,
+    ...peopleGetters,
   },
   mutations: {
     setError(state, error) {
@@ -83,6 +93,8 @@ export default createStore({
       }
     },
 
+    ...peopleMutations,
+
     setNewDialogOptions(
       state,
       { show = false, contactsPayload = {}, folderId = null }
@@ -112,6 +124,8 @@ export default createStore({
       commit("setAuthUser", authUser)
       return authUser
     },
+
+    ...peopleActions,
 
     createNew({ getters, commit, dispatch }, { folderId = null } = {}) {
       // Guests may respond to events but not create them (enforced server-side too).

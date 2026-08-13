@@ -272,10 +272,30 @@
                      renders for EVERYONE, guests included — seeing who an entry
                      is for is not the same right as changing it. -->
                   <div
-                    v-if="bylineOf(list, row.item)"
+                    v-if="bylinePartsOf(list, row.item).length"
                     class="tw-text-xs tw-text-parchment-dim"
                   >
-                    {{ bylineOf(list, row.item) }}
+                    <!-- Rendered part by part rather than as one joined string
+                         so the assignee can be hovered on its own (N3). The
+                         byline can name up to three different people —
+                         "Ambrose · For Bart · Checked by Ada" — and one card
+                         over the whole line would answer a question nobody
+                         asked. Only the segment that carries an account id is
+                         wrapped. -->
+                    <template
+                      v-for="(part, i) in bylinePartsOf(list, row.item)"
+                      :key="`byline-${row.item._id}-${i}`"
+                    >
+                      <span v-if="i > 0"> · </span>
+                      <MemberHoverCard
+                        v-if="part.userId"
+                        :user-id="part.userId"
+                        :name="part.name"
+                      >
+                        <span>{{ part.text }}</span>
+                      </MemberHoverCard>
+                      <span v-else>{{ part.text }}</span>
+                    </template>
                   </div>
                 </div>
                 <!-- `tw-ml-auto` so that when the cluster DOES wrap it sits at
@@ -527,6 +547,7 @@ import draggable from "vuedraggable"
 import LocationInput from "@/components/LocationInput.vue"
 import ConfirmDeleteDialog from "@/components/general/ConfirmDeleteDialog.vue"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
+import MemberHoverCard from "@/components/general/MemberHoverCard.vue"
 import {
   flattenListItems,
   canAddChild,
@@ -568,6 +589,7 @@ export default {
     draggable,
     LocationInput,
     UserAvatarContent,
+    MemberHoverCard,
   },
 
   props: {
@@ -911,11 +933,36 @@ export default {
      * lists you are looking at, and the assignee is by definition you.
      */
     bylineOf(list, item) {
+      return this.bylinePartsOf(list, item)
+        .map((p) => p.text)
+        .join(" · ")
+    },
+    /**
+     * The same byline, as segments, each carrying the account id behind it when
+     * there is one (N3).
+     *
+     * Only the assignee has one: `assigneeId` is stored on the entry, while the
+     * author and the checker are name SNAPSHOTS with no id field beside them —
+     * so those two stay inert rather than being matched by name, which would
+     * put the wrong person's telephone number on screen for any two members
+     * who share a name.
+     */
+    bylinePartsOf(list, item) {
       const parts = this.isVirtual(list)
-        ? [item.sourceListName ? `from ${item.sourceListName}` : null]
-        : [item.authorName || null, assigneeLabel(item)]
-      parts.push(this.checkLabel(item))
-      return parts.filter(Boolean).join(" · ")
+        ? [item.sourceListName ? { text: `from ${item.sourceListName}` } : null]
+        : [
+            item.authorName ? { text: item.authorName } : null,
+            assigneeLabel(item)
+              ? {
+                  text: assigneeLabel(item),
+                  userId: item.assigneeId ?? "",
+                  name: item.assigneeName,
+                }
+              : null,
+          ]
+      const checked = this.checkLabel(item)
+      if (checked) parts.push({ text: checked })
+      return parts.filter(Boolean)
     },
     isMine(item) {
       // On a private panel there is nobody else's entry to be looking at, and

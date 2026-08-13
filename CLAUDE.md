@@ -291,6 +291,22 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
   `viewerOwnsAll`, which collapses every per-entry right to always-allowed, so the **explicit
   `isVirtualList` guards** are the only thing stopping it offering Edit and Remove on somebody
   else's shared entry.
+- **The member hover card attaches where a person is DISPLAYED, never where one is SELECTED** (N3).
+  `components/general/MemberHoverCard.vue` wraps an avatar or a name and opens a card — 96px avatar,
+  nickname, real name, email, phone — after 500ms of hover, or on tap where there is no hover. That
+  one rule is what keeps it out of the assignee picker, the mention autocomplete, the invite composer
+  and the expense form, where the gesture is already spoken for; out of `RespondentsList`, where
+  hovering highlights that member's availability in the grid a card would cover; and out of the
+  Settle Up balance row, which *is* its own toggle. Three things to know before touching it:
+  **the details are joined client-side, not read off the object beside it** — the server blanks
+  `Phone` on every event payload (`stripSensitiveUserFields`) and drops the email too for comment
+  authors, so the card reads `store/people.js`, filled from `/admin/allowlist` for member+ and from
+  the public `/users/:id` for guests (sending a guest to the roll is a **403**, not a lesser card);
+  **the cache keys on `userId`, never on an allowlist row's `_id`**, which is the invitation rather
+  than the person — the same trap `avatarUrl` documents, and it fails by matching nothing, silently,
+  everywhere; and **it must render nothing over a bare name**, so only ids that are provably an
+  account's are passed (`comment.author?._id`, *not* `comment.userId`, which holds a guest's name on
+  legacy rows).
 - **`src/utils/index.js` is an `export *` barrel imported by ~40 components.** Don't add modules with
   heavy or DOM-dependent dependencies to it (e.g. `utils/markdown.js`, which pulls in DOMPurify);
   import those directly by path.

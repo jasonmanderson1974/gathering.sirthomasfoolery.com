@@ -72,12 +72,16 @@
               :key="`${opt.value}-${entry.key}`"
               class="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5"
             >
-              <span class="tw-flex-none">
-                <UserAvatarContent :user="entry.user" :size="22" />
-              </span>
-              <span class="tw-truncate tw-text-parchment-dim">
-                {{ entry.label }}
-              </span>
+              <MemberHoverCard :user-id="entry.userId" :fallback="entry.user">
+                <span class="tw-flex-none">
+                  <UserAvatarContent :user="entry.user" :size="22" />
+                </span>
+              </MemberHoverCard>
+              <MemberHoverCard :user-id="entry.userId" :fallback="entry.user">
+                <span class="tw-truncate tw-text-parchment-dim">
+                  {{ entry.label }}
+                </span>
+              </MemberHoverCard>
             </div>
           </div>
         </template>
@@ -89,6 +93,7 @@
 <script>
 import { mapState } from "vuex"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
+import MemberHoverCard from "@/components/general/MemberHoverCard.vue"
 import { userFromDisplayName } from "@/utils"
 
 /**
@@ -100,7 +105,7 @@ import { userFromDisplayName } from "@/utils"
 export default {
   name: "GatheringRsvp",
 
-  components: { UserAvatarContent },
+  components: { UserAvatarContent, MemberHoverCard },
 
   props: {
     event: { type: Object, required: true },
@@ -153,6 +158,11 @@ export default {
           key,
           label: `${name}${extra}`,
           user: rsvp.user ?? userFromDisplayName(name),
+          // Only an account-keyed row has one. A legacy name-keyed RSVP's key
+          // is the NAME, which would key a lookup on something that is not an
+          // id — so it gets no hover card, which is correct: there is no
+          // account behind it to describe.
+          userId: rsvp.user?._id ?? "",
         })
       }
       return r

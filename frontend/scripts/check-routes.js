@@ -114,6 +114,37 @@ const clickButton = (re) => `(() => {
 })()`
 
 /**
+ * Hovers the nth member hover-card trigger on the page (N3).
+ *
+ * Aimed at `[data-member-hover]` rather than at the avatar or name inside it,
+ * because `mouseenter` does not bubble: dispatched at a child it would reach
+ * the listener on the wrapper not at all, and the check would report a broken
+ * card on a page where hovering works perfectly.
+ */
+const hoverMember = (n = 0) => `(() => {
+  const els = [...document.querySelectorAll('[data-member-hover]')]
+  if (els.length <= ${n}) return 'ONLY ' + els.length + ' TRIGGER(S)'
+  els[${n}].dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }))
+  return 'ok'
+})()`
+
+/**
+ * The text of the open hover card, or a reason there isn't one.
+ *
+ * Scoped to the overlay, and that scoping is the whole assertion: the
+ * Fellowship page already prints every member's email and telephone in the
+ * directory cards themselves, so `document.body.innerText` would contain the
+ * phone number whether or not the card ever opened.
+ */
+const hoverCardText = `(() => {
+  const panels = [...document.querySelectorAll('.v-overlay__content')]
+    .filter((e) => e.getBoundingClientRect().height > 0)
+  if (panels.length === 0) return 'NO CARD'
+  if (panels.length > 1) return 'MULTIPLE CARDS'
+  return panels[0].innerText.replace(/\\s+/g, ' ')
+})()`
+
+/**
  * How many band panels are actually visible on the event page.
  *
  * The band tabs toggle sibling divs with `v-show`, which is the exact construct
@@ -673,6 +704,46 @@ async function main() {
         "New Gathering — form renders"
       )
       await shoot(cdp, "new-gathering-dialog")
+    }
+
+    if (selected("member hover card")) {
+      console.log("\n--- member hover card ---")
+      // The Fellowship is the one page guaranteed to render a trigger for every
+      // member of the seeded club, whatever else is or isn't in the fixture.
+      await visit(cdp, events, `${BASE}/fellowship`, "fellowship (hover)", {
+        ready: `document.querySelectorAll('[data-member-hover]').length > 0`,
+      })
+
+      const hovered = await evaluate(cdp, hoverMember(0))
+      report(hovered === "ok", "member hover card — trigger present", hovered)
+
+      if (hovered === "ok") {
+        // Longer than the component's own 500ms open delay, with room for the
+        // roll fetch and the overlay's transition. The delay is deliberate
+        // behaviour, so this cannot be tightened without testing something
+        // other than what a person experiences.
+        await sleep(1400)
+        const text = await evaluate(cdp, hoverCardText)
+        report(
+          typeof text === "string" && /\+15550100/.test(text),
+          "member hover card — opens with the member's details",
+          `card said: ${text}`
+        )
+        // The 96px avatar is the request; a card that rendered the 40px byline
+        // avatar would satisfy every other line here.
+        report(
+          (await evaluate(
+            cdp,
+            `(() => {
+              const img = document.querySelector('.v-overlay__content .v-avatar')
+              if (!img) return 'NO AVATAR'
+              return Math.round(img.getBoundingClientRect().width)
+            })()`
+          )) === 96,
+          "member hover card — avatar at the Settings size"
+        )
+        await shoot(cdp, "member-hover-card")
+      }
     }
 
     const phonePages = [

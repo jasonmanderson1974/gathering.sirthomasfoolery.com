@@ -2357,6 +2357,71 @@ none), no horizontal scroll, **no console errors and no Vue warnings**. That run
 the empty-picker problem above — which is the argument for doing this pass at all rather than
 stopping at a green health check.
 
+### N3 — a name on a page tells you nothing about whose it is · **P2 · M** — DONE 2026-08-13
+
+The club's own directory exists and is good: **The Fellowship** shows a member's photo, nickname,
+real name, email and telephone on one card. It is also the *only* place any of that appears.
+Everywhere else — a comment byline, an RSVP roster, "For Ambrose" on a checklist, a name against a
+figure in Settle Up — a member is a bare name and a 22px avatar, and working out who that is means
+leaving the page you were reading.
+
+Hovering any avatar or any name for **half a second** now opens a card with the Settings-sized
+avatar (96px), the nickname, the real name, the email and the telephone. On a touch device, where
+hover does not exist, the same card opens on tap.
+
+- **No server change, and that is a claim about privacy rather than about effort.** Both endpoints
+  already exist and are already gated: `GET /admin/allowlist` is behind `CanInviteRequired`
+  (member+, guests 403) and returns every field the card shows, and `GET /users/:id` returns the
+  reduced public profile. A member could already read the whole roll — this is a new *surface* onto
+  data the viewer can already reach, not a new exposure. Guests get names and a photo and no contact
+  details, which is exactly what the public route serves.
+- **The card cannot read what it shows off the object beside it.** `stripSensitiveUserFields` blanks
+  `Phone` on every event payload on purpose, and `slimUserForDisplay` drops the email as well, so a
+  comment byline knows a name and an id and nothing more. The details are joined client-side out of
+  a store cache (`store/people.js`) keyed by **account id**. `indexDirectory` therefore keys on
+  `userId` and drops rows without one: an allowlist row's `_id` is the *invitation*, and keying on
+  it would match nothing, everywhere, silently — the same trap `avatarUrl` documents.
+- **One rule decides every call site: the card attaches where a person is being _displayed_, never
+  where a person is being _selected_.** That keeps it out of the assignee picker, the mention
+  autocomplete, the invite composer and the expense form, where hover and click are already spoken
+  for by the act of choosing someone. It is also why `RespondentsList` is untouched — hovering a
+  respondent highlights their availability in the grid, and a card would cover the grid it is
+  explaining — and why the Settle Up balance row is named as an exception in its own markup: the row
+  *is* the toggle, so on a phone a card there would expand the breakdown and open a card on one
+  finger. Wired: comments (row + thread header), the RSVP roster, the checklist byline, expense
+  totals / "paid by" / splits, Settle Up payments, and the two roll views.
+- **It never opens over a bare name.** A guest respondent, a deleted author, a legacy name-keyed
+  RSVP and an unclaimed invitation all reach `personDetail` with a name and no account behind it,
+  and it returns null — the trigger renders with no wrapper and no behaviour at all. A 96px monogram
+  over nothing looks like a bug on a page that is working. Ids are taken only where they are
+  provably an account's (`comment.author?._id`, not `comment.userId`, which holds a guest's *name*
+  on legacy rows).
+- **The bootstrap case is what the first build got wrong**, and it is worth recording because it
+  looks like it cannot happen: a site holding an id and a name string but no user object resolved to
+  "nothing to show", so no hover target mounted, so the lookup that would have filled it in never
+  ran — a card that could only appear once it had already appeared. Fixed by seeding the id into the
+  fallback and warming the roll from `created()` for member+ (one request per session; `created()`
+  is skipped for guests, whose path is one request *per person* and would be ten calls on an event
+  page).
+- **The delay is the feature and the fetch rides it.** `mouseenter` dispatches the lookup
+  immediately; the card opens 500ms later, by which time the data has normally landed, so the card
+  does not draw a name and then reflow as the telephone arrives. `close-delay` is not decoration —
+  without it, moving the pointer off the trigger and onto the card to click the email dismisses it
+  before you get there.
+- **`store/people.js` and the `data-member-hover` hook both exist for testability**, following
+  `role_getters.js` and the `id="roster-export-btn"` hooks respectively. The people slice is spread
+  into `src/test/mount.js`'s store so the dom tier exercises the real endpoint choice: a stub would
+  be free to send a guest to the member-only roll while the app did the same and 403'd. `check:routes`
+  cannot see that split at all — it signs in as one superAdmin — so the "never calls the roll"
+  assertion in the spec is the only thing covering it.
+
+Verified: 468 unit tests green across both tiers (20 new), `check:vuetify-props`, eslint, prettier and
+a production build clean, and `browser-check.sh --dev` **ALL PASS** including the new
+`member hover card` section — trigger present, card opens carrying the member's telephone (asserted
+*scoped to `.v-overlay__content`*, since the Fellowship page prints every phone anyway and an
+unscoped match would pass with the card broken), and the avatar measured at 96px in a real browser.
+Screenshotted at 1280 and at 390px: 200x218 on the phone, no horizontal scroll.
+
 ---
 
 ## Workflow rules

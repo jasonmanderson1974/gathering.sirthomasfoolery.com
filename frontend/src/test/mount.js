@@ -12,6 +12,12 @@ import * as directives from "vuetify/directives"
 import { createStore } from "vuex"
 import { createRouter, createMemoryHistory } from "vue-router"
 import { roleGetters } from "@/store/role_getters"
+import {
+  peopleActions,
+  peopleGetters,
+  peopleMutations,
+  peopleState,
+} from "@/store/people"
 
 /**
  * A Vuetify instance for tests.
@@ -35,6 +41,11 @@ function vuetify() {
  * `roleGetters` is imported rather than reimplemented: `canInvite` /
  * `canManageUsers` gate real branches of the templates under test, and a
  * hand-rolled stub of them would happily disagree with the app.
+ *
+ * The people slice (N3) is spread in for the same reason, and it matters more
+ * there: which endpoint a hover card reaches for is decided by `canInvite`, and
+ * sending a guest to the member-only roll is a 403, not a degraded card. A stub
+ * would be free to get that right while the app got it wrong.
  */
 export function testStore(state = {}) {
   return createStore({
@@ -47,10 +58,12 @@ export function testStore(state = {}) {
       daysOnlyEnabled: true,
       overlayAvailabilitiesEnabled: true,
       newDialogOptions: { show: false, contactsPayload: {}, folderId: null },
+      ...peopleState(),
       ...state,
     },
-    getters: { ...roleGetters },
+    getters: { ...roleGetters, ...peopleGetters },
     mutations: {
+      ...peopleMutations,
       setError: (s, v) => (s.error = v),
       setInfo: (s, v) => (s.info = v),
       setAuthUser: (s, v) => (s.authUser = v),
@@ -59,6 +72,7 @@ export function testStore(state = {}) {
       setNewDialogOptions: (s, v) => (s.newDialogOptions = v),
     },
     actions: {
+      ...peopleActions,
       showError: ({ commit }, e) => commit("setError", e),
       showInfo: ({ commit }, i) => commit("setInfo", i),
       getEvents: () => Promise.resolve(),

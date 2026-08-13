@@ -32,6 +32,12 @@
           <v-icon size="x-small" class="tw-flex-none tw-text-parchment-dim">
             {{ isOpen(person) ? "mdi-chevron-down" : "mdi-chevron-right" }}
           </v-icon>
+          <!-- Deliberately NOT a hover card, unlike the payment rows below.
+               This row is a control: the whole thing toggles the breakdown, and
+               on a touch device the card opens on tap — so a name here would
+               expand the row and open a card on the same finger. The same
+               person is hoverable in the payments list, the expense list and
+               the splits. -->
           <span class="tw-min-w-0 tw-flex-grow tw-truncate">{{
             person.name
           }}</span>
@@ -115,9 +121,13 @@
           class="tw-flex tw-items-center tw-gap-2 tw-text-sm"
         >
           <span class="tw-min-w-0 tw-flex-grow tw-break-words">
-            <span class="tw-font-medium">{{ payment.fromName }}</span>
+            <MemberHoverCard :user-id="payment.fromId" :name="payment.fromName">
+              <span class="tw-font-medium">{{ payment.fromName }}</span>
+            </MemberHoverCard>
             <span class="tw-text-parchment-dim"> pays </span>
-            <span class="tw-font-medium">{{ payment.toName }}</span>
+            <MemberHoverCard :user-id="payment.toId" :name="payment.toName">
+              <span class="tw-font-medium">{{ payment.toName }}</span>
+            </MemberHoverCard>
           </span>
           <span class="tw-flex-none tw-tabular-nums tw-text-brass">
             {{ formatCents(payment.amountCents) }}
@@ -135,6 +145,7 @@
 <script>
 import { settleUpSummary, personBreakdown } from "@/components/event/settleUp"
 import { formatCents } from "@/components/event/expenseForm"
+import MemberHoverCard from "@/components/general/MemberHoverCard.vue"
 
 /**
  * What each person put in, and who owes whom — reduced to the fewest payments
@@ -149,6 +160,8 @@ import { formatCents } from "@/components/event/expenseForm"
  */
 export default {
   name: "SettleUpSummary",
+
+  components: { MemberHoverCard },
 
   props: {
     expenses: { type: Array, default: () => [] },

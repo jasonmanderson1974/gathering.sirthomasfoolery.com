@@ -45,7 +45,9 @@
           :key="person.userId"
           class="tw-text-parchment-dim"
         >
-          {{ person.name }}
+          <MemberHoverCard :user-id="person.userId" :name="person.name">
+            <span>{{ person.name }}</span>
+          </MemberHoverCard>
           <span class="tw-tabular-nums tw-text-parchment">
             {{ formatCents(person.paidCents) }}
           </span>
@@ -79,7 +81,13 @@
               </div>
               <div class="tw-text-xs tw-text-parchment-dim">
                 {{ formatExpenseDate(expense.date) }} ·
-                {{ expense.paidByName }} paid ·
+                <MemberHoverCard
+                  :user-id="expense.paidBy"
+                  :name="expense.paidByName"
+                >
+                  <span>{{ expense.paidByName }}</span>
+                </MemberHoverCard>
+                paid ·
                 {{ splitLabel(expense) }}
               </div>
             </div>
@@ -183,7 +191,9 @@
               :key="split.userId"
               class="tw-flex tw-justify-between tw-gap-2"
             >
-              <span class="tw-text-parchment-dim">{{ split.name }}</span>
+              <MemberHoverCard :user-id="split.userId" :name="split.name">
+                <span class="tw-text-parchment-dim">{{ split.name }}</span>
+              </MemberHoverCard>
               <span>{{ formatCents(split.amountCents) }}</span>
             </div>
           </div>
@@ -233,6 +243,7 @@ import { mapGetters } from "vuex"
 import SettleUpSummary from "@/components/event/SettleUpSummary.vue"
 import ExpenseDialog from "@/components/event/ExpenseDialog.vue"
 import ConfirmDeleteDialog from "@/components/general/ConfirmDeleteDialog.vue"
+import MemberHoverCard from "@/components/general/MemberHoverCard.vue"
 import { personTotals } from "@/components/event/settleUp"
 import { formatCents, formatExpenseDate } from "@/components/event/expenseForm"
 import { expenseReceiptUrl } from "@/utils/services/ExpenseService"
@@ -270,7 +281,12 @@ const FIELD_LABELS = Object.freeze({
 export default {
   name: "EventExpenses",
 
-  components: { SettleUpSummary, ExpenseDialog, ConfirmDeleteDialog },
+  components: {
+    SettleUpSummary,
+    ExpenseDialog,
+    ConfirmDeleteDialog,
+    MemberHoverCard,
+  },
 
   props: {
     /** Short id or _id — whichever the route gave; the server resolves both. */

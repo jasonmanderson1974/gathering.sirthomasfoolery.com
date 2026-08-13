@@ -94,17 +94,20 @@
           >
             <!-- Photo, or the monogram this card used to draw itself -->
             <div class="tw-shrink-0">
-              <UserAvatarContent :user="member" :size="40" />
+              <!-- `person`, not `user-id`: this card IS an allowlist row, so
+                   there is nothing to look up. -->
+              <MemberHoverCard :person="member">
+                <UserAvatarContent :user="member" :size="40" />
+              </MemberHoverCard>
             </div>
 
             <div class="tw-min-w-0 tw-flex-1">
               <div class="tw-flex tw-items-center tw-gap-2">
-                <span
-                  v-if="member.hasAccount"
-                  class="tw-truncate tw-font-medium tw-text-parchment"
-                >
-                  {{ rollDisplayName(member) }}
-                </span>
+                <MemberHoverCard v-if="member.hasAccount" :person="member">
+                  <span class="tw-truncate tw-font-medium tw-text-parchment">
+                    {{ rollDisplayName(member) }}
+                  </span>
+                </MemberHoverCard>
                 <span
                   v-else
                   class="tw-truncate tw-italic tw-text-parchment-dim"
@@ -150,11 +153,12 @@ import { mapGetters } from "vuex"
 import { get, formatPhone, isPhone, rollDisplayName } from "@/utils"
 import { roles, roleLabels } from "@/constants"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
+import MemberHoverCard from "@/components/general/MemberHoverCard.vue"
 
 export default {
   name: "Fellowship",
 
-  components: { UserAvatarContent },
+  components: { UserAvatarContent, MemberHoverCard },
 
   head() {
     return { title: "The Fellowship · Directory" }

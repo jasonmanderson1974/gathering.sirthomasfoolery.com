@@ -43,7 +43,13 @@
                   >
                 </div>
                 <div class="tw-text-xs tw-text-parchment-dim">
-                  {{ comment.authorName }} ·
+                  <MemberHoverCard
+                    :user-id="comment.author?._id ?? ''"
+                    :fallback="comment.author"
+                  >
+                    {{ comment.authorName }}
+                  </MemberHoverCard>
+                  ·
                   {{ replyCountLabel(replyCountFor(comment._id)) }}
                 </div>
               </div>
@@ -220,6 +226,7 @@ import dayjs from "dayjs"
 import CommentRow from "@/components/event/CommentRow.vue"
 import MentionTextarea from "@/components/event/MentionTextarea.vue"
 import ConfirmDeleteDialog from "@/components/general/ConfirmDeleteDialog.vue"
+import MemberHoverCard from "@/components/general/MemberHoverCard.vue"
 import {
   groupComments,
   replyCount,
@@ -244,7 +251,12 @@ import { flattenMentions } from "@/components/event/mentionText"
 export default {
   name: "EventComments",
 
-  components: { CommentRow, MentionTextarea, ConfirmDeleteDialog },
+  components: {
+    CommentRow,
+    MentionTextarea,
+    ConfirmDeleteDialog,
+    MemberHoverCard,
+  },
 
   props: {
     event: { type: Object, required: true },

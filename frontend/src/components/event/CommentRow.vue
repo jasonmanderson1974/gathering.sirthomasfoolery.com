@@ -1,11 +1,17 @@
 <template>
   <div class="tw-flex tw-gap-2">
     <div class="tw-mt-0.5 tw-flex-none">
-      <UserAvatarContent :user="author" :size="22" />
+      <MemberHoverCard :user-id="authorId" :fallback="author">
+        <UserAvatarContent :user="author" :size="22" />
+      </MemberHoverCard>
     </div>
     <div class="tw-min-w-0 tw-flex-grow">
       <div class="tw-flex tw-items-baseline tw-gap-2">
-        <span class="tw-text-sm tw-font-medium">{{ comment.authorName }}</span>
+        <MemberHoverCard :user-id="authorId" :fallback="author">
+          <span class="tw-text-sm tw-font-medium">
+            {{ comment.authorName }}
+          </span>
+        </MemberHoverCard>
         <span class="tw-text-xs tw-text-parchment-dim">
           {{ formatTime(comment.createdAt) }}
           <span v-if="comment.updatedAt">· edited</span>
@@ -76,6 +82,7 @@
 <script>
 import dayjs from "dayjs"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
+import MemberHoverCard from "@/components/general/MemberHoverCard.vue"
 import { splitMentions } from "@/components/event/mentionText"
 import { userFromDisplayName } from "@/utils"
 
@@ -87,7 +94,7 @@ import { userFromDisplayName } from "@/utils"
 export default {
   name: "CommentRow",
 
-  components: { UserAvatarContent },
+  components: { UserAvatarContent, MemberHoverCard },
 
   props: {
     comment: { type: Object, required: true },
@@ -127,6 +134,15 @@ export default {
      */
     author() {
       return this.comment.author ?? userFromDisplayName(this.comment.authorName)
+    },
+    /**
+     * The account id for the hover card, and ONLY when the server resolved the
+     * author. `comment.userId` is not usable here: legacy rows hold a guest's
+     * NAME in that field, which would key the lookup on something that is not
+     * an id and offer a card over someone who has no account at all.
+     */
+    authorId() {
+      return this.comment.author?._id ?? ""
     },
     // Proxies the parent's shared edit buffer via .sync, so only one row is ever
     // in edit mode and the parent keeps ownership of the draft text.

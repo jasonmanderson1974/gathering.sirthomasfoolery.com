@@ -92,14 +92,18 @@
           class="tw-flex tw-items-center tw-gap-3 tw-rounded-xl tw-border tw-border-brass-dim tw-bg-leather/40 tw-p-3"
         >
           <div class="tw-shrink-0">
-            <UserAvatarContent :user="member" :size="36" />
+            <!-- `person`, not `user-id`: the roll IS the allowlist, so there is
+                 nothing to look up. -->
+            <MemberHoverCard :person="member">
+              <UserAvatarContent :user="member" :size="36" />
+            </MemberHoverCard>
           </div>
 
           <div class="tw-min-w-0 tw-flex-1">
             <div class="tw-truncate tw-font-medium tw-text-parchment">
-              <span v-if="member.hasAccount">
-                {{ rollDisplayName(member) }}
-              </span>
+              <MemberHoverCard v-if="member.hasAccount" :person="member">
+                <span>{{ rollDisplayName(member) }}</span>
+              </MemberHoverCard>
               <span v-else class="tw-italic tw-text-parchment-dim">
                 Awaiting first entry
               </span>
@@ -367,12 +371,13 @@ import {
 } from "@/utils"
 import { roles, roleLabels } from "@/constants"
 import UserAvatarContent from "@/components/UserAvatarContent.vue"
+import MemberHoverCard from "@/components/general/MemberHoverCard.vue"
 import AvatarEditorDialog from "@/components/settings/AvatarEditorDialog.vue"
 
 export default {
   name: "MemberAdmin",
 
-  components: { UserAvatarContent, AvatarEditorDialog },
+  components: { UserAvatarContent, AvatarEditorDialog, MemberHoverCard },
 
   head() {
     return { title: "The Roll · The Fellowship" }
