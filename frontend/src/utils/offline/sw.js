@@ -42,6 +42,21 @@ export const registerServiceWorker = ({ onUpdateReady } = {}) => {
         updateViaCache: "none",
       })
 
+      // A worker that installed during an EARLIER visit is already waiting by
+      // the time this runs, and no `updatefound` will ever fire for it.
+      //
+      // This is not a corner case, it is the ordinary one. Refreshing is what a
+      // member does when something looks wrong: the first refresh installs the
+      // new build (which then waits, by design), and every refresh after that
+      // finds it already waiting — so with only the listener below, the prompt
+      // appeared exactly once and never again. Someone who missed it was stuck
+      // on the old build with no way through short of force-quitting the app,
+      // which is not a thing anyone should have to know to do.
+      if (registration.waiting && navigator.serviceWorker.controller) {
+        waitingWorker = registration.waiting
+        onUpdateReady?.()
+      }
+
       registration.addEventListener("updatefound", () => {
         const installing = registration.installing
         if (!installing) return

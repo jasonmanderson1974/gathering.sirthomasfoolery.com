@@ -2704,6 +2704,37 @@ every read. `check:routes` asserts My Lists and the assignee pool are cached bef
 — not merely that their panels render, which was the assertion that would have passed while the tab
 sat empty.
 
+### O7 — the update prompt appeared once and never again · **P1 · S** — DONE 2026-08-13
+
+Reported obliquely — "I was online, and refreshed, before going back to Airplane mode" — while
+correcting the account of O6. The correction was right and the O6 diagnosis still held (nothing
+fetched `/my-lists` at all before that fix, so no amount of refreshing would have warmed it), but
+the sentence pointed at something worse that nobody had asked about: **what does a refresh actually
+do to a client running an old build?**
+
+Asked of a real browser rather than reasoned about, and the answer was bad. `registerServiceWorker`
+wired the "a new version is ready" prompt to `updatefound` alone, which only fires for a worker
+installing **while the page is open**. So:
+
+- the first refresh installs the new build, which then waits (by design — the worker must not swap
+  under a running app, since a deploy deletes the previous build's chunks);
+- **every refresh after that finds it ALREADY waiting**, so no event fires, no prompt appears, and
+  the member sits on the old build with no way through short of force-quitting the app.
+
+Refreshing is exactly what someone does when something looks wrong, so this converted "your fix
+didn't work" into the expected experience. Registration now also checks `registration.waiting` on
+load and offers the reload for a worker that installed during an earlier visit.
+
+**`scripts/update-drill.sh` is new and is what found it** — the sibling of the kill-switch drill,
+against a real browser and two real builds. It asserts the update installs without taking over, the
+offer appears in-session, **the offer survives a refresh**, and taking it lands on the new build
+with the app still rendering. Worth having permanently: the no-takeover choice is deliberate and
+correct, and the whole cost of it is that the offer has to be reliable.
+
+Note for anyone re-running it: `docker compose down` keeps volumes, so a drill that mutated the
+check stack's worker leaves it mutated for the next run. Use `down -v` on `timeful-check` (never on
+`timeful-dev`, which holds a restored production dump).
+
 ---
 
 ## PART P — toolchain (opened 2026-08-13)
