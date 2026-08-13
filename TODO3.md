@@ -2675,6 +2675,37 @@ off appears on the page immediately, and after reconnecting is on the **server e
 
 ---
 
+## PART P — toolchain (opened 2026-08-13)
+
+### P1 — eight new Go stdlib advisories, and production is built on the affected version · **P1 · S** — OPEN
+
+`dependency-audit.yml` went red on 2026-08-13. **Not caused by the commit it failed on** — Part O
+touched neither `server/go.mod` nor `server/go.sum`, so the dependency graph is byte-identical to
+the last green run. This is the case the weekly cron exists for (L10): **a new advisory landing
+against code that has not changed.**
+
+Module-level findings went from the expected `GO-2026-5932` alone to nine:
+`GO-2026-5026 5932 5942 5972 6088 6089 6090 6091 6218`. Seven are called by our code, and all are
+**Go standard library** — `encoding/xml` (reached via `gin.Context.ShouldBindJSON` and the CalDAV
+client), `encoding/asn1` (via `options.ClientOptions.ApplyURI` in `db.Init`), `net/http`,
+`net/url`, `crypto/tls`, `html/template`.
+
+**This affects the running binary.** `deploy.sh` builds on the dev box, which is on **go1.26.5**;
+the fixes are in **go1.26.6**. CI is on the 1.25 line and wants **1.25.13**. So the fix is a
+toolchain bump, not a code change:
+
+1. install go1.26.6+ on the build box and redeploy, which is what actually patches production;
+2. raise `go-version` from `"1.25"` in `backend-ci.yml` and `dependency-audit.yml` (both currently
+   resolve to 1.25.12);
+3. re-run `scripts/dependency-audit.sh --go` and reset `GO_ALLOWLIST` to whatever legitimately
+   remains — expected to be `GO-2026-5932` alone again, the `x/crypto/openpgp` "unmaintained by
+   design" finding that has no fixed version and is not imported by our code.
+
+Note L15's warning while doing it: a `toolchain` line in `go.mod` is a floor, not a pin —
+`GOTOOLCHAIN=go1.26.x` is what pins. Do not downgrade this shared box.
+
+---
+
 ## Workflow rules
 
 Unchanged from `CLAUDE.md` and the two archives — these are the durable part, and every one of
