@@ -159,7 +159,13 @@ const hoverTriggerReachability = `(() => {
     // trigger was off-screen, nothing to test" and passes over the bug — which
     // is how the first version of this assertion managed to stay green while
     // the respondents-list avatar was provably unreachable.
-    el.scrollIntoView({ block: 'center', inline: 'center' })
+    // behavior:'instant' is required, not tidiness: App.vue sets
+    // scroll-behavior:smooth globally, so a plain scrollIntoView ANIMATES and
+    // every measurement below is taken before the scroll lands — the element
+    // reads as off-screen and gets skipped, quietly shrinking what this
+    // assertion covers to almost nothing. (No backticks in this comment: it
+    // lives inside a template literal.)
+    el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' })
     const r = el.getBoundingClientRect()
     if (r.width === 0 || r.height === 0) continue
     const cx = r.left + r.width / 2
