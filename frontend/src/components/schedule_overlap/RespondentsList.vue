@@ -50,17 +50,12 @@
     <div
       ref="scrollableSection"
       class="tw-flex tw-flex-col"
-      :style="
-        maxHeight
-          ? `max-height: ${maxHeight}px !important;`
-          : !isPhone
-          ? `max-height: ${respondentsListMaxHeight}px !important;`
-          : ''
-      "
+      :style="scrollableSectionStyle"
     >
       <div
         ref="respondentsScrollView"
         class="-tw-ml-2 tw-pl-2 tw-pt-2 tw-text-sm"
+        :style="respondentsScrollViewStyle"
         :class="
           isPhone && !maxHeight
             ? 'tw-overflow-hidden'
@@ -275,29 +270,40 @@
             </div>
           </template>
         </v-switch>
-        <EventOptions
-          :event="event"
-          :showEventOptions="showEventOptions"
-          @toggleShowEventOptions="$emit('toggleShowEventOptions')"
-          :showBestTimes="showBestTimes"
-          @update:showBestTimes="(val) => $emit('update:showBestTimes', val)"
-          :hideIfNeeded="hideIfNeeded"
-          @update:hideIfNeeded="(val) => $emit('update:hideIfNeeded', val)"
-          :showResponseCounts="showResponseCounts"
-          @update:showResponseCounts="
-            (val) => $emit('update:showResponseCounts', val)
-          "
-          :startCalendarOnMonday="startCalendarOnMonday"
-          @update:startCalendarOnMonday="
-            (val) => $emit('update:startCalendarOnMonday', val)
-          "
-          :showCalendarEvents="showCalendarEvents"
-          @update:showCalendarEvents="
-            (val) => $emit('update:showCalendarEvents', val)
-          "
-          :hasCalendarEvents="hasCalendarEvents"
-          :numResponses="respondents.length"
-        />
+        <!-- Options sits below the balances in the page's right column, and
+             above them here — because "Responses, then Settle Up, then
+             Options" is the order asked for and Options is rendered from
+             inside this component, not beside it. A second teleport is what
+             lets one panel land between the two halves of another.
+
+             With no target it renders exactly where it always did, at the tail
+             of this list: that is the phone and the narrow-desktop layout, and
+             it is why this is a teleport rather than a move. -->
+        <Teleport :to="optionsTargetEl || 'body'" :disabled="!optionsTargetEl">
+          <EventOptions
+            :event="event"
+            :showEventOptions="showEventOptions"
+            @toggleShowEventOptions="$emit('toggleShowEventOptions')"
+            :showBestTimes="showBestTimes"
+            @update:showBestTimes="(val) => $emit('update:showBestTimes', val)"
+            :hideIfNeeded="hideIfNeeded"
+            @update:hideIfNeeded="(val) => $emit('update:hideIfNeeded', val)"
+            :showResponseCounts="showResponseCounts"
+            @update:showResponseCounts="
+              (val) => $emit('update:showResponseCounts', val)
+            "
+            :startCalendarOnMonday="startCalendarOnMonday"
+            @update:startCalendarOnMonday="
+              (val) => $emit('update:startCalendarOnMonday', val)
+            "
+            :showCalendarEvents="showCalendarEvents"
+            @update:showCalendarEvents="
+              (val) => $emit('update:showCalendarEvents', val)
+            "
+            :hasCalendarEvents="hasCalendarEvents"
+            :numResponses="respondents.length"
+          />
+        </Teleport>
       </template>
     </div>
 
@@ -399,6 +405,11 @@ export default {
     parsedResponses: { type: Object, required: true },
     isOwner: { type: Boolean, required: true },
     maxHeight: { type: Number },
+    // Where to teleport the Options section, so the page's right column can put
+    // the Settle Up balances between it and the list above. An ELEMENT, not a
+    // selector, for the reason ScheduleOverlap's own `rightColumnEl` documents.
+    // Null renders it in place, at the tail of this list.
+    optionsTargetEl: { type: Object, default: null },
     timezone: { type: Object, required: true },
     showBestTimes: { type: Boolean, required: true },
     hideIfNeeded: { type: Boolean, required: true },
@@ -433,7 +444,16 @@ export default {
       deleteAvailabilityDialog: false,
       userToDelete: null,
       desktopMaxHeight: 0,
-      respondentsListMinHeight: 400,
+      // Floor for the MAX height, so a short window still shows a usable list.
+      // Renamed from respondentsListMinHeight, which read like a minimum height
+      // for the panel and is now next door actually being one.
+      respondentsListMaxHeightFloor: 400,
+      // Two rows' worth, so the names box is never shorter than two people
+      // however few have answered. Both numbers are measured off a real
+      // rendered row rather than derived from the classes: a row comes out at
+      // 28px (`tw-py-1` around a 20px line), and the box adds `tw-pt-2` above
+      // the first one.
+      respondentsListMinHeight: 2 * 28 + 8,
 
       oldCurRespondents: [],
       curRespondentsAddedTime: {}, // Map of respondent id to time they were added
@@ -525,7 +545,32 @@ export default {
       return orderedRespondents
     },
     respondentsListMaxHeight() {
-      return Math.max(this.desktopMaxHeight, this.respondentsListMinHeight)
+      return Math.max(this.desktopMaxHeight, this.respondentsListMaxHeightFloor)
+    },
+    scrollableSectionStyle() {
+      if (this.maxHeight) return `max-height: ${this.maxHeight}px !important;`
+      if (this.isPhone) return ""
+      return `max-height: ${this.respondentsListMaxHeight}px !important;`
+    },
+    /**
+     * Keeps the names box two rows tall however few people have answered, so
+     * the panels below it don't ride up and down as responses arrive.
+     *
+     * It goes on the SCROLLING element rather than its parent, and that is the
+     * whole point: the parent also holds the "if needed" note and the add-guest
+     * button, so a minimum there is satisfied by those and leaves the names
+     * themselves as short as ever. This element is also `flex-shrink: 1` inside
+     * a flex column, which was squeezing a single name into a 44px box with 50px
+     * of content in it — a scrollbar on a one-person list. A min-height stops
+     * the shrink as well as reserving the room.
+     *
+     * Desktop only: on a phone the names are laid out in two columns
+     * (`tw-grid-cols-2 sm:tw-block`), so two people are ONE row there and
+     * reserving two would be a gap for nothing.
+     */
+    respondentsScrollViewStyle() {
+      if (this.maxHeight || this.isPhone) return ""
+      return `min-height: ${this.respondentsListMinHeight}px;`
     },
   },
 

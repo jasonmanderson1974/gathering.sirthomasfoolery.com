@@ -781,6 +781,7 @@
                     ref="respondentsList"
                     :event="event"
                     :eventId="event._id"
+                    :optionsTargetEl="rightColumnOptionsEl"
                     :curDate="
                       getDateFromRowCol(curTimeslot.row, curTimeslot.col)
                     "
@@ -1080,6 +1081,10 @@ export default {
     // would resolve to nothing. Null means "render it in place", which is the
     // phone layout and the set-specific-times flow.
     rightColumnEl: { type: Object, default: null },
+    // Second target in that same column, below the Settle Up balances, for the
+    // Options section — which RespondentsList renders, so it takes its own
+    // teleport to land there. Null keeps it at the tail of the list.
+    rightColumnOptionsEl: { type: Object, default: null },
     // These three are read from MIXINS, not from anything in this file, so a
     // grep of ScheduleOverlap.vue alone says they are dead and they are not
     // (L13). `vue/no-unused-properties` reports all three for the same reason —
@@ -1881,6 +1886,17 @@ export default {
       if (this.state === this.states.EDIT_AVAILABILITY) {
         this.unsavedChanges = true
       }
+    },
+    /**
+     * The respondents list sizes itself from where it sits on the page
+     * (`window.innerHeight - top`), and it measures that once on mount and
+     * again only on resize. A teleport moves it AFTER mount and fires neither,
+     * so without this it keeps the height it worked out for its old position
+     * beside the grid — much lower down the page, and so much shorter than the
+     * column it now lives in actually allows.
+     */
+    rightColumnEl() {
+      this.$nextTick(() => this.$refs.respondentsList?.setDesktopMaxHeight())
     },
     /**
      * The grid is torn out of the DOM while collapsed, taking #drag-section

@@ -328,6 +328,11 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
     pieces of that component's internal state, five two-way, and its handlers mutate
     `respondentSelectionMixin` — lifting it into `Event.vue` would mean plumbing all of it through
     the parent. The teleport moves the DOM node and nothing else.
+  - **There are TWO targets, and the second one is why.** The column reads Responses → Settle Up →
+    Options, but Options is rendered by `RespondentsList`, at the tail of the list — so a single
+    teleport can only ever put the balances above both or below both. `optionsTargetEl` is a second
+    teleport around `EventOptions` that lets one panel land between the two halves of another.
+    Both fall back to rendering in place when their target is null.
   - **The target is passed as an ELEMENT, never as a `"#id"` selector.** On the first mount the
     page's subtree is still detached from the document, so a selector resolves to nothing and Vue
     logs "Failed to locate Teleport target" — which fails the whole `dom` tier.

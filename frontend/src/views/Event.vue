@@ -169,6 +169,7 @@
               :initial-timezone="initialTimezone"
               :addingAvailabilityAsGuest="addingAvailabilityAsGuest"
               :rightColumnEl="rightColumnEl"
+              :rightColumnOptionsEl="rightColumnOptionsEl"
               @addAvailability="addAvailability"
               @addAvailabilityAsGuest="addAvailabilityAsGuest"
               @refreshEvent="refreshEvent"
@@ -348,6 +349,13 @@
                  falls back to the top of the tab; `showSettleUpColumn` is what
                  the tab is told, so the two can never both render. -->
             <SettleUpSummary v-if="showSettleUpColumn" :expenses="expenses" />
+
+            <!-- And where the Options section lands, below the balances.
+                 It needs a target of its own because RespondentsList renders
+                 it, at the tail of the list above — so the only way to put
+                 anything between the two is to teleport the second half
+                 separately. -->
+            <div ref="rightColumnOptionsSlot"></div>
           </aside>
         </div>
       </div>
@@ -620,6 +628,10 @@ export default {
     // would resolve to nothing and Vue would log "Failed to locate Teleport
     // target" — which fails every test in the dom tier.
     rightColumnEl: null,
+
+    // The second target in that column, below the balances, for the Options
+    // section. Same rules as above.
+    rightColumnOptionsEl: null,
   }),
 
   mounted() {
@@ -1691,6 +1703,7 @@ export default {
       handler() {
         this.$nextTick(() => {
           this.rightColumnEl = this.$refs.rightColumnSlot || null
+          this.rightColumnOptionsEl = this.$refs.rightColumnOptionsSlot || null
         })
       },
     },

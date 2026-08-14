@@ -2833,6 +2833,32 @@ unconfirmed one (Responses in the column) and one carrying a ledger. Both `brows
 ALL PASS, `--dev` included — which is the leg where "no framework warnings" is a real assertion and
 a mis-resolved teleport target would have shown up.
 
+### Q2 — three adjustments to the right column · **P3 · S** — DONE 2026-08-13
+
+Asked for after seeing Q1 on a real gathering.
+
+1. **Responses reserves two rows.** It had a max height and no minimum, so a gathering with one
+   answer left a one-line panel and everything below it rode up. The min goes on the **scrolling
+   element**, not its parent — the parent also holds the "if needed" note and the add-guest button,
+   so a minimum there is satisfied by those and leaves the names themselves as short as ever. That
+   element is `flex-shrink: 1` in a flex column, and was squeezing a single name into a 44px box
+   holding 50px of content: **a scrollbar on a one-person list**, which the min-height also fixes.
+   Both numbers are measured off a real rendered row (28px, plus the box's own 8px `pt-2`), not
+   derived from the classes.
+2. **Settle Up moved above Options.** Needed a second teleport — see the Q1 notes and `CLAUDE.md`.
+   Options is rendered *inside* `RespondentsList`, so one teleport can only put the balances above
+   both or below both.
+3. **Options defaulting to collapsed: no change, and none needed.** `showEventOptions` is already
+   `false` when unset. What was seen was localStorage: the open/shut state persists per device, so
+   expanding it once keeps it open on every gathering forever. Left as designed —
+   `localStorage.removeItem("showEventOptions")` resets it. Worth knowing before anyone "fixes" the
+   default again: the default is not the thing that decides this.
+
+**Also fixed here, and it was a Q1 regression:** the respondents list sizes itself from
+`window.innerHeight - top`, measured on mount and on resize. A teleport moves the element after
+mount and fires neither, so it kept the height it computed for its old position beside the grid.
+`ScheduleOverlap` now re-measures on `rightColumnEl` changing.
+
 ---
 
 ## Workflow rules
