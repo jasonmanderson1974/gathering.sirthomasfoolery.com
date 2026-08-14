@@ -54,6 +54,22 @@ async function launch({ port = 9222 } = {}) {
     `--user-data-dir=${profile}`,
     "--no-sandbox",
     "--disable-gpu",
+    // KEEP THE RENDERER IN THE FOREGROUND. Not tuning — without these three,
+    // Chrome is free to decide this window is backgrounded or occluded and stop
+    // delivering frames to it, and a headless window has nothing to argue
+    // otherwise. That is not merely slow, it is a permanent wrong answer:
+    // EVERY Vuetify overlay opens through VDialogTransition, which sets
+    // `visibility: hidden` in onBeforeEnter and clears it two
+    // `requestAnimationFrame`s later. With no frames the second step never
+    // runs, so a menu or dialog sits in the DOM — active, full-size, its card
+    // rendered inside it — and invisible for as long as the page lives. It
+    // cost two days as TODO3 N4: an intermittent hover-card failure that only
+    // ever appeared on long runs, survived a 25-second poll, and read like a
+    // broken feature. Puppeteer passes the same three by default, for the same
+    // reason.
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
     "about:blank",
   ]
 

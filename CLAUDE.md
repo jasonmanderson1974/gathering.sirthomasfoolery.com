@@ -102,6 +102,21 @@ The Go module is `sirtom/server` (renamed from `schej.it/server`, 2026-07-23). T
   [--full] [--click <text>] [--out]` shoots one page on a stack you already
   have. Both drive `browser-check-lib.js`, so they see exactly what the check
   sees. `frontend/shots/` and `/shots` are gitignored.
+- **An overlay assertion must test that it is SHOWN, never that it has a box**
+  (N4). `getBoundingClientRect().height > 0` does not exclude
+  `visibility: hidden`, and that is not a hypothetical state: **every** Vuetify
+  overlay opens through `VDialogTransition` — `VMenu`'s default transition is
+  `VDialog`'s — which sets `visibility: hidden` in `onBeforeEnter` and clears it
+  only after **two `requestAnimationFrame`s**. A renderer that has stopped
+  painting therefore leaves menus and dialogs in the DOM, active, full-size,
+  content rendered, and invisible forever; `innerText` reads `""`, so the check
+  reported an open card as an empty one and a *hidden* card's avatar as proof
+  the card had opened. Use `IS_SHOWN` in `check-routes.js`. Chrome stops
+  painting a window it thinks is backgrounded, so `launch()` passes
+  `--disable-background-timer-throttling`,
+  `--disable-backgrounding-occluded-windows` and
+  `--disable-renderer-backgrounding` — **don't drop them**; without them this
+  returns as a rare failure on long runs that no poll can wait out.
 - `scripts/dev-up.sh [--seed] [--force] [--no-build] [--down]` — the ordinary dev stack
   (`timeful-dev`, :3002), optionally holding **the same club CI asserts against**: the fixture
   lives in `scripts/seed-club.js` + `scripts/seed-club.sh` and has two consumers, so the

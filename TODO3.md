@@ -2478,7 +2478,7 @@ checklist gathering, 2 on another, and 0 on gatherings whose only avatars are th
 excluded ones, which is the answer that distinguishes "nothing to show" from a silently broken
 lookup.
 
-### N4 — the hover card's own assertion fails only on a full run, and lies about why · **P2 · S** — OPEN
+### N4 — the hover card's own assertion fails only on a full run, and lies about why · **P2 · S** — DONE 2026-08-14
 
 `check:routes`' **"member hover card — opens with the member's details"** fails on a full run while
 passing under every `--only` subset tried (`hover` alone, `fellowship|hover`, `dialogs|hover`,
@@ -2507,6 +2507,54 @@ load-dependent rather than purely code-dependent.)
 Note the neighbouring assertions are compromised by the same filter and should be re-read once (1)
 is understood — **"avatar at the Settings size" passes by measuring the hidden card's avatar**, so
 it is not currently evidence that the card opened.
+
+**Closed 2026-08-14. The renderer had stopped painting, and the card was never a card that
+closed — it was a card that never finished opening.**
+
+**The mechanism, reproduced exactly.** `VMenu` does not have a transition of its own: its default is
+`{ component: VDialogTransition }`, the same one `VDialog` uses. `VDialogTransition.onBeforeEnter`
+sets `el.style.visibility = 'hidden'`, and `onEnter` clears it **after awaiting two
+`requestAnimationFrame`s**. Stop delivering frames and the second step never runs — the overlay
+stays in the DOM, `.v-overlay--active`, full-size, with its `v-card` and every one of the member's
+details rendered inside it, and invisible for as long as the page lives. Stalling `rAF` by hand on
+the Fellowship page reproduces the reported state field for field: one overlay, `200x218`,
+`visibility: hidden`, `innerText === ""`, `textContent` holding the phone number, still hidden 20
+seconds later. **`aria-expanded` on the trigger reads `true` throughout**, which is what settles it:
+the menu never closed. Reading "opened at some point and closed again" off the DOM was the one wrong
+turn in the original write-up, and no amount of polling was ever going to fix a card that is waiting
+on a frame that is not coming.
+
+**Why only on long runs.** Chrome stops painting a renderer it considers backgrounded or occluded,
+and a headless window has nothing to argue otherwise. `launch()` passed `--headless=new
+--no-sandbox --disable-gpu` and none of the three flags that keep a renderer in the foreground —
+which Puppeteer passes by default, for exactly this reason. That is the whole of the
+"environmental or load-dependent" behaviour: nothing about the full *sequence* mattered, only that a
+long run gives Chrome more opportunity to background the window. Six full runs on this box (three
+idle, two under saturating CPU load, one from a cold stack) failed to reproduce it, which is
+consistent with a trigger nobody here controls.
+
+**The fix, in three parts:**
+
+1. **`browser-check-lib.js` now launches with `--disable-background-timer-throttling`,
+   `--disable-backgrounding-occluded-windows` and `--disable-renderer-backgrounding`.** This is the
+   actual repair, and it is not specific to the hover card: a stalled frame makes **every** Vuetify
+   overlay in the suite invisible, dialogs included.
+2. **`IS_SHOWN` replaces `getBoundingClientRect().height > 0`** wherever an assertion is scoped to
+   an overlay — the hover card's text, its avatar measurement, and the New Gathering dialog. It
+   rejects `display: none`, `visibility: hidden` and `opacity: 0`, so a hidden card now reports
+   `NO CARD (1 overlay(s) present, none shown)` instead of `card said:` and nothing. As predicted in
+   (2) above, **"avatar at the Settings size" had been passing by measuring the hidden card's
+   avatar**; it now fails honestly alongside the assertion above it.
+3. **The failure prints its own diagnosis.** `hoverCardDiagnostics` dumps every overlay's box,
+   computed display/visibility/opacity, whether its root is active and the text it holds, plus the
+   trigger's `aria-expanded` and whether it is still connected; and `stalledFrameNote` probes
+   `requestAnimationFrame` and, when no frame arrives within a second, appends four lines naming
+   VDialogTransition and pointing at the launch flags. Verified end to end by stalling `rAF`
+   deliberately: the check now says what is wrong instead of showing an empty string.
+
+Both legs pass (`--dev` and the production-build leg, the latter from a cold stack including the
+offline section), eslint is clean and both unit tiers are green. Nothing that ships changed —
+this is check-harness code only, so there is nothing here to deploy.
 
 ---
 

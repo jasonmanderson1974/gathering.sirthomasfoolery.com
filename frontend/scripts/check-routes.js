@@ -144,6 +144,28 @@ const hoverMember = (n = 0) => `(() => {
 })()`
 
 /**
+ * Is the renderer still producing frames?
+ *
+ * A precondition of half of what this file asserts, and the cause of N4. Every
+ * Vuetify overlay — VMenu included, it defaults to `VDialogTransition` — opens
+ * by setting `visibility: hidden` in `onBeforeEnter` and clearing it in
+ * `onEnter` *after two `requestAnimationFrame`s*. Stop delivering frames and
+ * that second step never runs: the overlay is in the DOM, active, full-size,
+ * with its card rendered inside it, and permanently invisible. No wait is long
+ * enough, which is why a 25-second poll made no difference to it.
+ *
+ * Chrome stops delivering frames to a renderer it considers backgrounded or
+ * occluded, which is why this arrived as a slow intermittent fault that only
+ * ever showed up on long runs. The three `--disable-*` flags in
+ * `browser-check-lib.js` are the fix; this is how the next occurrence explains
+ * itself instead of looking like a broken feature.
+ */
+const framesFlowing = `new Promise((resolve) => {
+  const t = setTimeout(() => resolve(false), 1000)
+  requestAnimationFrame(() => { clearTimeout(t); resolve(true) })
+})`
+
+/**
  * How many hover-card triggers a real pointer could never reach.
  *
  * A trigger can sit perfectly in the DOM, wrap the right person, pass every
@@ -195,6 +217,32 @@ const hoverTriggerReachability = `(() => {
 })()`
 
 /**
+ * Is this element actually SHOWN — not merely laid out?
+ *
+ * `getBoundingClientRect().height > 0` does not answer that question, and the
+ * difference is not academic (N4). A `visibility: hidden` element keeps its
+ * box — and that is precisely the state a Vuetify overlay is left in when the
+ * renderer stops painting, because `VDialogTransition` hides it on
+ * `onBeforeEnter` and unhides it two frames later. So a card that never
+ * finished opening measures exactly like one standing open, and that is how a
+ * hover-card failure came to report `card said:` with nothing after it instead
+ * of `NO CARD`: it was counted as the one visible panel, and `innerText` on a
+ * hidden element is the empty string. It also meant "avatar at the Settings
+ * size" was passing by measuring the invisible card's avatar, which is no
+ * evidence of anything at all.
+ *
+ * A string rather than a function because every expression here is evaluated
+ * on its own in the page, where there is nothing to hang a helper on.
+ */
+const IS_SHOWN = `((el) => {
+  const s = getComputedStyle(el)
+  if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') {
+    return false
+  }
+  return el.getBoundingClientRect().height > 0
+})`
+
+/**
  * The text of the open hover card, or a reason there isn't one.
  *
  * Scoped to the overlay, and that scoping is the whole assertion: the
@@ -203,11 +251,73 @@ const hoverTriggerReachability = `(() => {
  * phone number whether or not the card ever opened.
  */
 const hoverCardText = `(() => {
-  const panels = [...document.querySelectorAll('.v-overlay__content')]
-    .filter((e) => e.getBoundingClientRect().height > 0)
-  if (panels.length === 0) return 'NO CARD'
+  const all = [...document.querySelectorAll('.v-overlay__content')]
+  const panels = all.filter(${IS_SHOWN})
+  if (panels.length === 0) {
+    // Distinguished on purpose. Closing a menu removes its content from the
+    // DOM outright, so an overlay that is present and NOT shown is not a card
+    // that shut — it is one caught part-way into opening, and on this check
+    // that has meant a renderer that stopped painting (N4). Different fault,
+    // different diagnosis, and the count is the only hint of it in the message.
+    return all.length === 0
+      ? 'NO CARD'
+      : 'NO CARD (' + all.length + ' overlay(s) present, none shown)'
+  }
   if (panels.length > 1) return 'MULTIPLE CARDS'
   return panels[0].innerText.replace(/\\s+/g, ' ')
+})()`
+
+/**
+ * Everything needed to tell WHY there is no card, printed only when there
+ * isn't one.
+ *
+ * This failure has only ever appeared on full runs, never on a filtered one,
+ * so the run that shows it is the expensive run — which makes "re-run it with
+ * a print statement in" the wrong loop to be in. The state is cheap to gather
+ * and impossible to gather afterwards.
+ *
+ * `aria-expanded` is the load-bearing field: VMenu renders it from `isActive`,
+ * the component's own idea of whether it is open. `true` beside an overlay
+ * that is not shown means the menu thinks it is open and something outside the
+ * component is hiding it — which is what N4 turned out to be, and it is the
+ * one reading that rules out "the card opened and closed again". `false` means
+ * the component itself dropped it. Nothing else on the page separates the two.
+ */
+const hoverCardDiagnostics = `(() => {
+  const overlays = [...document.querySelectorAll('.v-overlay__content')].map((el) => {
+    const s = getComputedStyle(el)
+    const r = el.getBoundingClientRect()
+    return {
+      box: Math.round(r.width) + 'x' + Math.round(r.height) +
+        '@' + Math.round(r.left) + ',' + Math.round(r.top),
+      display: s.display,
+      visibility: s.visibility,
+      opacity: s.opacity,
+      transform: s.transform === 'none' ? 'none' : 'set',
+      rootActive: !!el.closest('.v-overlay--active'),
+      // textContent, not innerText: it reads through a hidden element, so an
+      // overlay that is merely invisible still says what it holds.
+      text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 48),
+    }
+  })
+  const triggers = [...document.querySelectorAll('[data-member-hover]')]
+  const first = triggers[0]
+  const active = document.activeElement
+  return JSON.stringify({
+    overlays,
+    triggers: triggers.length,
+    firstTrigger: first
+      ? {
+          expanded: first.getAttribute('aria-expanded'),
+          text: (first.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 24),
+          // A trigger that has been re-rendered under the check's feet is no
+          // longer the element the mouseenter was dispatched at.
+          connected: first.isConnected,
+        }
+      : null,
+    focus: active ? active.tagName + '.' + (active.className || '') : null,
+    scrollY: Math.round(window.scrollY),
+  })
 })()`
 
 /**
@@ -559,6 +669,28 @@ function report(ok, label, detail) {
   if (!ok) failures++
   console.log(`${ok ? "PASS" : "FAIL"}  ${label}`)
   if (!ok && detail !== undefined) console.log(`      ${detail}`)
+}
+
+/**
+ * The one line that explains every "the overlay is there but invisible"
+ * failure, or nothing at all when frames are flowing normally.
+ *
+ * Appended to the failures it can cause rather than asserted on its own,
+ * because a renderer that stops painting mid-run is not something any page can
+ * be blamed for and not something the run can recover from — it is a note to
+ * the person reading the log, and it is only worth a second of anyone's time
+ * when something has already gone wrong.
+ */
+async function stalledFrameNote(cdp) {
+  if ((await evaluate(cdp, framesFlowing)) === true) return ""
+  return (
+    "\n      THE RENDERER IS NOT PAINTING: requestAnimationFrame did not fire " +
+    "within a second.\n      Every Vuetify overlay opens via VDialogTransition, " +
+    "which sets visibility:hidden and clears it\n      two frames later — so " +
+    "with no frames, an overlay stays invisible forever and no wait helps " +
+    "(N4).\n      Chrome does this to a renderer it thinks is backgrounded; " +
+    "see the launch flags in browser-check-lib.js."
+  )
 }
 
 // Numbered in visit order so the directory reads as the run did, and slugged
@@ -1106,13 +1238,16 @@ async function main() {
       // the check failed on the framework upgrade while the dialog itself was
       // opening perfectly well. `[role=dialog]` is the app's contract with
       // assistive technology and survives the next upgrade too.
-      report(
+      const dialogShown =
         (await evaluate(
           cdp,
           `[...document.querySelectorAll('[role=dialog]')]
-           .filter((e) => e.getBoundingClientRect().height > 0).length === 1`
-        )) === true,
-        "New Gathering — dialog opens"
+           .filter(${IS_SHOWN}).length === 1`
+        )) === true
+      report(
+        dialogShown,
+        "New Gathering — dialog opens",
+        dialogShown ? "" : (await stalledFrameNote(cdp)).trimStart()
       )
       report(
         (await evaluate(cdp, hasText("/Dates and times/i"))) === true,
@@ -1155,19 +1290,24 @@ async function main() {
           if (typeof text === "string" && /\+15550100/.test(text)) break
           await sleep(250)
         }
+        const opened = typeof text === "string" && /\+15550100/.test(text)
         report(
-          typeof text === "string" && /\+15550100/.test(text),
+          opened,
           "member hover card — opens with the member's details",
-          `card said: ${text}`
+          opened
+            ? ""
+            : `card said: ${text}\n` +
+                `      state: ${await evaluate(cdp, hoverCardDiagnostics)}` +
+                (await stalledFrameNote(cdp))
         )
         // The 96px avatar is the request; a card that rendered the 40px byline
         // avatar would satisfy every other line here.
         //
-        // Scoped to the VISIBLE overlay, not to the first `.v-overlay__content`
-        // in document order. Vuetify leaves overlay containers in the DOM, so
-        // the loose selector could measure an avatar belonging to some other
-        // (closed) overlay entirely — which is what it did on a full run while
-        // passing on a single-section one.
+        // Scoped to the SHOWN overlay — `IS_SHOWN`, not "has a box". An
+        // overlay that is present and hidden measures perfectly well, so with
+        // the looser predicate this line reported 96px off a card nobody could
+        // see and stood as evidence the card had opened. It was doing exactly
+        // that on the full runs where the assertion above it failed (N4).
         //
         // Polled until it settles, because Vuetify SCALES the overlay in and
         // `getBoundingClientRect` reports the transformed box. Measured the
@@ -1176,7 +1316,7 @@ async function main() {
         // convincing kind of wrong number.
         const measureAvatar = `(() => {
             const panel = [...document.querySelectorAll('.v-overlay__content')]
-              .filter((e) => e.getBoundingClientRect().height > 0)[0]
+              .filter(${IS_SHOWN})[0]
             if (!panel) return 'NO CARD'
             const av = panel.querySelector('.v-avatar')
             if (!av) return 'NO AVATAR'
