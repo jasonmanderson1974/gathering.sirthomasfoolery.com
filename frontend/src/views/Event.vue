@@ -67,263 +67,288 @@
         </v-card>
       </v-dialog>
 
-      <div
-        class="tw-mx-auto tw-mt-4 lg:tw-flex lg:tw-items-start lg:tw-justify-center lg:tw-gap-6"
-      >
-        <!-- The gathering at a glance, once a time is confirmed and the
-             calendar has collapsed (F21). Only exists wide enough for two
-             columns; narrower than that the same three panels render inline in
-             the column below, under the title where they read in order. -->
-        <div
-          v-if="showGatheringSidebar"
-          class="tw-mx-4 lg:tw-sticky lg:tw-top-16 lg:tw-order-2 lg:tw-w-72 lg:tw-flex-none"
-        >
-          <GatheringSummary
+      <div class="tw-mx-auto tw-mt-4">
+        <!-- The title and its buttons span the full page width, above the two
+             columns — the split starts underneath them. -->
+        <div v-if="!isSettingSpecificTimes" class="tw-mx-4">
+          <!-- How old the copy on screen is. Shown only when this page came
+               off the cache, and it earns its place mainly for Settle Up:
+               reading a figure without knowing it may predate the last three
+               expenses is worse than knowing the page is stale. -->
+          <div
+            v-if="cachedAgeLabel"
+            class="tw-mb-2 tw-flex tw-items-center tw-gap-1.5 tw-text-xs tw-opacity-60"
+          >
+            <v-icon size="14">mdi-cloud-off-outline</v-icon>
+            <span>Saved copy — last updated {{ cachedAgeLabel }}</span>
+          </div>
+
+          <!-- Title, chips, date, and action buttons -->
+          <EventHeader
             :event="event"
             :canEdit="canEdit"
-            @reschedule="rescheduleGathering"
-            @cancel-gathering="cancelGathering"
-          />
-
-          <EventLocation
-            v-model:event="event"
-            :canEdit="event.ownerId != 0 && canEdit"
-          />
-
-          <GatheringRsvp
-            :event="event"
-            @set-rsvp="setRsvp"
-            @clear-rsvp="clearRsvp"
+            :isEditing="isEditing"
+            :dateString="dateString"
+            :actionButtonText="actionButtonText"
+            :loading="loading"
+            :userHasResponded="userHasResponded"
+            :availabilityBtnOpacity="availabilityBtnOpacity"
+            @edit-event="editEvent"
+            @copy-link="copyLink"
+            @edit-guest-availability="editGuestAvailability"
+            @add-availability="addAvailability"
+            @cancel-editing="cancelEditing"
+            @save-changes="saveChanges"
           />
         </div>
 
-        <div class="tw-mx-auto tw-max-w-5xl tw-flex-1 lg:tw-order-1">
-          <div v-if="!isSettingSpecificTimes" class="tw-mx-4">
-            <!-- How old the copy on screen is. Shown only when this page came
-                 off the cache, and it earns its place mainly for Settle Up:
-                 reading a figure without knowing it may predate the last three
-                 expenses is worse than knowing the page is stale. -->
-            <div
-              v-if="cachedAgeLabel"
-              class="tw-mb-2 tw-flex tw-items-center tw-gap-1.5 tw-text-xs tw-opacity-60"
-            >
-              <v-icon size="14">mdi-cloud-off-outline</v-icon>
-              <span>Saved copy — last updated {{ cachedAgeLabel }}</span>
+        <!-- Everything below the title is two columns on a desktop: the
+             calendar and the tab band on the left at ~80%, and one column on
+             the right at 20% holding what used to be three separate strips of
+             three different widths — the gathering summary, the calendar's own
+             Responses / Options list, and the Settle Up balances. -->
+        <div class="lg:tw-flex lg:tw-items-start lg:tw-gap-6">
+          <div class="tw-min-w-0 tw-flex-1">
+            <div v-if="!isSettingSpecificTimes" class="tw-mx-4">
+              <!-- Description -->
+              <EventDescription
+                v-model:event="event"
+                :canEdit="event.ownerId != 0 && canEdit"
+              />
+
+              <!-- The confirmed gathering, the venue (C12) and the RSVP panel
+                   (C1). All three live in the right column once the calendar
+                   collapses, and inline here when it doesn't — gated so they
+                   render in exactly one place, never both. Expanding the
+                   availability grid must not make the confirmed time
+                   disappear. -->
+              <GatheringSummary
+                v-if="isScheduled && !showGatheringSidebar"
+                :event="event"
+                :canEdit="canEdit"
+                @reschedule="rescheduleGathering"
+                @cancel-gathering="cancelGathering"
+              />
+
+              <EventLocation
+                v-if="!showGatheringSidebar"
+                v-model:event="event"
+                :canEdit="event.ownerId != 0 && canEdit"
+              />
+
+              <GatheringRsvp
+                v-if="event.scheduledEvent && !showGatheringSidebar"
+                :event="event"
+                @set-rsvp="setRsvp"
+                @clear-rsvp="clearRsvp"
+              />
+
+              <!-- Venue / activity polls (C6) -->
+              <EventPolls
+                :event="event"
+                @create-poll="onCreatePoll"
+                @delete-poll="onDeletePoll"
+                @vote-poll="onVotePoll"
+              />
             </div>
 
-            <!-- Title, chips, date, and action buttons -->
-            <EventHeader
+            <!-- Calendar. Its own right-hand block (Responses, the toggles, the
+                 editing controls) teleports itself into the column beside this
+                 one when there is one — see rightColumnEl below. -->
+
+            <ScheduleOverlap
+              ref="scheduleOverlap"
               :event="event"
-              :canEdit="canEdit"
-              :isEditing="isEditing"
-              :dateString="dateString"
-              :actionButtonText="actionButtonText"
-              :loading="loading"
-              :userHasResponded="userHasResponded"
-              :availabilityBtnOpacity="availabilityBtnOpacity"
-              @edit-event="editEvent"
-              @copy-link="copyLink"
-              @edit-guest-availability="editGuestAvailability"
-              @add-availability="addAvailability"
-              @cancel-editing="cancelEditing"
-              @save-changes="saveChanges"
+              :collapsed="calendarCollapsed"
+              :fromEditEvent="fromEditEvent"
+              :loadingCalendarEvents="loading"
+              :calendarEventsMap="calendarEventsMap"
+              :calendarPermissionGranted="calendarPermissionGranted"
+              v-model:weekOffset="weekOffset"
+              :curGuestId="curGuestId"
+              :initial-timezone="initialTimezone"
+              :addingAvailabilityAsGuest="addingAvailabilityAsGuest"
+              :rightColumnEl="rightColumnEl"
+              @addAvailability="addAvailability"
+              @addAvailabilityAsGuest="addAvailabilityAsGuest"
+              @refreshEvent="refreshEvent"
+              @highlightAvailabilityBtn="highlightAvailabilityBtn"
+              @deleteAvailability="deleteAvailability"
+              @setCurGuestId="(id) => (curGuestId = id)"
+              @calendarsChanged="fetchAuthUserCalendarEvents"
             />
 
-            <!-- Description -->
-            <EventDescription
-              v-model:event="event"
-              :canEdit="event.ownerId != 0 && canEdit"
-            />
+            <!-- The discussion (C7) and the shared lists (F14) as two tabs over
+                 one band (F16). They were side by side at 2/3 + 1/3, which left
+                 both cramped and put the lists below the entire discussion on a
+                 phone. Panels use v-show, not v-if, so drafts and what you had
+                 expanded survive a switch back and forth.
 
-            <!-- The confirmed gathering, the venue (C12) and the RSVP panel
-                 (C1). All three live in the sidebar once the calendar
-                 collapses, and inline here when it doesn't — gated so they
-                 render in exactly one place, never both. Expanding the
-                 availability grid must not make the confirmed time disappear. -->
-            <GatheringSummary
-              v-if="isScheduled && !showGatheringSidebar"
-              :event="event"
-              :canEdit="canEdit"
-              @reschedule="rescheduleGathering"
-              @cancel-gathering="cancelGathering"
-            />
-
-            <EventLocation
-              v-if="!showGatheringSidebar"
-              v-model:event="event"
-              :canEdit="event.ownerId != 0 && canEdit"
-            />
-
-            <GatheringRsvp
-              v-if="event.scheduledEvent && !showGatheringSidebar"
-              :event="event"
-              @set-rsvp="setRsvp"
-              @clear-rsvp="clearRsvp"
-            />
-
-            <!-- Venue / activity polls (C6) -->
-            <EventPolls
-              :event="event"
-              @create-poll="onCreatePoll"
-              @delete-poll="onDeletePoll"
-              @vote-poll="onVotePoll"
-            />
-          </div>
-
-          <!-- Calendar -->
-
-          <ScheduleOverlap
-            ref="scheduleOverlap"
-            :event="event"
-            :collapsed="calendarCollapsed"
-            :fromEditEvent="fromEditEvent"
-            :loadingCalendarEvents="loading"
-            :calendarEventsMap="calendarEventsMap"
-            :calendarPermissionGranted="calendarPermissionGranted"
-            v-model:weekOffset="weekOffset"
-            :curGuestId="curGuestId"
-            :initial-timezone="initialTimezone"
-            :addingAvailabilityAsGuest="addingAvailabilityAsGuest"
-            @addAvailability="addAvailability"
-            @addAvailabilityAsGuest="addAvailabilityAsGuest"
-            @refreshEvent="refreshEvent"
-            @highlightAvailabilityBtn="highlightAvailabilityBtn"
-            @deleteAvailability="deleteAvailability"
-            @setCurGuestId="(id) => (curGuestId = id)"
-            @calendarsChanged="fetchAuthUserCalendarEvents"
-          />
-
-          <!-- Who owes whom (F22), in the content column's right-hand strip
-               rather than the page sidebar — so it continues straight down from
-               the calendar's own Responses / Options column, which is flush to
-               the same right edge and the same width.
-
-               Derived from the same rows the Settle Up tab renders, so it is
-               right whether or not that tab has ever been opened. Below the
-               breakpoint there is no strip and it falls back to the top of the
-               tab; `showSettleUpColumn` is what the tab is told, so the two can
-               never both render. -->
-          <div v-if="showSettleUpColumn" class="tw-flex tw-justify-end">
-            <!-- Flush to the same right edge as Responses, but wider than it:
-                 at the Responses column's own 208px the panel truncated names
-                 ("Jason Ander…") and wrapped every figure onto two lines. The
-                 right edge is what reads as the alignment; the extra width
-                 comes off the empty space to its left. -->
-            <div class="tw-w-72">
-              <SettleUpSummary :expenses="expenses" />
-            </div>
-          </div>
-
-          <!-- The discussion (C7) and the shared lists (F14) as two tabs over
-               one full-width band (F16). They were side by side at 2/3 + 1/3,
-               which left both cramped and put the lists below the entire
-               discussion on a phone. Panels use v-show, not v-if, so drafts and
-               what you had expanded survive a switch back and forth. -->
-          <div v-if="!isSettingSpecificTimes" class="tw-mx-4">
-            <!-- Availability is still there once a time is set, just out of the
-                 way. Anyone can look; only a manager can act on it. -->
-            <v-btn
-              v-if="isScheduled"
-              variant="text"
-              size="small"
-              class="tw-mb-1 tw-text-xs tw-text-parchment-dim"
-              @click="calendarExpanded = !calendarExpanded"
-            >
-              <v-icon size="small" start>{{
-                calendarExpanded ? "mdi-chevron-up" : "mdi-chevron-down"
-              }}</v-icon>
-              {{ calendarExpanded ? "Hide availability" : "View availability" }}
-            </v-btn>
-
-            <!-- tw-flex-wrap, from F22 on: five tabs no longer fit across a
-                 390px phone, and an unwrapped row pushed the whole page into a
-                 horizontal scroll — visible on every tab, not just the new
-                 one. Wrapping to a second line beats a scroll nobody would
-                 find. -->
-            <div class="tw-flex tw-flex-wrap tw-gap-1">
+                 check-routes.js walks this div's children to assert exactly one
+                 panel is visible: it finds the Discussion button, takes its
+                 parent as the tab row and the row's parent as the band. Don't
+                 wrap the panels in anything, and don't give the band a visible
+                 sibling of its own. -->
+            <div v-if="!isSettingSpecificTimes" class="tw-mx-4">
+              <!-- Availability is still there once a time is set, just out of
+                   the way. Anyone can look; only a manager can act on it. -->
               <v-btn
-                v-for="t in bandTabs"
-                :key="t.value"
+                v-if="isScheduled"
                 variant="text"
                 size="small"
-                :class="`tw-text-xs tw-transition-all ${
-                  t.value === bandTab
-                    ? 'tw-bg-brass/10 tw-text-brass'
-                    : 'tw-text-parchment-dim'
-                }`"
-                @click="bandTab = t.value"
+                class="tw-mb-1 tw-text-xs tw-text-parchment-dim"
+                @click="calendarExpanded = !calendarExpanded"
               >
-                {{ t.title }}
+                <v-icon size="small" start>{{
+                  calendarExpanded ? "mdi-chevron-up" : "mdi-chevron-down"
+                }}</v-icon>
+                {{
+                  calendarExpanded ? "Hide availability" : "View availability"
+                }}
               </v-btn>
-            </div>
 
-            <div v-show="bandTab === 'discussion'">
-              <EventComments
-                :event="event"
-                :mentionables="mentionables"
-                @add-comment="onAddComment"
-                @edit-comment="onEditComment"
-                @delete-comment="onDeleteComment"
-                @tag-thread="onTagThread"
-                @set-thread-members-only="onSetThreadMembersOnly"
-                @untag-thread="onUntagThread"
-              />
-            </div>
-            <div v-show="bandTab === 'lists'">
-              <EventLists
-                :lists="sharedLists"
-                :can-manage="canManageLists"
-                :can-assign="canAssignListItems"
-                :assignees="listAssignees"
-                :refreshing="refreshingLists"
-                @refresh="refreshLists"
-                @assign-item="onAssignListItem"
-                @create-list="onCreateList"
-                @rename-list="onRenameList"
-                @delete-list="onDeleteList"
-                @add-item="onAddListItem"
-                @edit-item="onEditListItem"
-                @delete-item="onDeleteListItem"
-                @move-item="onMoveListItem"
-                @toggle-item-checked="onToggleListItemChecked"
-              />
-            </div>
-            <!-- The two private tabs (F19/F20). Both panels own their own
-                 fetching, so each is told only whether it is the one on screen.
-                 v-if on authUser as well as the tab: without an account there
-                 is nothing to key a private document to. -->
-            <div v-show="bandTab === 'my-lists'">
-              <PersonalLists
-                v-if="authUser"
-                :event-id="bandEventId"
-                :active="bandTab === 'my-lists'"
-                @loaded="(n) => (personalListCount = n)"
-              />
-            </div>
-            <div v-show="bandTab === 'my-notes'">
-              <PersonalNotes
-                v-if="authUser"
-                :event-id="bandEventId"
-                :active="bandTab === 'my-notes'"
-              />
-            </div>
-            <!-- The shared ledger (F22). Unlike the two private tabs this one
-                 is readable by everyone signed in, guests included — the v-if
-                 is on having an account at all, not on a role. -->
-            <div v-show="bandTab === 'settle-up'">
-              <EventExpenses
-                v-if="authUser"
-                :event-id="bandEventId"
-                :expenses="expenses"
-                :refreshing="refreshingExpenses"
-                :has-sidebar="showSettleUpColumn"
-                @create-expense="onCreateExpense"
-                @edit-expense="onEditExpense"
-                @delete-expense="onDeleteExpense"
-                @delete-receipt="onDeleteReceipt"
-              />
+              <!-- tw-flex-wrap, from F22 on: five tabs no longer fit across a
+                   390px phone, and an unwrapped row pushed the whole page into
+                   a horizontal scroll — visible on every tab, not just the new
+                   one. Wrapping to a second line beats a scroll nobody would
+                   find. -->
+              <div class="tw-flex tw-flex-wrap tw-gap-1">
+                <v-btn
+                  v-for="t in bandTabs"
+                  :key="t.value"
+                  variant="text"
+                  size="small"
+                  :class="`tw-text-xs tw-transition-all ${
+                    t.value === bandTab
+                      ? 'tw-bg-brass/10 tw-text-brass'
+                      : 'tw-text-parchment-dim'
+                  }`"
+                  @click="bandTab = t.value"
+                >
+                  {{ t.title }}
+                </v-btn>
+              </div>
+
+              <div v-show="bandTab === 'discussion'">
+                <EventComments
+                  :event="event"
+                  :mentionables="mentionables"
+                  @add-comment="onAddComment"
+                  @edit-comment="onEditComment"
+                  @delete-comment="onDeleteComment"
+                  @tag-thread="onTagThread"
+                  @set-thread-members-only="onSetThreadMembersOnly"
+                  @untag-thread="onUntagThread"
+                />
+              </div>
+              <div v-show="bandTab === 'lists'">
+                <EventLists
+                  :lists="sharedLists"
+                  :can-manage="canManageLists"
+                  :can-assign="canAssignListItems"
+                  :assignees="listAssignees"
+                  :refreshing="refreshingLists"
+                  @refresh="refreshLists"
+                  @assign-item="onAssignListItem"
+                  @create-list="onCreateList"
+                  @rename-list="onRenameList"
+                  @delete-list="onDeleteList"
+                  @add-item="onAddListItem"
+                  @edit-item="onEditListItem"
+                  @delete-item="onDeleteListItem"
+                  @move-item="onMoveListItem"
+                  @toggle-item-checked="onToggleListItemChecked"
+                />
+              </div>
+              <!-- The two private tabs (F19/F20). Both panels own their own
+                   fetching, so each is told only whether it is the one on
+                   screen. v-if on authUser as well as the tab: without an
+                   account there is nothing to key a private document to. -->
+              <div v-show="bandTab === 'my-lists'">
+                <PersonalLists
+                  v-if="authUser"
+                  :event-id="bandEventId"
+                  :active="bandTab === 'my-lists'"
+                  @loaded="(n) => (personalListCount = n)"
+                />
+              </div>
+              <div v-show="bandTab === 'my-notes'">
+                <PersonalNotes
+                  v-if="authUser"
+                  :event-id="bandEventId"
+                  :active="bandTab === 'my-notes'"
+                />
+              </div>
+              <!-- The shared ledger (F22). Unlike the two private tabs this one
+                   is readable by everyone signed in, guests included — the v-if
+                   is on having an account at all, not on a role. -->
+              <div v-show="bandTab === 'settle-up'">
+                <EventExpenses
+                  v-if="authUser"
+                  :event-id="bandEventId"
+                  :expenses="expenses"
+                  :refreshing="refreshingExpenses"
+                  :has-sidebar="showSettleUpColumn"
+                  @create-expense="onCreateExpense"
+                  @edit-expense="onEditExpense"
+                  @delete-expense="onDeleteExpense"
+                  @delete-receipt="onDeleteReceipt"
+                />
+              </div>
             </div>
           </div>
+
+          <!-- The page's one right-hand column. 20% of the width, floored at
+               18rem: the Settle Up panel was already widened from 13rem to
+               18rem once because at the narrower size it truncated names
+               ("Jason Ander…") and wrapped every figure onto two lines, and a
+               bare 20% would put it back there on anything under 1440px.
+
+               v-if, not v-show — tailwind.config.js sets `important: true`, so
+               the tw-* display utilities beat the inline display:none that
+               v-show sets and the column would never actually hide. -->
+          <aside
+            v-if="showRightColumn"
+            class="tw-mx-4 lg:tw-sticky lg:tw-top-16 lg:tw-w-1/5 lg:tw-min-w-[18rem] lg:tw-flex-none"
+          >
+            <!-- The gathering at a glance, once a time is confirmed and the
+                 calendar has collapsed (F21). Below the breakpoint there is no
+                 column and the same three panels render inline in the left
+                 column instead, under the title where they read in order. -->
+            <template v-if="showGatheringSidebar">
+              <GatheringSummary
+                :event="event"
+                :canEdit="canEdit"
+                @reschedule="rescheduleGathering"
+                @cancel-gathering="cancelGathering"
+              />
+
+              <EventLocation
+                v-model:event="event"
+                :canEdit="event.ownerId != 0 && canEdit"
+              />
+
+              <GatheringRsvp
+                :event="event"
+                @set-rsvp="setRsvp"
+                @clear-rsvp="clearRsvp"
+              />
+            </template>
+
+            <!-- Where ScheduleOverlap teleports its Responses / Options block.
+                 It gets an element of its own so the teleported content lands
+                 BETWEEN the summary above and the balances below — a teleport
+                 appends to its target, so without this it would always come
+                 last no matter where the target sits. -->
+            <div ref="rightColumnSlot"></div>
+
+            <!-- Who owes whom (F22). Derived from the same rows the Settle Up
+                 tab renders, so it is right whether or not that tab has ever
+                 been opened. Below the breakpoint there is no column and it
+                 falls back to the top of the tab; `showSettleUpColumn` is what
+                 the tab is told, so the two can never both render. -->
+            <SettleUpSummary v-if="showSettleUpColumn" :expenses="expenses" />
+          </aside>
         </div>
       </div>
 
@@ -358,7 +383,9 @@
       v-else-if="unavailableOffline"
       class="tw-mt-16 tw-flex tw-flex-col tw-items-center tw-px-6 tw-text-center"
     >
-      <v-icon size="48" class="tw-mb-4 tw-text-brass">mdi-cloud-off-outline</v-icon>
+      <v-icon size="48" class="tw-mb-4 tw-text-brass"
+        >mdi-cloud-off-outline</v-icon
+      >
       <div class="tw-font-head tw-text-xl tw-text-parchment">
         This gathering is not available offline
       </div>
@@ -583,6 +610,16 @@ export default {
     // collapsed on a confirmed gathering (F21). Not persisted — landing on the
     // page should always show the gathering, not the poll it came from.
     calendarExpanded: false,
+
+    // The element ScheduleOverlap teleports its Responses / Options block into,
+    // or null when there is no right-hand column (below 1024px, and while
+    // setting specific times) and it should render in place instead.
+    //
+    // An element rather than a "#id" selector on purpose: on the first mount
+    // the page's subtree is still detached from the document, so a selector
+    // would resolve to nothing and Vue would log "Failed to locate Teleport
+    // target" — which fails every test in the dom tier.
+    rightColumnEl: null,
   }),
 
   mounted() {
@@ -722,37 +759,50 @@ export default {
       )
     },
     /**
-     * Whether the summary / venue / RSVP panels get their own column on the
-     * right, or render inline under the title instead.
+     * Whether the page gets its right-hand column at all — the one holding the
+     * gathering summary, the calendar's Responses / Options block and the
+     * Settle Up balances.
      *
      * Measured against Tailwind's `lg` (1024px) rather than a Vuetify
-     * breakpoint, because the column itself is laid out by `lg:` classes and
-     * the two scales don't line up — Vuetify's own `lg` starts at 1264.
-     * Stacking the sidebar above everything on a narrow screen would put the
-     * summary above the gathering's own title.
+     * breakpoint, for the reason spelled out on showGatheringSidebar below: the
+     * column is laid out by `lg:` classes and Vuetify's own `lg` starts at 1264.
+     *
+     * Excluded while setting specific times, which is a calendar-only flow with
+     * its own instructions panel — with no column the teleport is disabled and
+     * that panel renders beside the grid exactly as it does on a phone.
      */
-    showGatheringSidebar() {
-      return this.calendarCollapsed && viewportWidth(this.$vuetify) >= 1024
+    showRightColumn() {
+      return (
+        viewportWidth(this.$vuetify) >= 1024 && !this.isSettingSpecificTimes
+      )
     },
     /**
-     * Whether the balances get their own right-hand strip in the content
-     * column, rather than sitting at the top of the Settle Up tab.
+     * Whether the summary / venue / RSVP panels go in that column, or render
+     * inline under the title instead.
      *
-     * Deliberately NOT tied to the gathering sidebar: money gets spent on a
+     * Both this and showSettleUpColumn now decide only what goes IN the column,
+     * never whether one exists — that is showRightColumn's job, and deriving
+     * from it is what keeps the breakpoint in one place. Stacking the summary
+     * above everything on a narrow screen would put it above the gathering's
+     * own title.
+     */
+    showGatheringSidebar() {
+      return this.showRightColumn && this.calendarCollapsed
+    },
+    /**
+     * Whether the balances go in the right column, rather than sitting at the
+     * top of the Settle Up tab.
+     *
+     * Deliberately NOT tied to the gathering summary: money gets spent on a
      * gathering that is still being arranged, so the balances appear as soon as
      * there is a ledger, whether or not a time has been confirmed.
      *
-     * Gated on there being expenses at all, so an empty panel doesn't conjure a
-     * column onto every gathering; on `authUser`, because every expense route is
-     * behind a session; and on the same 1024px breakpoint the sidebar uses,
-     * below which a 208px strip would be unreadable.
+     * Gated on there being expenses at all, so an empty panel doesn't appear on
+     * every gathering, and on `authUser`, because every expense route is behind
+     * a session.
      */
     showSettleUpColumn() {
-      return (
-        !!this.authUser &&
-        this.expenses.length > 0 &&
-        viewportWidth(this.$vuetify) >= 1024
-      )
+      return this.showRightColumn && !!this.authUser && this.expenses.length > 0
     },
     isEditing() {
       return this.scheduleOverlapComponent?.editing
@@ -1632,6 +1682,18 @@ export default {
   },
 
   watch: {
+    // `showRightColumn` is the only thing that decides whether the column
+    // exists, so watching it covers the first mount, a resize across 1024px and
+    // entering or leaving the set-specific-times flow. The $nextTick is
+    // required: the ref only exists after the render that added the <aside>.
+    showRightColumn: {
+      immediate: true,
+      handler() {
+        this.$nextTick(() => {
+          this.rightColumnEl = this.$refs.rightColumnSlot || null
+        })
+      },
+    },
     // Selecting the Lists tab refetches them. The panels are kept alive with
     // v-show, so there is no created() hook to hang this off — and someone
     // opening the tab is exactly when the data most wants to be current.

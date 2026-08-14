@@ -2786,6 +2786,55 @@ makes the gate mean something.
 
 ---
 
+## PART Q — layout (opened 2026-08-13)
+
+### Q1 — the gathering page is one narrow column with three strips down its side · **P2 · M** — DONE 2026-08-13
+
+Asked for directly: on a desktop, everything below the title / date / edit buttons should be two
+columns — the calendar and the tab band on the left at ~80%, and one column on the right at 20%
+holding the gathering summary, the Responses list, the toggles and the Settle Up balances. The
+mobile layout to stay exactly as it is.
+
+What was there instead was **three separate right-hand strips, at three nesting levels, three
+widths and two breakpoints**: the summary / venue / RSVP panels as a page-level sibling at 288px
+(`showGatheringSidebar`), the Responses and Options list at 208px **inside `ScheduleOverlap`**, and
+the balances right-aligned inside the content column at 288px. None of them shared an edge, and the
+content column was capped at `max-w-5xl` however wide the screen was.
+
+**The obstacle was the middle one.** `RespondentsList` is not a page-level component — it reads
+about twenty pieces of `ScheduleOverlap`'s own internal state (`curTimeslot`, `curRespondents`,
+`parsedResponses`, `respondents`, `curTimezone`, `hasCalendarEvents`, …), five of them two-way, and
+eight of its handlers mutate `respondentSelectionMixin` state. Lifting it into `Event.vue` meant
+plumbing all of that through the parent — a large refactor of the most intricate component in the
+app, to move a `<div>`.
+
+**Done with a `<Teleport>` instead.** The component instance and every binding stay exactly where
+they are; only the DOM destination moves. `Event.vue` renders one `<aside>` and hands
+`ScheduleOverlap` the **element** to teleport into; with no element the teleport is `disabled` and
+the block renders in place, which is what makes "mobile is unchanged" a structural guarantee rather
+than a promise. Three notes for anyone touching it:
+
+- **An element, never a `"#id"` selector.** On the first mount the page's subtree is still detached
+  from the document, so a selector resolves to nothing and Vue logs *"Failed to locate Teleport
+  target"* — which fails every test in the `dom` tier (`setup.dom.js`), correctly.
+- **The teleport target is its own empty `<div>` inside the aside.** A teleport appends to its
+  target, so without one the Responses block would always land below the balances no matter where
+  the target element sat.
+- **`showRightColumn` is now the single home of the 1024px breakpoint.** `showGatheringSidebar` and
+  `showSettleUpColumn` derive from it and decide only *what goes in* the column.
+
+**20% with an 18rem floor**, not a bare 20%: the balances panel had already been widened from 13rem
+to 18rem once because at the narrower size it truncated names ("Jason Ander…") and wrapped every
+figure onto two lines, and a bare 20% puts it back there on anything under 1440px. `check:routes`
+runs desktop at 1280, i.e. inside the floor, so CI exercises the tighter regime.
+
+Verified at 1024 / 1280 / 1920 and at 390px, for a confirmed gathering (summary in the column), an
+unconfirmed one (Responses in the column) and one carrying a ledger. Both `browser-check.sh` legs
+ALL PASS, `--dev` included — which is the leg where "no framework warnings" is a real assertion and
+a mis-resolved teleport target would have shown up.
+
+---
+
 ## Workflow rules
 
 Unchanged from `CLAUDE.md` and the two archives — these are the durable part, and every one of

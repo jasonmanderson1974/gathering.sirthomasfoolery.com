@@ -315,6 +315,25 @@ For local frontend → local backend, set `CORS_ORIGINS=http://localhost:8080` i
   everywhere; and **it must render nothing over a bare name**, so only ids that are provably an
   account's are passed (`comment.author?._id`, *not* `comment.userId`, which holds a guest's name on
   legacy rows).
+- **The gathering page is two columns above 1024px, and the right one is filled by a
+  `<Teleport>`** (Q1). `Event.vue` renders the title full width, then a left column (`tw-flex-1
+  tw-min-w-0` — the `min-w-0` is what stops the calendar grid forcing a horizontal scroll) holding
+  the calendar and the tab band, and one `<aside>` at `lg:tw-w-1/5 lg:tw-min-w-[18rem]` holding the
+  gathering summary, the Responses list, the toggles and the Settle Up balances. The floor is not
+  decoration: the balances panel was already widened from 13rem to 18rem once because names
+  truncated ("Jason Ander…") at the narrower size. **`showRightColumn` is the only place the 1024px
+  breakpoint is written** — `showGatheringSidebar` and `showSettleUpColumn` derive from it and
+  decide only what goes *in* the column. Three things hold it together:
+  - **The Responses list is still rendered by `ScheduleOverlap` and teleported out.** It reads ~20
+    pieces of that component's internal state, five two-way, and its handlers mutate
+    `respondentSelectionMixin` — lifting it into `Event.vue` would mean plumbing all of it through
+    the parent. The teleport moves the DOM node and nothing else.
+  - **The target is passed as an ELEMENT, never as a `"#id"` selector.** On the first mount the
+    page's subtree is still detached from the document, so a selector resolves to nothing and Vue
+    logs "Failed to locate Teleport target" — which fails the whole `dom` tier.
+  - **Below 1024px the target is null, the teleport is `disabled`, and everything renders in place
+    exactly as before.** That is the phone layout and the set-specific-times flow, and it is a
+    structural guarantee rather than a second code path to keep in step.
 - **`src/utils/index.js` is an `export *` barrel imported by ~40 components.** Don't add modules with
   heavy or DOM-dependent dependencies to it (e.g. `utils/markdown.js`, which pulls in DOMPurify);
   import those directly by path.

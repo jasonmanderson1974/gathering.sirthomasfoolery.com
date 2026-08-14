@@ -531,265 +531,287 @@
             </template>
           </div>
 
-          <!-- Right hand side content -->
+          <!-- Right hand side content.
 
-          <div
-            v-if="!calendarOnly"
-            class="tw-px-4 tw-py-4 sm:tw-sticky sm:tw-top-16 sm:tw-flex-none sm:tw-self-start sm:tw-py-0 sm:tw-pl-0 sm:tw-pr-0 sm:tw-pt-14"
-            :style="{ width: rightSideWidth }"
-          >
-            <!-- Show section on the right depending on some if conditions -->
-            <template v-if="state === states.SET_SPECIFIC_TIMES">
-              <SpecificTimesInstructions
-                v-if="!isPhone"
-                :numTempTimes="tempTimes.size"
-                @saveTempTimes="saveTempTimes"
-              />
-            </template>
-            <template v-else>
-              <div
-                class="tw-flex tw-flex-col tw-gap-5"
-                v-if="state == states.EDIT_AVAILABILITY"
-              >
+               Teleported into the page's own right-hand column when Event.vue
+               offers one, so the Responses list, the toggles and the editing
+               controls line up with the gathering summary and the balances
+               instead of hanging off the side of the grid. The component and
+               every binding stay exactly where they are — only the DOM
+               destination moves — which is what makes this safe on a component
+               whose right side reads twenty pieces of its own internal state.
+
+               With no column the teleport is disabled and this renders in
+               place, unchanged: that is the phone layout, and the
+               set-specific-times flow. `to` falls back to "body" only so Vue
+               never has to resolve a null target; while disabled it is unused.
+          -->
+          <Teleport :to="rightColumnEl || 'body'" :disabled="!rightColumnEl">
+            <div
+              v-if="!calendarOnly"
+              :class="rightSideClass"
+              :style="{ width: rightSideWidth }"
+            >
+              <!-- Show section on the right depending on some if conditions -->
+              <template v-if="state === states.SET_SPECIFIC_TIMES">
+                <SpecificTimesInstructions
+                  v-if="!isPhone"
+                  :numTempTimes="tempTimes.size"
+                  @saveTempTimes="saveTempTimes"
+                />
+              </template>
+              <template v-else>
                 <div
-                  v-if="
-                    !(
+                  class="tw-flex tw-flex-col tw-gap-5"
+                  v-if="state == states.EDIT_AVAILABILITY"
+                >
+                  <div
+                    v-if="
+                      !(
+                        calendarPermissionGranted &&
+                        !event.daysOnly &&
+                        !addingAvailabilityAsGuest
+                      )
+                    "
+                    class="tw-flex tw-flex-wrap tw-items-baseline tw-gap-1 tw-text-sm tw-italic tw-text-parchment-dim"
+                  >
+                    {{
+                      (userHasResponded && !addingAvailabilityAsGuest) ||
+                      curGuestId
+                        ? "Editing"
+                        : "Adding"
+                    }}
+                    availability as
+                    <div
+                      v-if="curGuestId && canEditGuestName"
+                      class="tw-group tw-mt-0.5 tw-flex tw-w-fit tw-cursor-pointer tw-items-center tw-gap-1"
+                      @click="openEditGuestNameDialog"
+                    >
+                      <span class="tw-font-medium group-hover:tw-underline">{{
+                        curGuestId
+                      }}</span>
+                      <v-icon size="small">mdi-pencil</v-icon>
+                    </div>
+                    <span v-else>
+                      {{
+                        authUser && !addingAvailabilityAsGuest
+                          ? displayName(authUser)
+                          : curGuestId?.length > 0
+                          ? curGuestId
+                          : "a guest"
+                      }}
+                    </span>
+                    <v-dialog
+                      v-model="editGuestNameDialog"
+                      width="400"
+                      content-class="tw-m-0"
+                    >
+                      <v-card>
+                        <v-card-title>Edit guest name</v-card-title>
+                        <v-card-text>
+                          <v-text-field
+                            v-model="newGuestName"
+                            label="Guest name"
+                            autofocus
+                            @keydown.enter="saveGuestName"
+                            hide-details
+                          ></v-text-field>
+                        </v-card-text>
+                        <v-card-actions>
+                          <v-spacer />
+                          <v-btn
+                            variant="text"
+                            @click="editGuestNameDialog = false"
+                            >Cancel</v-btn
+                          >
+                          <v-btn
+                            variant="text"
+                            color="primary"
+                            @click="saveGuestName"
+                            >Save</v-btn
+                          >
+                        </v-card-actions>
+                      </v-card>
+                    </v-dialog>
+                  </div>
+                  <div class="tw-flex tw-flex-col tw-gap-3">
+                    <AvailabilityTypeToggle
+                      v-if="!isPhone"
+                      class="tw-w-full"
+                      v-model="availabilityType"
+                    />
+                    <ColorLegend />
+                  </div>
+                  <!-- User's calendar accounts -->
+                  <CalendarAccounts
+                    v-if="
                       calendarPermissionGranted &&
                       !event.daysOnly &&
                       !addingAvailabilityAsGuest
-                    )
-                  "
-                  class="tw-flex tw-flex-wrap tw-items-baseline tw-gap-1 tw-text-sm tw-italic tw-text-parchment-dim"
-                >
-                  {{
-                    (userHasResponded && !addingAvailabilityAsGuest) ||
-                    curGuestId
-                      ? "Editing"
-                      : "Adding"
-                  }}
-                  availability as
-                  <div
-                    v-if="curGuestId && canEditGuestName"
-                    class="tw-group tw-mt-0.5 tw-flex tw-w-fit tw-cursor-pointer tw-items-center tw-gap-1"
-                    @click="openEditGuestNameDialog"
-                  >
-                    <span class="tw-font-medium group-hover:tw-underline">{{
-                      curGuestId
-                    }}</span>
-                    <v-icon size="small">mdi-pencil</v-icon>
-                  </div>
-                  <span v-else>
-                    {{
-                      authUser && !addingAvailabilityAsGuest
-                        ? displayName(authUser)
-                        : curGuestId?.length > 0
-                        ? curGuestId
-                        : "a guest"
-                    }}
-                  </span>
-                  <v-dialog
-                    v-model="editGuestNameDialog"
-                    width="400"
-                    content-class="tw-m-0"
-                  >
-                    <v-card>
-                      <v-card-title>Edit guest name</v-card-title>
-                      <v-card-text>
-                        <v-text-field
-                          v-model="newGuestName"
-                          label="Guest name"
-                          autofocus
-                          @keydown.enter="saveGuestName"
-                          hide-details
-                        ></v-text-field>
-                      </v-card-text>
-                      <v-card-actions>
-                        <v-spacer />
-                        <v-btn
-                          variant="text"
-                          @click="editGuestNameDialog = false"
-                          >Cancel</v-btn
-                        >
-                        <v-btn
-                          variant="text"
-                          color="primary"
-                          @click="saveGuestName"
-                          >Save</v-btn
-                        >
-                      </v-card-actions>
-                    </v-card>
-                  </v-dialog>
-                </div>
-                <div class="tw-flex tw-flex-col tw-gap-3">
-                  <AvailabilityTypeToggle
-                    v-if="!isPhone"
-                    class="tw-w-full"
-                    v-model="availabilityType"
-                  />
-                  <ColorLegend />
-                </div>
-                <!-- User's calendar accounts -->
-                <CalendarAccounts
-                  v-if="
-                    calendarPermissionGranted &&
-                    !event.daysOnly &&
-                    !addingAvailabilityAsGuest
-                  "
-                  :toggleState="true"
-                  :eventId="event._id"
-                  :calendar-events-map="calendarEventsMap"
-                  :initialCalendarAccountsData="authUser.calendarAccounts"
-                  @calendarsChanged="$emit('calendarsChanged')"
-                ></CalendarAccounts>
+                    "
+                    :toggleState="true"
+                    :eventId="event._id"
+                    :calendar-events-map="calendarEventsMap"
+                    :initialCalendarAccountsData="authUser.calendarAccounts"
+                    @calendarsChanged="$emit('calendarsChanged')"
+                  ></CalendarAccounts>
 
-                <div v-if="showOverlayAvailabilityToggle">
-                  <v-switch
-                    id="overlay-availabilities-toggle"
-                    inset
-                    :model-value="overlayAvailability"
-                    @update:model-value="updateOverlayAvailability"
-                    hide-details
-                  >
-                    <template v-slot:label>
-                      <div class="tw-text-sm tw-text-parchment">
-                        Overlay availabilities
-                      </div>
-                    </template>
-                  </v-switch>
+                  <div v-if="showOverlayAvailabilityToggle">
+                    <v-switch
+                      id="overlay-availabilities-toggle"
+                      inset
+                      :model-value="overlayAvailability"
+                      @update:model-value="updateOverlayAvailability"
+                      hide-details
+                    >
+                      <template v-slot:label>
+                        <div class="tw-text-sm tw-text-parchment">
+                          Overlay availabilities
+                        </div>
+                      </template>
+                    </v-switch>
 
-                  <div class="tw-mt-2 tw-text-xs tw-text-parchment-dim">
-                    View everyone's availability while inputting your own
-                  </div>
-                </div>
-
-                <!-- Options section -->
-                <div
-                  v-if="!event.daysOnly && showCalendarOptions"
-                  ref="optionsSection"
-                >
-                  <ExpandableSection
-                    label="Options"
-                    :model-value="showEditOptions"
-                    @update:model-value="toggleShowEditOptions"
-                  >
-                    <div class="tw-flex tw-flex-col tw-gap-5 tw-pt-2.5">
-                      <v-dialog
-                        v-if="showCalendarOptions"
-                        v-model="calendarOptionsDialog"
-                        width="500"
-                      >
-                        <template v-slot:activator="{ props }">
-                          <v-btn
-                            variant="outlined"
-                            class="tw-border-brass-dim tw-text-sm"
-                            v-bind="props"
-                          >
-                            Calendar options...
-                          </v-btn>
-                        </template>
-
-                        <v-card>
-                          <v-card-title class="tw-flex">
-                            <div>Calendar options</div>
-                            <v-spacer />
-                            <v-btn icon @click="calendarOptionsDialog = false">
-                              <v-icon>mdi-close</v-icon>
-                            </v-btn>
-                          </v-card-title>
-                          <v-card-text
-                            class="tw-flex tw-flex-col tw-gap-6 tw-pb-8 tw-pt-2"
-                          >
-                            <BufferTimeSwitch v-model:bufferTime="bufferTime" />
-
-                            <WorkingHoursToggle
-                              v-model:workingHours="workingHours"
-                              :timezone="curTimezone"
-                            />
-                          </v-card-text>
-                        </v-card>
-                      </v-dialog>
+                    <div class="tw-mt-2 tw-text-xs tw-text-parchment-dim">
+                      View everyone's availability while inputting your own
                     </div>
-                  </ExpandableSection>
-                </div>
+                  </div>
 
-                <!-- Delete availability button -->
-                <div
-                  v-if="
-                    (!addingAvailabilityAsGuest && userHasResponded) ||
-                    curGuestId
-                  "
-                >
-                  <v-dialog
-                    v-model="deleteAvailabilityDialog"
-                    width="500"
-                    persistent
+                  <!-- Options section -->
+                  <div
+                    v-if="!event.daysOnly && showCalendarOptions"
+                    ref="optionsSection"
                   >
-                    <template v-slot:activator="{ props }">
-                      <span
-                        v-bind="props"
-                        class="tw-cursor-pointer tw-text-sm tw-text-red"
-                      >
-                        Delete availability
-                      </span>
-                    </template>
+                    <ExpandableSection
+                      label="Options"
+                      :model-value="showEditOptions"
+                      @update:model-value="toggleShowEditOptions"
+                    >
+                      <div class="tw-flex tw-flex-col tw-gap-5 tw-pt-2.5">
+                        <v-dialog
+                          v-if="showCalendarOptions"
+                          v-model="calendarOptionsDialog"
+                          width="500"
+                        >
+                          <template v-slot:activator="{ props }">
+                            <v-btn
+                              variant="outlined"
+                              class="tw-border-brass-dim tw-text-sm"
+                              v-bind="props"
+                            >
+                              Calendar options...
+                            </v-btn>
+                          </template>
 
-                    <v-card>
-                      <v-card-title>Are you sure?</v-card-title>
-                      <v-card-text class="tw-text-sm tw-text-parchment-dim"
-                        >Are you sure you want to delete your availability from
-                        this event?</v-card-text
-                      >
-                      <v-card-actions>
-                        <v-spacer />
-                        <v-btn
-                          variant="text"
-                          @click="deleteAvailabilityDialog = false"
-                          >Cancel</v-btn
+                          <v-card>
+                            <v-card-title class="tw-flex">
+                              <div>Calendar options</div>
+                              <v-spacer />
+                              <v-btn
+                                icon
+                                @click="calendarOptionsDialog = false"
+                              >
+                                <v-icon>mdi-close</v-icon>
+                              </v-btn>
+                            </v-card-title>
+                            <v-card-text
+                              class="tw-flex tw-flex-col tw-gap-6 tw-pb-8 tw-pt-2"
+                            >
+                              <BufferTimeSwitch
+                                v-model:bufferTime="bufferTime"
+                              />
+
+                              <WorkingHoursToggle
+                                v-model:workingHours="workingHours"
+                                :timezone="curTimezone"
+                              />
+                            </v-card-text>
+                          </v-card>
+                        </v-dialog>
+                      </div>
+                    </ExpandableSection>
+                  </div>
+
+                  <!-- Delete availability button -->
+                  <div
+                    v-if="
+                      (!addingAvailabilityAsGuest && userHasResponded) ||
+                      curGuestId
+                    "
+                  >
+                    <v-dialog
+                      v-model="deleteAvailabilityDialog"
+                      width="500"
+                      persistent
+                    >
+                      <template v-slot:activator="{ props }">
+                        <span
+                          v-bind="props"
+                          class="tw-cursor-pointer tw-text-sm tw-text-red"
                         >
-                        <v-btn
-                          variant="text"
-                          color="error"
-                          @click="confirmDeleteAvailability"
-                          >Delete</v-btn
+                          Delete availability
+                        </span>
+                      </template>
+
+                      <v-card>
+                        <v-card-title>Are you sure?</v-card-title>
+                        <v-card-text class="tw-text-sm tw-text-parchment-dim"
+                          >Are you sure you want to delete your availability
+                          from this event?</v-card-text
                         >
-                      </v-card-actions>
-                    </v-card>
-                  </v-dialog>
+                        <v-card-actions>
+                          <v-spacer />
+                          <v-btn
+                            variant="text"
+                            @click="deleteAvailabilityDialog = false"
+                            >Cancel</v-btn
+                          >
+                          <v-btn
+                            variant="text"
+                            color="error"
+                            @click="confirmDeleteAvailability"
+                            >Delete</v-btn
+                          >
+                        </v-card-actions>
+                      </v-card>
+                    </v-dialog>
+                  </div>
                 </div>
-              </div>
-              <template v-else>
-                <RespondentsList
-                  ref="respondentsList"
-                  :event="event"
-                  :eventId="event._id"
-                  :curDate="getDateFromRowCol(curTimeslot.row, curTimeslot.col)"
-                  :curRespondents="curRespondents"
-                  :curTimeslot="curTimeslot"
-                  :curTimeslotAvailability="curTimeslotAvailability"
-                  :respondents="respondents"
-                  :parsedResponses="parsedResponses"
-                  :isOwner="isOwner"
-                  :attendees="event.attendees"
-                  v-model:showCalendarEvents="showCalendarEvents"
-                  :hasCalendarEvents="hasCalendarEvents"
-                  :timezone="curTimezone"
-                  v-model:show-best-times="showBestTimes"
-                  v-model:hide-if-needed="hideIfNeeded"
-                  v-model:show-response-counts="showResponseCounts"
-                  v-model:start-calendar-on-monday="startCalendarOnMonday"
-                  :show-event-options="showEventOptions"
-                  @toggleShowEventOptions="toggleShowEventOptions"
-                  @addAvailability="$emit('addAvailability')"
-                  @addAvailabilityAsGuest="$emit('addAvailabilityAsGuest')"
-                  @mouseOverRespondent="mouseOverRespondent"
-                  @mouseLeaveRespondent="mouseLeaveRespondent"
-                  @clickRespondent="clickRespondent"
-                  @editGuestAvailability="editGuestAvailability"
-                  @refreshEvent="refreshEvent"
-                />
+                <template v-else>
+                  <RespondentsList
+                    ref="respondentsList"
+                    :event="event"
+                    :eventId="event._id"
+                    :curDate="
+                      getDateFromRowCol(curTimeslot.row, curTimeslot.col)
+                    "
+                    :curRespondents="curRespondents"
+                    :curTimeslot="curTimeslot"
+                    :curTimeslotAvailability="curTimeslotAvailability"
+                    :respondents="respondents"
+                    :parsedResponses="parsedResponses"
+                    :isOwner="isOwner"
+                    :attendees="event.attendees"
+                    v-model:showCalendarEvents="showCalendarEvents"
+                    :hasCalendarEvents="hasCalendarEvents"
+                    :timezone="curTimezone"
+                    v-model:show-best-times="showBestTimes"
+                    v-model:hide-if-needed="hideIfNeeded"
+                    v-model:show-response-counts="showResponseCounts"
+                    v-model:start-calendar-on-monday="startCalendarOnMonday"
+                    :show-event-options="showEventOptions"
+                    @toggleShowEventOptions="toggleShowEventOptions"
+                    @addAvailability="$emit('addAvailability')"
+                    @addAvailabilityAsGuest="$emit('addAvailabilityAsGuest')"
+                    @mouseOverRespondent="mouseOverRespondent"
+                    @mouseLeaveRespondent="mouseLeaveRespondent"
+                    @clickRespondent="clickRespondent"
+                    @editGuestAvailability="editGuestAvailability"
+                    @refreshEvent="refreshEvent"
+                  />
+                </template>
               </template>
-            </template>
-          </div>
+            </div>
+          </Teleport>
         </div>
 
         <ToolRow
@@ -1052,6 +1074,12 @@ export default {
     noEventNames: { type: Boolean, default: false }, // Whether to show "busy" instead of the event name
     calendarOnly: { type: Boolean, default: false }, // Whether to only show calendar and not respondents or any other controls
     collapsed: { type: Boolean, default: false }, // Whether to render nothing at all (gathering already scheduled) while staying mounted
+    // The page's right-hand column, if it has one, for this component's own
+    // right-hand block to teleport into. An ELEMENT, not a selector — on the
+    // first mount the page is still detached from the document and a selector
+    // would resolve to nothing. Null means "render it in place", which is the
+    // phone layout and the set-specific-times flow.
+    rightColumnEl: { type: Object, default: null },
     // These three are read from MIXINS, not from anything in this file, so a
     // grep of ScheduleOverlap.vue alone says they are dead and they are not
     // (L13). `vue/no-unused-properties` reports all three for the same reason —
@@ -1218,8 +1246,21 @@ export default {
     ...mapGetters(["canInvite", "canManageUsers"]),
     /** Returns the width of the right side of the calendar */
     rightSideWidth() {
+      // Teleported into the page column, which owns the width itself.
+      if (this.rightColumnEl) return "100%"
       if (this.isPhone) return "100%"
       return "13rem"
+    },
+    /**
+     * The right side's own spacing, which only applies while it is sitting
+     * beside the grid. In the page column the <aside> supplies the sticky, the
+     * horizontal margin and the top offset — and `sm:tw-pt-14` in particular is
+     * there to line the Responses list up with the calendar's day header, so it
+     * is nothing but a gap once the block is no longer next to the grid.
+     */
+    rightSideClass() {
+      if (this.rightColumnEl) return "tw-py-4"
+      return "tw-px-4 tw-py-4 sm:tw-sticky sm:tw-top-16 sm:tw-flex-none sm:tw-self-start sm:tw-py-0 sm:tw-pl-0 sm:tw-pr-0 sm:tw-pt-14"
     },
     /** Only allow scheduling when a curScheduledEvent exists */
     allowScheduleEvent() {
