@@ -317,10 +317,13 @@ their own recipients. This was a real CI failure that reproduces roughly one
 run in three — if you touch either package, run them together a dozen times,
 not once.
 
-If you have no local Go toolchain, run the tests in a container (matches CI):
+If you have no local Go toolchain, run the tests in a container. **Keep the tag
+in step with `.go-version`** — that file is the toolchain production is built
+with, and all three Go workflows read it (P1/P2); a container on another patch
+is testing a standard library we do not ship.
 ```bash
 docker run --rm -e MONGODB_URI=mongodb://host.docker.internal:27017 \
-  -v "$PWD/server:/src" -w /src golang:1.25-alpine \
+  -v "$PWD/server:/src" -w /src golang:1.26.6-alpine \
   sh -c "go build . && go test \$(go list ./... | grep -v '/scripts')"
 ```
 > On Linux/WSL, `host.docker.internal` may not resolve — use
@@ -332,7 +335,7 @@ needs cgo and a C compiler, which the dev boxes don't have, so use the Debian
 image rather than Alpine:
 ```bash
 docker run --rm --network host -e MONGODB_URI=mongodb://localhost:27017 \
-  -e CGO_ENABLED=1 -v "$PWD/server:/src" -w /src golang:1.25 \
+  -e CGO_ENABLED=1 -v "$PWD/server:/src" -w /src golang:1.26.6 \
   sh -c "go test -race \$(go list ./... | grep -v '/scripts')"
 ```
 

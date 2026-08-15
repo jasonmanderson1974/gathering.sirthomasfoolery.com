@@ -2832,6 +2832,54 @@ toolchain to match it would have been the wrong fix to the wrong number. The 1.2
 (1.25.13) exists, so pinning CI back there would also have worked — matching the build box is what
 makes the gate mean something.
 
+### P2 — "1.26" did not mean 1.26.6, so P1's CI half never took effect · **P1 · S** — DONE 2026-08-14
+
+**P1's own commit went red.** Run `31753622263`, on `1e250c3` — the commit that raised all three
+workflows from `"1.25"` to `"1.26"` — reported the same seven called stdlib advisories and the same
+nine module-level findings as the run before it. The build box really was on go1.26.6 and
+`scripts/dependency-audit.sh` really did pass there; the audit in CI was still grading **go1.26.5**.
+
+One line in the log is the whole finding:
+
+```
+Setup go version spec 1.26
+Found in cache @ /opt/hostedtoolcache/go/1.26.5/x64
+```
+
+**A minor-line spec is a *satisfied-by*, not a *resolve-to-newest*.** `actions/setup-go` looks in
+the runner image's tool cache first and takes anything matching the spec; `check-latest` defaults to
+**false**, and the log prints `check-latest: false` two lines above. The ubuntu-24.04 image
+preinstalls go1.26.5, 1.26.5 satisfies "1.26", so setup-go never went to the network and the
+toolchain carrying the fixes was never downloaded. P1's comment — *"the minor line is enough, the
+patch resolves to the newest, which is what carries the fixes"* — is exactly the wrong half of that
+behaviour, and it is wrong in the silent direction: the job looked correctly configured, the
+version string in the YAML matched the build box's line, and the audit still graded a stdlib we do
+not ship.
+
+Note what this means for a green run, which is the more dangerous case and the same one P1 flagged
+one level up: **the runner's preinstalled patch is not ours and drifts on its own schedule.** A
+toolchain we ship could be behind the one being audited just as easily as ahead of it, and then the
+gate passes over a vulnerable production binary.
+
+**Done.** The patch is now exact and lives in one place, `.go-version` (`1.26.6`), read by
+`backend-ci.yml`, `browser-ci.yml` and `dependency-audit.yml` via `go-version-file`. An exact
+version matches only itself, so a stale tool-cache entry cannot satisfy it and the runner downloads
+the toolchain regardless of what the image ships — no `check-latest` needed, and `check-latest`
+would have been the wrong fix anyway, since "newest 1.26.x" is not "what production is built with".
+`.go-version` was also added to the `paths:` filter of all three workflows: a toolchain bump is an
+edit to that file and nothing else, and without it the audit would not re-run on the one change it
+most needs to re-grade. `DEVELOPMENT.md`'s two `golang:1.25*` container tags were stale in the same
+way and now name the same patch.
+
+`scripts/dependency-audit.sh` needed no change and `GO_ALLOWLIST` still reads `GO-2026-5932` alone —
+the script was right both times; only the toolchain under it was wrong.
+
+**The 1 warning in that run is unrelated and still open:** `actions/checkout@v4`,
+`actions/setup-node@v4` and `actions/setup-go@v5` target Node 20, which GitHub has deprecated and is
+already force-running on Node 24. It is a notice, not a failure, and clearing it means bumping
+action majors across all four workflows — a change with its own verification, not something to
+smuggle into a toolchain fix.
+
 ---
 
 ## PART Q — layout (opened 2026-08-13)

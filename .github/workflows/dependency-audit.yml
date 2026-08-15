@@ -19,6 +19,9 @@ on:
       - "frontend/package-lock.json"
       - "server/go.mod"
       - "server/go.sum"
+      # A toolchain bump is a .go-version edit and nothing else, and it is
+      # exactly the change this audit exists to re-grade (P2).
+      - ".go-version"
       - "scripts/dependency-audit.sh"
       - ".github/workflows/dependency-audit.yml"
   push:
@@ -29,6 +32,9 @@ on:
       - "frontend/package-lock.json"
       - "server/go.mod"
       - "server/go.sum"
+      # A toolchain bump is a .go-version edit and nothing else, and it is
+      # exactly the change this audit exists to re-grade (P2).
+      - ".go-version"
       - "scripts/dependency-audit.sh"
       - ".github/workflows/dependency-audit.yml"
 
@@ -55,15 +61,20 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          # The line PRODUCTION IS BUILT WITH, not the one go.mod names as its
-          # language floor. deploy.sh builds on the dev box, which is on the
-          # 1.26 line, and govulncheck reports against the toolchain it runs
-          # under — so auditing 1.25 here graded a standard library we do not
-          # ship. That is how eight stdlib advisories (P1) were reported against
-          # a binary that may or may not have had them. Keep this in step with
-          # the build box; the minor line is enough, the patch resolves to the
-          # newest, which is what carries the fixes.
-          go-version: "1.26"
+          # The toolchain PRODUCTION IS BUILT WITH, to the patch, from
+          # `.go-version` — not the one go.mod names as its language floor.
+          # deploy.sh builds on the dev box and govulncheck grades the standard
+          # library of the toolchain it runs under, so auditing anything else
+          # here grades a stdlib we do not ship (P1).
+          #
+          # THE PATCH MUST BE EXACT, and "1.26" is not (P2). A minor-line spec
+          # is satisfied by whatever setup-go finds in the runner's tool cache,
+          # and `check-latest` defaults to false — so "1.26" silently resolved
+          # to the preinstalled 1.26.5 and re-reported the same eight stdlib
+          # advisories P1 had already fixed by moving the build box to 1.26.6.
+          # An exact version matches only itself, so a stale cache entry cannot
+          # satisfy it and the runner downloads the toolchain we actually ship.
+          go-version-file: .go-version
           cache-dependency-path: server/go.sum
 
       # npm audit reads package-lock.json and does not need node_modules, but

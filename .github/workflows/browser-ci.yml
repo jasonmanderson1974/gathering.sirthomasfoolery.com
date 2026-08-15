@@ -28,6 +28,7 @@ on:
       - "server/**"
       - "compose.dev.yaml"
       - "scripts/**"
+      - ".go-version"
       - ".github/workflows/browser-ci.yml"
   push:
     branches:
@@ -37,6 +38,7 @@ on:
       - "server/**"
       - "compose.dev.yaml"
       - "scripts/**"
+      - ".go-version"
       - ".github/workflows/browser-ci.yml"
 
 jobs:
@@ -90,9 +92,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          # Kept in step with backend-ci and dependency-audit — all three now
-          # track the line production is built with (P1).
-          go-version: "1.26"
+          # Kept in step with backend-ci and dependency-audit — all three read
+          # the exact patch from `.go-version`, which is the toolchain
+          # production is built with (P1, P2).
+          go-version-file: .go-version
           cache-dependency-path: server/go.sum
 
       # Preinstalled on the GitHub-hosted Ubuntu images, but assert it rather

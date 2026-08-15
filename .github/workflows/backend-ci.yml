@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - "server/**"
+      - ".go-version"
       - ".github/workflows/backend-ci.yml"
   push:
     branches:
       - main
     paths:
       - "server/**"
+      - ".go-version"
       - ".github/workflows/backend-ci.yml"
 
 jobs:
@@ -39,11 +41,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          # Matches the build box and dependency-audit.yml. go.mod's `go 1.25.0`
-          # stays as it is: that is the LANGUAGE level, not the toolchain, and
-          # lowering the toolchain to match it would put CI on a standard
-          # library production never runs.
-          go-version: "1.26"
+          # Matches the build box and dependency-audit.yml, to the patch, from
+          # `.go-version` — see the note there for why a minor-line spec like
+          # "1.26" is not enough. go.mod's `go 1.25.0` stays as it is: that is
+          # the LANGUAGE level, not the toolchain, and lowering the toolchain to
+          # match it would put CI on a standard library production never runs.
+          go-version-file: .go-version
           cache-dependency-path: server/go.sum
 
       # Compiles the whole server (main package + all its imports). The one-off
